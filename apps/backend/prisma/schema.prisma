@@ -438,6 +438,7 @@ model Submission {
   paidAt               DateTime?
 
   authors SubmissionAuthor[]
+  files   SubmissionFile[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -446,6 +447,31 @@ model Submission {
   @@index([modalityId])
   @@index([topicId])
   @@map("submissions")
+}
+
+/// Arquivos de um trabalho: até 5, somando no máximo o limite do evento.
+///
+/// Tabela separada porque um trabalho pode ter mais de um arquivo (o artigo
+/// e anexos). Os trabalhos antigos guardavam o arquivo único nas colunas
+/// fileKey/fileName/fileSizeBytes de `submissions` — a migração copia cada
+/// um para cá como position 0, e essas colunas ficam legadas (não são mais
+/// escritas, mantidas só para rollback).
+model SubmissionFile {
+  id           String     @id @default(uuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  /// Chave no storage (mesma abstração dos certificados).
+  fileKey       String
+  fileName      String?
+  fileSizeBytes Int?
+  /// Ordem de exibição; o primeiro enviado é 0.
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([submissionId])
+  @@map("submission_files")
 }
 
 /// Autores de um trabalho, em ordem.

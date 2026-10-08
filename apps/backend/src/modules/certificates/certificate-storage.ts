@@ -103,8 +103,12 @@ export function submissionFileKey(
   eventId: string,
   submissionId: string,
   extensao: "pdf" | "docx" | "pptx" = "pdf",
+  // Trabalho com mais de um arquivo: a posição deixa cada chave única. Sem
+  // posição mantém o formato antigo (os arquivos já enviados continuam lá).
+  position?: number,
 ): string {
-  return `submissions/${eventId}/${submissionId}.${extensao}`;
+  const sufixo = position === undefined ? "" : `-${position}`;
+  return `submissions/${eventId}/${submissionId}${sufixo}.${extensao}`;
 }
 
 export function signatureImageKey(filename: string): string {

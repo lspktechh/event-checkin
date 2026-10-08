@@ -27,6 +27,7 @@ import { AlertTriangleIcon } from "@/components/Icons";
 const COPOL_EVENT_ID = "f1b36d08-e85d-459b-8606-69119ab05a78";
 
 const EXTENSOES_ACEITAS = [".pdf", ".docx", ".pptx"];
+const MAX_ARQUIVOS = 5;
 
 interface Autor {
   name: string;
@@ -87,7 +88,7 @@ export default function TrabalhosPage() {
   const [area, setArea] = useState("");
   const [autores, setAutores] = useState<Autor[]>([autorVazio()]);
   const [apresentador, setApresentador] = useState(0);
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [arquivos, setArquivos] = useState<File[]>([]);
 
   const [enviando, setEnviando] = useState(false);
   const [progresso, setProgresso] = useState<number | null>(null);
@@ -115,24 +116,37 @@ export default function TrabalhosPage() {
     setApresentador((p) => (p === i ? 0 : p > i ? p - 1 : p));
   }
 
-  function escolherArquivo(f: File | null) {
+  function adicionarArquivos(novos: FileList | null) {
     setErro(null);
-    if (!f || !config) {
-      setArquivo(null);
-      return;
+    if (!novos || novos.length === 0 || !config) return;
+
+    const atuais = [...arquivos];
+    for (const f of Array.from(novos)) {
+      if (atuais.length >= MAX_ARQUIVOS) {
+        setErro(`São permitidos no máximo ${MAX_ARQUIVOS} arquivos.`);
+        break;
+      }
+      const nome = f.name.toLowerCase();
+      if (!EXTENSOES_ACEITAS.some((ext) => nome.endsWith(ext))) {
+        setErro("Envie em PDF, DOCX (Word) ou PPTX (PowerPoint). Arquivos .doc e .ppt antigos precisam ser salvos como .docx, .pptx ou PDF.");
+        continue;
+      }
+      // Evita duplicado pelo nome + tamanho.
+      if (atuais.some((a) => a.name === f.name && a.size === f.size)) continue;
+
+      const totalComEste = atuais.reduce((s, a) => s + a.size, 0) + f.size;
+      if (totalComEste > config.maxFileSizeMb * 1024 * 1024) {
+        setErro(`Os arquivos somam mais que o limite de ${config.maxFileSizeMb} MB no total.`);
+        continue;
+      }
+      atuais.push(f);
     }
-    const nome = f.name.toLowerCase();
-    if (!EXTENSOES_ACEITAS.some((ext) => nome.endsWith(ext))) {
-      setErro("Envie o trabalho em PDF, DOCX (Word) ou PPTX (PowerPoint). Arquivos .doc e .ppt antigos precisam ser salvos como .docx, .pptx ou PDF.");
-      setArquivo(null);
-      return;
-    }
-    if (f.size > config.maxFileSizeMb * 1024 * 1024) {
-      setErro(`O arquivo passa do limite de ${config.maxFileSizeMb} MB.`);
-      setArquivo(null);
-      return;
-    }
-    setArquivo(f);
+    setArquivos(atuais);
+  }
+
+  function removerArquivo(i: number) {
+    setErro(null);
+    setArquivos((lista) => lista.filter((_, j) => j !== i));
   }
 
   async function enviar(e: FormEvent) {
@@ -152,14 +166,17 @@ export default function TrabalhosPage() {
       setErro("Informe pelo menos uma palavra-chave.");
       return;
     }
-    if (!arquivo) {
-      setErro("Anexe o arquivo do trabalho (PDF, DOCX ou PPTX).");
+    if (arquivos.length === 0) {
+      setErro("Anexe pelo menos um arquivo do trabalho (PDF, DOCX ou PPTX).");
       return;
     }
 
     setEnviando(true);
     setProgresso(null);
     try {
+      const files = await Promise.all(
+        arquivos.map(async (a) => ({ fileName: a.name, dataBase64: await lerBase64(a) }))
+      );
       const resultado = await createPublicSubmission(config.eventId, {
         modalityId: config.modalities.length > 0 ? modalidade : null,
         topicId: config.topics.length > 0 ? area : null,
@@ -172,8 +189,7 @@ export default function TrabalhosPage() {
           institution: a.institution.trim() || null,
           isPresenter: i === apresentador,
         })),
-        fileName: arquivo.name,
-        dataBase64: await lerBase64(arquivo),
+        files,
       }, setProgresso);
       router.push(`/trabalhos/pagamento/?id=${encodeURIComponent(resultado.id)}`);
     } catch (err) {
@@ -359,17 +375,54 @@ export default function TrabalhosPage() {
               </fieldset>
 
               <label style={labelStyle}>
-                Arquivo do trabalho (PDF, DOCX ou PPTX) *
+                Arquivos do trabalho (PDF, DOCX ou PPTX) — até {MAX_ARQUIVOS} *
                 <input
                   type="file"
+                  multiple
                   accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                  onChange={(e) => escolherArquivo(e.target.files?.[0] ?? null)}
+                  onChange={(e) => {
+                    adicionarArquivos(e.target.files);
+                    e.target.value = ""; // permite re-selecionar o mesmo arquivo
+                  }}
+                  disabled={arquivos.length >= MAX_ARQUIVOS}
                   style={{ ...inputStyle, padding: 10 }}
                 />
-                {arquivo && (
-                  <small style={{ fontWeight: 400, color: "var(--muted-foreground)" }}>
-                    {arquivo.name} · {(arquivo.size / 1024 / 1024).toFixed(2)} MB
-                  </small>
+                <small style={{ fontWeight: 400, color: "var(--muted-foreground)" }}>
+                  {config
+                    ? `Pode anexar até ${MAX_ARQUIVOS} arquivos, somando no máximo ${config.maxFileSizeMb} MB no total.`
+                    : ""}
+                </small>
+                {arquivos.length > 0 && (
+                  <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 0", display: "flex", flexDirection: "column", gap: 6 }}>
+                    {arquivos.map((a, i) => (
+                      <li
+                        key={`${a.name}-${a.size}-${i}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          background: "var(--background)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          padding: "8px 12px",
+                          fontWeight: 400,
+                          fontSize: 14,
+                        }}
+                      >
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {a.name} · {(a.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removerArquivo(i)}
+                          style={{ background: "none", border: "none", color: "var(--destructive, #ef4444)", cursor: "pointer", fontWeight: 600, flexShrink: 0 }}
+                        >
+                          remover
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </label>
 

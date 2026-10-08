@@ -831,8 +831,10 @@ export interface SubmissionRecord {
   abstract: string;
   keywords: string[];
   status: SubmissionStatus;
+  /** Legado (primeiro arquivo). Use `files` para a lista completa. */
   fileName: string | null;
   fileSizeBytes: number | null;
+  files: { id: string; fileName: string | null; fileSizeBytes: number | null; position: number }[];
   submittedAt: string | null;
   decidedAt: string | null;
   // Nulos quando o evento não tem catálogo (trabalho enviado pelo site).
@@ -928,7 +930,7 @@ export function uploadSubmissionFile(
   fileName: string,
   dataBase64: string
 ) {
-  return request<{ id: string; fileName: string; fileSizeBytes: number }>(
+  return request<SubmissionRecord>(
     `/events/${eventId}/submissions/${submissionId}/file`,
     { method: "POST", body: { fileName, dataBase64 } }
   );
@@ -963,13 +965,28 @@ export function deleteSubmission(eventId: string, submissionId: string) {
 }
 /** URL do PDF para abrir em nova aba. O token vai no header, então o
  *  link direto não serve — quem chama precisa buscar e criar um blob. */
-export async function fetchSubmissionFile(eventId: string, submissionId: string): Promise<Blob> {
+export async function fetchSubmissionFile(
+  eventId: string,
+  submissionId: string,
+  fileId?: string
+): Promise<Blob> {
   const token = getToken();
-  const res = await fetch(`${API_URL}/events/${eventId}/submissions/${submissionId}/file`, {
+  const url = fileId
+    ? `${API_URL}/events/${eventId}/submissions/${submissionId}/files/${fileId}`
+    : `${API_URL}/events/${eventId}/submissions/${submissionId}/file`;
+  const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new ApiError("Não consegui abrir o arquivo", "file_error", res.status);
   return res.blob();
+}
+
+/** Remove um arquivo de um trabalho em rascunho. */
+export function removeSubmissionFile(eventId: string, submissionId: string, fileId: string) {
+  return request<SubmissionRecord>(
+    `/events/${eventId}/submissions/${submissionId}/files/${fileId}`,
+    { method: "DELETE" }
+  );
 }
 
 // --- Lotes Automáticos ---

@@ -5,6 +5,11 @@ export const submissionIdParams = z.object({
   eventId: z.string().uuid(),
   submissionId: z.string().uuid(),
 });
+export const submissionFileParams = z.object({
+  eventId: z.string().uuid(),
+  submissionId: z.string().uuid(),
+  fileId: z.string().uuid(),
+});
 export const catalogIdParams = z.object({
   eventId: z.string().uuid(),
   id: z.string().uuid(),
@@ -116,8 +121,13 @@ export const uploadFileSchema = z.object({
  * O arquivo vem inteiro em `dataBase64` ou, se é grande, já foi mandado em
  * partes e vem só o `uploadId` delas (ver submissions.parts.ts).
  */
-export const publicCreateSubmissionSchema = createSubmissionSchema
-  .extend({
+/** Teto de arquivos por trabalho. O tamanho é somado e limitado pelo
+ *  maxFileSizeMb do evento (o total, não cada arquivo). */
+export const MAX_ARQUIVOS_POR_TRABALHO = 5;
+
+/** Um arquivo: nome + o conteúdo (inteiro em base64 ou já em partes). */
+const submissionFileInputSchema = z
+  .object({
     fileName: fileNameSchema,
     dataBase64: z.string().min(1).optional(),
     uploadId: z.string().uuid().optional(),
@@ -126,6 +136,27 @@ export const publicCreateSubmissionSchema = createSubmissionSchema
     message: "Anexe o arquivo do trabalho",
     path: ["dataBase64"],
   });
+
+export const publicCreateSubmissionSchema = createSubmissionSchema
+  .extend({
+    // Formato novo: lista de arquivos (1 a 5).
+    files: z.array(submissionFileInputSchema).min(1).max(MAX_ARQUIVOS_POR_TRABALHO).optional(),
+    // Formato antigo (um arquivo só). Mantido para o site não quebrar
+    // enquanto a versão nova não está no ar na Vercel. O service normaliza
+    // os dois para uma lista.
+    fileName: fileNameSchema.optional(),
+    dataBase64: z.string().min(1).optional(),
+    uploadId: z.string().uuid().optional(),
+  })
+  .refine(
+    (v) => {
+      const temLista = Array.isArray(v.files) && v.files.length > 0;
+      const temUnico = Boolean(v.fileName) && Boolean(v.dataBase64) !== Boolean(v.uploadId);
+      // Exatamente um dos formatos: ou a lista, ou o arquivo único.
+      return temLista !== temUnico;
+    },
+    { message: "Anexe o arquivo do trabalho", path: ["files"] }
+  );
 
 /**
  * Uma parte do arquivo. ~700 mil caracteres de base64 por parte no site;

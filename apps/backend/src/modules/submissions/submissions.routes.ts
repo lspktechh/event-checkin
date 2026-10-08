@@ -15,6 +15,7 @@ import {
   publicCreateSubmissionSchema,
   publicSubmissionIdParams,
   publicUploadPartSchema,
+  submissionFileParams,
   submissionIdParams,
   submissionSettingsSchema,
   uploadFileSchema,
@@ -186,6 +187,39 @@ export async function submissionsRoutes(app: FastifyInstance) {
           `${tipo === "pdf" ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`
         )
         .send(buffer);
+    }
+  );
+
+  // Baixar um arquivo específico (trabalho com mais de um).
+  app.get(
+    "/events/:eventId/submissions/:submissionId/files/:fileId",
+    { preHandler: requirePermission("submissions.view") },
+    async (request, reply) => {
+      const { eventId, submissionId, fileId } = submissionFileParams.parse(request.params);
+      const { buffer, fileName, tipo, contentType } = await service.readFile(
+        eventId,
+        submissionId,
+        fileId
+      );
+      return reply
+        .header("Content-Type", contentType)
+        .header(
+          "Content-Disposition",
+          `${tipo === "pdf" ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`
+        )
+        .send(buffer);
+    }
+  );
+
+  // Remover um arquivo de um trabalho em rascunho (painel).
+  app.delete(
+    "/events/:eventId/submissions/:submissionId/files/:fileId",
+    { preHandler: requirePermission("submissions.manage") },
+    async (request) => {
+      const { eventId, submissionId, fileId } = submissionFileParams.parse(request.params);
+      const r = await service.removeFile(eventId, submissionId, fileId);
+      await recordAudit(request, "submissions.file_remove", "Submission", submissionId, { fileId });
+      return ok(r);
     }
   );
 

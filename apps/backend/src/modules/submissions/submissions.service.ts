@@ -11,6 +11,7 @@ import {
   type PagamentoConferido,
 } from "../../lib/mercadopago/mercadopago.client.js";
 import { receberParte, retirarArquivo } from "./submissions.parts.js";
+import { MAX_ARQUIVOS_POR_TRABALHO } from "./submissions.schema.js";
 import { emailService } from "../../lib/email/email.service.js";
 import { resolveEmailSettings } from "../../lib/email/email-settings.js";
 import type {
@@ -347,7 +348,12 @@ export async function createSubmission(eventId: string, input: CreateSubmissionI
 export async function getSubmission(eventId: string, submissionId: string) {
   const s = await prisma.submission.findFirst({
     where: { id: submissionId, eventId },
-    include: { authors: { orderBy: { position: "asc" } }, modality: true, topic: true },
+    include: {
+      authors: { orderBy: { position: "asc" } },
+      files: { orderBy: { position: "asc" } },
+      modality: true,
+      topic: true,
+    },
   });
   if (!s) throw new NotFoundError("Trabalho não encontrado");
   return s;
@@ -393,6 +399,7 @@ export async function listSubmissions(
       take: q.pageSize,
       include: {
         authors: { orderBy: { position: "asc" } },
+        files: { orderBy: { position: "asc" } },
         modality: { select: { id: true, name: true } },
         topic: { select: { id: true, name: true } },
       },
@@ -435,7 +442,7 @@ export async function submitSubmission(eventId: string, submissionId: string) {
   if (s.status !== "DRAFT") {
     throw new ValidationError("Este trabalho já foi enviado");
   }
-  if (!s.fileKey) {
+  if (s.files.length === 0) {
     throw new ValidationError("Anexe o arquivo do trabalho antes de enviar");
   }
 
@@ -547,18 +554,26 @@ async function avisarAutores(
 export async function deleteSubmission(eventId: string, id: string) {
   const s = await prisma.submission.findFirst({
     where: { id, eventId },
-    select: { id: true, code: true, fileKey: true },
+    select: {
+      id: true,
+      code: true,
+      fileKey: true,
+      files: { select: { fileKey: true } },
+    },
   });
   if (!s) {
     throw new NotFoundError("Trabalho não encontrado.");
   }
 
-  // Remove o arquivo físico do storage, se houver
-  if (s.fileKey) {
-    await certificateStorage.remove(s.fileKey).catch(() => {});
+  // Remove todos os arquivos físicos do storage (inclui a chave legada, se
+  // ainda existir em algum trabalho antigo).
+  const chaves = new Set<string>(s.files.map((f) => f.fileKey));
+  if (s.fileKey) chaves.add(s.fileKey);
+  for (const key of chaves) {
+    await certificateStorage.remove(key).catch(() => {});
   }
 
-  // O Prisma cascateia os autores (onDelete: Cascade em SubmissionAuthor)
+  // O Prisma cascateia autores e arquivos (onDelete: Cascade)
   await prisma.submission.delete({
     where: { id: s.id },
   });
@@ -606,43 +621,34 @@ function tipoDoArquivo(buffer: Buffer): TipoArquivo | null {
 }
 
 /**
- * Valida e grava o arquivo de um trabalho. Compartilhado pelo painel
- * (uploadFile) e pelo envio público (createPublicSubmission).
+ * Valida o formato e grava UM arquivo de trabalho no storage, com chave
+ * única pela posição. O limite de tamanho é do CONJUNTO (somado), conferido
+ * por quem chama — aqui só recusa arquivo vazio ou de formato errado.
  */
-async function gravarArquivo(
+async function salvarArquivo(
   eventId: string,
   submissionId: string,
-  fileKeyAtual: string | null,
   buffer: Buffer,
-  maxFileSizeMb: number,
+  position: number,
 ) {
   if (buffer.length === 0) throw new ValidationError("Arquivo vazio.");
-
-  const limite = maxFileSizeMb * 1024 * 1024;
-  if (buffer.length > limite) {
-    throw new ValidationError(
-      `Arquivo muito grande — o limite deste evento é ${maxFileSizeMb} MB.`
-    );
-  }
-
   const tipo = tipoDoArquivo(buffer);
-  if (!tipo) {
-    throw new ValidationError(FORMATO_INVALIDO);
-  }
+  if (!tipo) throw new ValidationError(FORMATO_INVALIDO);
 
-  const key = submissionFileKey(eventId, submissionId, tipo);
+  const key = submissionFileKey(eventId, submissionId, tipo, position);
   await certificateStorage.save(key, buffer);
-
-  // Trocou um PDF por um DOCX (ou o contrário) ainda em rascunho: o
-  // arquivo anterior tem outra extensão, então não foi sobrescrito — apaga
-  // para não ficar lixo no disco com o trabalho de alguém.
-  if (fileKeyAtual && fileKeyAtual !== key) {
-    await certificateStorage.remove(fileKeyAtual).catch(() => {});
-  }
-
-  return { key, tamanho: buffer.length };
+  return { key, tamanho: buffer.length, tipo };
 }
 
+/** Soma dos arquivos já anexados ao trabalho. */
+function bytesDosArquivos(files: { fileSizeBytes: number | null }[]): number {
+  return files.reduce((total, f) => total + (f.fileSizeBytes ?? 0), 0);
+}
+
+/**
+ * Anexa mais um arquivo a um trabalho em rascunho (painel do organizador).
+ * Respeita o teto de arquivos e o limite de tamanho TOTAL do evento.
+ */
 export async function uploadFile(
   eventId: string,
   submissionId: string,
@@ -651,12 +657,12 @@ export async function uploadFile(
 ) {
   const s = await getSubmission(eventId, submissionId);
 
-  // Depois de enviado, o arquivo é o que a comissão vai avaliar. Trocá-lo
-  // sem passar pela retirada seria mudar o objeto do parecer pelas costas
-  // de quem já leu.
+  // Depois de enviado, os arquivos são o que a comissão vai avaliar. Mexer
+  // sem passar pela retirada mudaria o objeto do parecer pelas costas de
+  // quem já leu.
   if (s.status !== "DRAFT") {
     throw new ValidationError(
-      "Este trabalho já foi enviado — não é possível trocar o arquivo."
+      "Este trabalho já foi enviado — não é possível alterar os arquivos."
     );
   }
 
@@ -664,30 +670,57 @@ export async function uploadFile(
   const janela = janelaAberta(settings);
   if (!janela.aberta) throw new ValidationError(janela.motivo!);
 
-  const { key, tamanho } = await gravarArquivo(
-    eventId,
-    submissionId,
-    s.fileKey,
-    Buffer.from(dataBase64, "base64"),
-    settings.maxFileSizeMb,
-  );
+  if (s.files.length >= MAX_ARQUIVOS_POR_TRABALHO) {
+    throw new ValidationError(
+      `São permitidos no máximo ${MAX_ARQUIVOS_POR_TRABALHO} arquivos por trabalho.`
+    );
+  }
 
-  return prisma.submission.update({
-    where: { id: submissionId },
-    data: { fileKey: key, fileName, fileSizeBytes: tamanho },
-    select: { id: true, fileName: true, fileSizeBytes: true },
+  const buffer = Buffer.from(dataBase64, "base64");
+  const limiteTotal = settings.maxFileSizeMb * 1024 * 1024;
+  if (bytesDosArquivos(s.files) + buffer.length > limiteTotal) {
+    throw new ValidationError(
+      `Os arquivos somam mais que o limite do evento (${settings.maxFileSizeMb} MB no total).`
+    );
+  }
+
+  const position = s.files.length ? Math.max(...s.files.map((f) => f.position)) + 1 : 0;
+  const { key, tamanho } = await salvarArquivo(eventId, submissionId, buffer, position);
+  await prisma.submissionFile.create({
+    data: { submissionId, fileKey: key, fileName, fileSizeBytes: tamanho, position },
   });
+
+  return getSubmission(eventId, submissionId);
 }
 
-/** Bytes do arquivo (PDF, DOCX ou PPTX), para a comissão baixar e ler. */
-export async function readFile(eventId: string, submissionId: string) {
+/** Remove um arquivo de um trabalho em rascunho (painel). */
+export async function removeFile(eventId: string, submissionId: string, fileId: string) {
   const s = await getSubmission(eventId, submissionId);
-  if (!s.fileKey) throw new NotFoundError("Este trabalho não tem arquivo anexado");
-  const extensao = s.fileKey.slice(s.fileKey.lastIndexOf(".") + 1);
+  if (s.status !== "DRAFT") {
+    throw new ValidationError("Este trabalho já foi enviado — não é possível alterar os arquivos.");
+  }
+  const file = s.files.find((f) => f.id === fileId);
+  if (!file) throw new NotFoundError("Arquivo não encontrado");
+  await certificateStorage.remove(file.fileKey).catch(() => {});
+  await prisma.submissionFile.delete({ where: { id: fileId } });
+  return getSubmission(eventId, submissionId);
+}
+
+/**
+ * Bytes de um arquivo do trabalho, para a comissão baixar e ler. Sem
+ * `fileId`, devolve o primeiro (compatível com o link antigo de um arquivo).
+ */
+export async function readFile(eventId: string, submissionId: string, fileId?: string) {
+  const s = await getSubmission(eventId, submissionId);
+  if (s.files.length === 0) throw new NotFoundError("Este trabalho não tem arquivo anexado");
+  const file = fileId ? s.files.find((f) => f.id === fileId) : s.files[0];
+  if (!file) throw new NotFoundError("Arquivo não encontrado");
+
+  const extensao = file.fileKey.slice(file.fileKey.lastIndexOf(".") + 1);
   const tipo: TipoArquivo = extensao === "docx" || extensao === "pptx" ? extensao : "pdf";
   return {
-    buffer: await certificateStorage.read(s.fileKey),
-    fileName: s.fileName ?? `${s.code}.${tipo}`,
+    buffer: await certificateStorage.read(file.fileKey),
+    fileName: file.fileName ?? `${s.code}.${tipo}`,
     tipo,
     contentType: CONTENT_TYPE[tipo],
   };
@@ -862,51 +895,76 @@ export async function createPublicSubmission(eventId: string, input: PublicCreat
   const janela = janelaAberta(settings);
   if (!janela.aberta) throw new ValidationError(janela.motivo!);
 
-  const { fileName, dataBase64, uploadId, ...dados } = input;
+  // Normaliza os dois formatos (lista nova ou arquivo único antigo) numa
+  // lista, e separa os campos de arquivo do resto dos dados do trabalho.
+  const { files, fileName, dataBase64, uploadId, ...dados } = input;
+  const entradas =
+    files && files.length > 0
+      ? files
+      : [{ fileName: fileName as string, dataBase64, uploadId }];
 
-  // Valida o arquivo ANTES de criar qualquer coisa: arquivo errado é o erro
-  // mais comum, e ele não pode deixar um trabalho vazio para trás.
-  const buffer = uploadId
-    ? retirarArquivo(eventId, uploadId)
-    : Buffer.from(dataBase64 ?? "", "base64");
-  if (!tipoDoArquivo(buffer)) {
-    throw new ValidationError(FORMATO_INVALIDO);
+  if (entradas.length > MAX_ARQUIVOS_POR_TRABALHO) {
+    throw new ValidationError(
+      `São permitidos no máximo ${MAX_ARQUIVOS_POR_TRABALHO} arquivos.`
+    );
+  }
+
+  // Resolve os buffers (parte ou base64) e valida o formato de CADA um antes
+  // de criar qualquer coisa — arquivo errado é o erro mais comum e não pode
+  // deixar um trabalho vazio para trás. Confere também o tamanho TOTAL.
+  const arquivos = entradas.map((f) => ({
+    fileName: f.fileName,
+    buffer: f.uploadId
+      ? retirarArquivo(eventId, f.uploadId)
+      : Buffer.from(f.dataBase64 ?? "", "base64"),
+  }));
+  for (const a of arquivos) {
+    if (a.buffer.length === 0 || !tipoDoArquivo(a.buffer)) {
+      throw new ValidationError(FORMATO_INVALIDO);
+    }
+  }
+  const totalBytes = arquivos.reduce((t, a) => t + a.buffer.length, 0);
+  if (totalBytes > settings.maxFileSizeMb * 1024 * 1024) {
+    throw new ValidationError(
+      `Os arquivos somam mais que o limite do evento (${settings.maxFileSizeMb} MB no total).`
+    );
   }
 
   const criado = await createSubmission(eventId, dados);
 
   try {
-    const { key, tamanho } = await gravarArquivo(
-      eventId,
-      criado.id,
-      null,
-      buffer,
-      settings.maxFileSizeMb,
-    );
+    let position = 0;
+    for (const a of arquivos) {
+      const { key, tamanho } = await salvarArquivo(eventId, criado.id, a.buffer, position);
+      await prisma.submissionFile.create({
+        data: {
+          submissionId: criado.id,
+          fileKey: key,
+          fileName: a.fileName,
+          fileSizeBytes: tamanho,
+          position,
+        },
+      });
+      position += 1;
+    }
 
     const valor = taxaDoEvento(settings);
-    await prisma.submission.update({
-      where: { id: criado.id },
-      data: {
-        fileKey: key,
-        fileName,
-        fileSizeBytes: tamanho,
-        ...(valor === null ? { status: "SUBMITTED", submittedAt: new Date() } : {}),
-      },
-    });
-
-    if (valor !== null) {
+    if (valor === null) {
+      await prisma.submission.update({
+        where: { id: criado.id },
+        data: { status: "SUBMITTED", submittedAt: new Date() },
+      });
+      void notificarEnvioDeTrabalho(criado.id);
+    } else {
       const apresentador = criado.authors.find((a) => a.isPresenter) ?? criado.authors[0];
       await iniciarCobranca(criado, event.name, valor, apresentador);
-    } else {
-      void notificarEnvioDeTrabalho(criado.id);
     }
   } catch (err) {
-    const arquivo = await prisma.submission.findUnique({
-      where: { id: criado.id },
+    const salvos = await prisma.submissionFile.findMany({
+      where: { submissionId: criado.id },
       select: { fileKey: true },
     });
-    if (arquivo?.fileKey) await certificateStorage.remove(arquivo.fileKey).catch(() => {});
+    for (const f of salvos) await certificateStorage.remove(f.fileKey).catch(() => {});
     await prisma.submission.delete({ where: { id: criado.id } }).catch(() => {});
     if (err instanceof ValidationError) throw err;
     console.error("[Submissions] Falha no envio público:", err);
@@ -928,7 +986,11 @@ export async function createPublicSubmission(eventId: string, input: PublicCreat
  * "aguardando" com o dinheiro já na conta.
  */
 export async function getPublicStatus(submissionId: string) {
-  let s = await prisma.submission.findUnique({ where: { id: submissionId } });
+  const comArquivos = { files: { orderBy: { position: "asc" as const } } };
+  let s = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    include: comArquivos,
+  });
   if (!s) throw new NotFoundError("Trabalho não encontrado");
 
   if (s.paymentStatus === "PENDING" && s.paymentId && mercadoPagoClient.configurado) {
@@ -936,7 +998,11 @@ export async function getPublicStatus(submissionId: string) {
       const conferencia = await mercadoPagoClient.conferirPagamento(s.paymentId);
       if (conferencia.ok && conferencia.dados.aprovado) {
         await confirmarPagamentoSubmissao(conferencia.dados);
-        s = (await prisma.submission.findUnique({ where: { id: submissionId } })) ?? s;
+        s =
+          (await prisma.submission.findUnique({
+            where: { id: submissionId },
+            include: comArquivos,
+          })) ?? s;
       }
     } catch {
       // Falha momentânea de rede: a página tenta de novo no próximo ciclo.
@@ -955,7 +1021,9 @@ export async function getPublicStatus(submissionId: string) {
     qrCodeBase64: s.paymentQrCodeBase64,
     paymentExpiresAt: s.paymentExpiresAt,
     paidAt: s.paidAt,
-    fileName: s.fileName,
+    // Primeiro arquivo para compatibilidade; `files` traz todos.
+    fileName: s.files[0]?.fileName ?? null,
+    files: s.files.map((f) => ({ id: f.id, fileName: f.fileName })),
   };
 }
 
@@ -1069,6 +1137,7 @@ export async function notificarEnvioDeTrabalho(
         modality: true,
         topic: true,
         authors: { orderBy: { position: "asc" } },
+        files: { orderBy: { position: "asc" } },
       },
     });
 
@@ -1100,7 +1169,11 @@ export async function notificarEnvioDeTrabalho(
           submissionTitle: submission.title,
           modalityName: submission.modality?.name ?? null,
           topicName: submission.topic?.name ?? null,
-          fileName: submission.fileName ?? null,
+          fileName:
+            submission.files
+              .map((f) => f.fileName)
+              .filter(Boolean)
+              .join(", ") || null,
           authors: submission.authors.map((a) => ({
             name: a.name,
             email: a.email,

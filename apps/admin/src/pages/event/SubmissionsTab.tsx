@@ -137,15 +137,19 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
     );
   }
 
-  async function abrirArquivo(s: api.SubmissionRecord) {
+  async function abrirArquivo(
+    s: api.SubmissionRecord,
+    file: { id: string; fileName: string | null }
+  ) {
     try {
-      const blob = await api.fetchSubmissionFile(eventId, s.id);
+      const blob = await api.fetchSubmissionFile(eventId, s.id, file.id);
       const url = URL.createObjectURL(blob);
-      if (s.fileName && extensao(s.fileName) !== "pdf") {
+      const nome = file.fileName ?? "";
+      if (nome && extensao(nome) !== "pdf") {
         // DOCX e PPTX o navegador não abre numa aba — baixa com o nome do autor.
         const a = document.createElement("a");
         a.href = url;
-        a.download = s.fileName;
+        a.download = nome;
         a.click();
       } else {
         window.open(url, "_blank", "noopener");
@@ -385,13 +389,25 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                 <ResumoDoTrabalho s={s} />
 
                 <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
-                  {s.fileName ? (
-                    <button type="button" className="btn btn-sm" onClick={() => abrirArquivo(s)}>
-                      {extensao(s.fileName) === "pdf" ? "Abrir PDF" : `Baixar ${extensao(s.fileName).toUpperCase()}`}
-                    </button>
-                  ) : canManage ? (
+                  {s.files.length > 0
+                    ? s.files.map((f, i) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={() => abrirArquivo(s, f)}
+                          title={f.fileName ?? undefined}
+                        >
+                          {f.fileName && extensao(f.fileName) === "pdf"
+                            ? `Abrir PDF${s.files.length > 1 ? ` ${i + 1}` : ""}`
+                            : `Baixar ${f.fileName ? extensao(f.fileName).toUpperCase() : "arquivo"}${s.files.length > 1 ? ` ${i + 1}` : ""}`}
+                        </button>
+                      ))
+                    : !canManage && <span className="muted">Sem arquivo</span>}
+
+                  {canManage && s.status === "DRAFT" && s.files.length < 5 && (
                     <label className="btn btn-sm" style={{ cursor: "pointer" }}>
-                      Anexar arquivo (PDF, DOCX ou PPTX)
+                      {s.files.length === 0 ? "Anexar arquivo (PDF, DOCX ou PPTX)" : "Anexar mais um"}
                       <input
                         type="file"
                         accept={ACCEPT_ARQUIVO}
@@ -403,16 +419,14 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                         }}
                       />
                     </label>
-                  ) : (
-                    <span className="muted">Sem arquivo</span>
                   )}
 
                   {canManage && s.status === "DRAFT" && (
                     <button
                       type="button"
                       className="btn btn-sm"
-                      disabled={!s.fileName || ocupado === `sub-${s.id}`}
-                      title={!s.fileName ? "Anexe o arquivo antes de enviar" : undefined}
+                      disabled={s.files.length === 0 || ocupado === `sub-${s.id}`}
+                      title={s.files.length === 0 ? "Anexe o arquivo antes de enviar" : undefined}
                       onClick={() => {
                         // Liberar sem a taxa é decisão consciente (pagou por
                         // fora, isenção) — não pode sair num clique distraído.

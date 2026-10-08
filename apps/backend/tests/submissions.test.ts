@@ -237,9 +237,8 @@ describe("trabalho — criar, listar, decidir", () => {
 
   it("envia, e não deixa enviar duas vezes", async () => {
     const s = (await post(`/events/${eventId}/submissions`, trabalho())).json().data;
-    await prisma.submission.update({
-      where: { id: s.id },
-      data: { fileKey: "k", fileName: "t.pdf", fileSizeBytes: 10 },
+    await prisma.submissionFile.create({
+      data: { submissionId: s.id, fileKey: "k", fileName: "t.pdf", fileSizeBytes: 10, position: 0 },
     });
 
     expect((await post(`/events/${eventId}/submissions/${s.id}/submit`)).statusCode).toBe(200);
@@ -258,9 +257,8 @@ describe("trabalho — criar, listar, decidir", () => {
 
   it("aprova um trabalho enviado e carimba a data", async () => {
     const s = (await post(`/events/${eventId}/submissions`, trabalho())).json().data;
-    await prisma.submission.update({
-      where: { id: s.id },
-      data: { fileKey: "k", fileName: "t.pdf", fileSizeBytes: 10 },
+    await prisma.submissionFile.create({
+      data: { submissionId: s.id, fileKey: "k", fileName: "t.pdf", fileSizeBytes: 10, position: 0 },
     });
     await post(`/events/${eventId}/submissions/${s.id}/submit`);
 
@@ -323,8 +321,8 @@ describe("arquivo do trabalho", () => {
       dataBase64: pdfValido(),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.fileName).toBe("meu-trabalho.pdf");
-    expect(res.json().data.fileSizeBytes).toBeGreaterThan(0);
+    expect(res.json().data.files[0].fileName).toBe("meu-trabalho.pdf");
+    expect(res.json().data.files[0].fileSizeBytes).toBeGreaterThan(0);
   });
 
   it("recusa arquivo que não é PDF nem DOCX, mesmo com nome .pdf", async () => {
@@ -447,6 +445,63 @@ describe("arquivo do trabalho", () => {
     const s = await novoTrabalho();
     expect((await get(`/events/${eventId}/submissions/${s.id}/file`)).statusCode).toBe(404);
   });
+
+  it("aceita até 5 arquivos e recusa o 6º", async () => {
+    const s = await novoTrabalho();
+    for (let i = 1; i <= 5; i++) {
+      const r = await post(`/events/${eventId}/submissions/${s.id}/file`, {
+        fileName: `arquivo-${i}.pdf`,
+        dataBase64: pdfValido(),
+      });
+      expect(r.statusCode, `arquivo ${i} deveria ser aceito`).toBe(200);
+    }
+    const sexto = await post(`/events/${eventId}/submissions/${s.id}/file`, {
+      fileName: "arquivo-6.pdf",
+      dataBase64: pdfValido(),
+    });
+    expect(sexto.statusCode).toBeGreaterThanOrEqual(400);
+    expect(JSON.stringify(sexto.json())).toMatch(/5 arquivos/);
+
+    const detalhe = (await get(`/events/${eventId}/submissions/${s.id}`)).json().data;
+    expect(detalhe.files).toHaveLength(5);
+  });
+
+  it("recusa quando os arquivos somam mais que o limite total do evento", async () => {
+    await patch(`/events/${eventId}/submissions/settings`, { maxFileSizeMb: 1 });
+    const s = await novoTrabalho();
+    const meioMb = Buffer.concat([
+      Buffer.from("%PDF-1.4\n"),
+      Buffer.alloc(600_000, 0x20),
+    ]).toString("base64");
+
+    // Dois de ~0,6 MB passam de 1 MB no total: o primeiro entra, o segundo não.
+    expect(
+      (await post(`/events/${eventId}/submissions/${s.id}/file`, { fileName: "a.pdf", dataBase64: meioMb })).statusCode
+    ).toBe(200);
+    const segundo = await post(`/events/${eventId}/submissions/${s.id}/file`, { fileName: "b.pdf", dataBase64: meioMb });
+    expect(segundo.statusCode).toBeGreaterThanOrEqual(400);
+    expect(JSON.stringify(segundo.json())).toMatch(/total/i);
+  });
+
+  it("baixa um arquivo específico pelo id e remove outro em rascunho", async () => {
+    const s = await novoTrabalho();
+    await post(`/events/${eventId}/submissions/${s.id}/file`, { fileName: "um.pdf", dataBase64: pdfValido() });
+    await post(`/events/${eventId}/submissions/${s.id}/file`, { fileName: "dois.docx", dataBase64: docxValido() });
+
+    const detalhe = (await get(`/events/${eventId}/submissions/${s.id}`)).json().data;
+    expect(detalhe.files).toHaveLength(2);
+
+    const segundo = detalhe.files[1];
+    const baixado = await get(`/events/${eventId}/submissions/${s.id}/files/${segundo.id}`);
+    expect(baixado.statusCode).toBe(200);
+    expect(baixado.headers["content-type"]).toMatch(/wordprocessingml/);
+
+    const del1 = await del(`/events/${eventId}/submissions/${s.id}/files/${detalhe.files[0].id}`);
+    expect(del1.statusCode).toBe(200);
+    const depois = (await get(`/events/${eventId}/submissions/${s.id}`)).json().data;
+    expect(depois.files).toHaveLength(1);
+    expect(depois.files[0].fileName).toBe("dois.docx");
+  });
 });
 
 describe("envio público pelo site, com taxa no Mercado Pago", () => {
@@ -485,6 +540,32 @@ describe("envio público pelo site, com taxa no Mercado Pago", () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().data.status).toBe("SUBMITTED");
     expect(res.json().data.paymentStatus).toBe("NOT_REQUIRED");
+  });
+
+  it("aceita vários arquivos no envio público, na ordem enviada", async () => {
+    const res = await postPublico(`/public/events/${eventId}/submissions`, {
+      ...trabalho(),
+      files: [
+        { fileName: "artigo.pdf", dataBase64: pdfValido() },
+        { fileName: "anexo.docx", dataBase64: docxValido() },
+      ],
+    });
+    expect(res.statusCode).toBe(201);
+    const detalhe = (await get(`/events/${eventId}/submissions/${res.json().data.id}`)).json().data;
+    expect(detalhe.files).toHaveLength(2);
+    expect(detalhe.files.map((f: { fileName: string }) => f.fileName)).toEqual([
+      "artigo.pdf",
+      "anexo.docx",
+    ]);
+  });
+
+  it("recusa mais de 5 arquivos no envio público", async () => {
+    const files = Array.from({ length: 6 }, (_, i) => ({
+      fileName: `f${i}.pdf`,
+      dataBase64: pdfValido(),
+    }));
+    const res = await postPublico(`/public/events/${eventId}/submissions`, { ...trabalho(), files });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
   });
 
   it("com taxa, gera o Pix e segura o trabalho até pagar", async () => {

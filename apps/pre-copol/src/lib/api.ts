@@ -270,8 +270,8 @@ export interface SubmissionPublicInput {
   abstract: string;
   keywords: string[];
   authors: { name: string; email: string; institution?: string | null; isPresenter?: boolean }[];
-  fileName: string;
-  dataBase64: string;
+  /** Até 5 arquivos, somando no máximo o limite do evento. */
+  files: { fileName: string; dataBase64: string }[];
 }
 
 export interface SubmissionPublicStatus {
@@ -287,6 +287,7 @@ export interface SubmissionPublicStatus {
   paymentExpiresAt: string | null;
   paidAt: string | null;
   fileName: string | null;
+  files?: { id: string; fileName: string | null }[];
 }
 
 export function getSubmissionConfig(eventId: string) {
@@ -348,18 +349,35 @@ export async function createPublicSubmission(
   input: SubmissionPublicInput,
   aoProgredir?: (fracao: number) => void,
 ) {
-  const { dataBase64, ...dados } = input;
-  let arquivo: { dataBase64: string } | { uploadId: string } = { dataBase64 };
+  const { files, ...dados } = input;
 
-  if (dataBase64.length > PARTE_BASE64) {
+  // Passos para a barra de progresso: cada parte de cada arquivo + o envio
+  // final do formulário. Arquivo pequeno conta como 1 passo.
+  const partesPorArquivo = files.map((f) => Math.max(1, Math.ceil(f.dataBase64.length / PARTE_BASE64)));
+  const totalPassos = partesPorArquivo.reduce((a, b) => a + b, 0) + 1;
+  let passosFeitos = 0;
+
+  type Anexo =
+    | { fileName: string; dataBase64: string }
+    | { fileName: string; uploadId: string };
+  const anexos: Anexo[] = [];
+
+  for (const f of files) {
+    if (f.dataBase64.length <= PARTE_BASE64) {
+      anexos.push({ fileName: f.fileName, dataBase64: f.dataBase64 });
+      passosFeitos += 1;
+      aoProgredir?.(passosFeitos / totalPassos);
+      continue;
+    }
+
     const uploadId = crypto.randomUUID();
-    const total = Math.ceil(dataBase64.length / PARTE_BASE64);
+    const total = Math.ceil(f.dataBase64.length / PARTE_BASE64);
     for (let index = 0; index < total; index++) {
       const parte = {
         uploadId,
         index,
         total,
-        dataBase64: dataBase64.slice(index * PARTE_BASE64, (index + 1) * PARTE_BASE64),
+        dataBase64: f.dataBase64.slice(index * PARTE_BASE64, (index + 1) * PARTE_BASE64),
       };
       const caminho = `/public/events/${eventId}/submissions/parts`;
       // Uma nova tentativa por parte: no celular a rede oscila, e reenviar
@@ -368,14 +386,15 @@ export async function createPublicSubmission(
         if (err instanceof FalhaDeRede) return postarEnvio(caminho, parte);
         throw err;
       });
-      aoProgredir?.((index + 1) / (total + 1));
+      passosFeitos += 1;
+      aoProgredir?.(passosFeitos / totalPassos);
     }
-    arquivo = { uploadId };
+    anexos.push({ fileName: f.fileName, uploadId });
   }
 
   const resultado = await postarEnvio<SubmissionPublicStatus>(
     `/public/events/${eventId}/submissions`,
-    { ...dados, ...arquivo },
+    { ...dados, files: anexos },
   );
   aoProgredir?.(1);
   return resultado;
