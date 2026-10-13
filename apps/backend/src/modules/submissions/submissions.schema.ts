@@ -48,23 +48,32 @@ export const submissionSettingsSchema = z
   );
 
 const authorSchema = z.object({
-  name: z.string().trim().min(2).max(150),
-  email: z.string().trim().toLowerCase().email(),
-  institution: z.string().trim().max(150).nullable().optional(),
+  name: z.string().trim().min(2, "Informe o nome do autor (pelo menos 2 letras).").max(150, "O nome do autor ficou muito longo (máximo de 150 caracteres)."),
+  email: z.string().trim().toLowerCase().email("Informe um e-mail válido para o autor, no formato nome@dominio.com."),
+  institution: z.string().trim().max(150, "O nome da instituição ficou muito longo (máximo de 150 caracteres).").nullable().optional(),
   isPresenter: z.boolean().optional(),
 });
 
 export const createSubmissionSchema = z.object({
   // Opcionais aqui porque o evento pode não ter catálogo nenhum. Quando
   // tem, o service exige a escolha — ver createSubmission.
-  modalityId: z.string().uuid().nullable().optional(),
-  topicId: z.string().uuid().nullable().optional(),
-  title: z.string().trim().min(5, "O título está curto demais").max(300),
-  abstract: z.string().trim().min(50, "O resumo precisa de pelo menos 50 caracteres").max(10000),
-  keywords: z.array(z.string().trim().min(2).max(50)).min(1).max(10),
+  modalityId: z.string().uuid("Escolha uma modalidade na lista.").nullable().optional(),
+  topicId: z.string().uuid("Escolha uma área temática na lista.").nullable().optional(),
+  title: z.string().trim().min(5, "O título está curto demais — escreva pelo menos 5 caracteres.").max(300, "O título ficou longo demais — use no máximo 300 caracteres."),
+  abstract: z.string().trim().min(50, "O resumo precisa de pelo menos 50 caracteres.").max(10000, "O resumo ficou longo demais — use no máximo 10.000 caracteres."),
+  keywords: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(2, "Cada palavra-chave precisa de pelo menos 2 letras.")
+        .max(50, "Cada palavra-chave pode ter no máximo 50 caracteres. Parece que você escreveu uma frase inteira — separe as palavras-chave por vírgula (ex.: periodontia, saúde coletiva).")
+    )
+    .min(1, "Informe pelo menos uma palavra-chave, separando por vírgula.")
+    .max(10, "Informe no máximo 10 palavras-chave."),
   // Pelo menos um autor, e a regra de "exatamente um apresentador" é
   // verificada no service — aqui só garante que a lista não vem vazia.
-  authors: z.array(authorSchema).min(1, "Informe pelo menos um autor").max(20),
+  authors: z.array(authorSchema).min(1, "Informe pelo menos um autor.").max(20, "Informe no máximo 20 autores por trabalho."),
 });
 
 export const updateSubmissionSchema = createSubmissionSchema.partial();
@@ -91,13 +100,13 @@ export type SubmissionSettingsInput = z.infer<typeof submissionSettingsSchema>;
 const fileNameSchema = z
   .string()
   .trim()
-  .min(1)
-  .max(200)
+  .min(1, "Informe o nome do arquivo.")
+  .max(200, "O nome do arquivo ficou muito longo (máximo de 200 caracteres).")
   // Só metadado: o caminho no disco é montado pelo servidor. Ainda assim
   // recusa separador de diretório, para o nome não virar caminho se um
   // dia alguém usá-lo para montar um.
   .refine((v) => !v.includes("/") && !v.includes("\\") && !v.includes(".."), {
-    message: "Nome de arquivo inválido",
+    message: "O nome do arquivo tem caracteres inválidos. Evite barras ( / \\ ) e \"..\" no nome.",
   });
 
 /**
@@ -109,7 +118,7 @@ const fileNameSchema = z
  */
 export const uploadFileSchema = z.object({
   fileName: fileNameSchema,
-  dataBase64: z.string().min(1, "Arquivo vazio"),
+  dataBase64: z.string().min(1, "O arquivo está vazio. Selecione um arquivo válido (PDF, DOCX ou PPTX)."),
 });
 
 /**
@@ -129,24 +138,28 @@ export const MAX_ARQUIVOS_POR_TRABALHO = 5;
 const submissionFileInputSchema = z
   .object({
     fileName: fileNameSchema,
-    dataBase64: z.string().min(1).optional(),
-    uploadId: z.string().uuid().optional(),
+    dataBase64: z.string().min(1, "O arquivo está vazio. Selecione um arquivo válido (PDF, DOCX ou PPTX).").optional(),
+    uploadId: z.string().uuid("Houve uma falha ao enviar o arquivo. Anexe novamente.").optional(),
   })
   .refine((v) => Boolean(v.dataBase64) !== Boolean(v.uploadId), {
-    message: "Anexe o arquivo do trabalho",
+    message: "Anexe o arquivo do trabalho (PDF, DOCX ou PPTX).",
     path: ["dataBase64"],
   });
 
 export const publicCreateSubmissionSchema = createSubmissionSchema
   .extend({
     // Formato novo: lista de arquivos (1 a 5).
-    files: z.array(submissionFileInputSchema).min(1).max(MAX_ARQUIVOS_POR_TRABALHO).optional(),
+    files: z
+      .array(submissionFileInputSchema)
+      .min(1, "Anexe pelo menos um arquivo do trabalho.")
+      .max(MAX_ARQUIVOS_POR_TRABALHO, `Você pode anexar no máximo ${MAX_ARQUIVOS_POR_TRABALHO} arquivos por trabalho.`)
+      .optional(),
     // Formato antigo (um arquivo só). Mantido para o site não quebrar
     // enquanto a versão nova não está no ar na Vercel. O service normaliza
     // os dois para uma lista.
     fileName: fileNameSchema.optional(),
-    dataBase64: z.string().min(1).optional(),
-    uploadId: z.string().uuid().optional(),
+    dataBase64: z.string().min(1, "O arquivo está vazio. Selecione um arquivo válido (PDF, DOCX ou PPTX).").optional(),
+    uploadId: z.string().uuid("Houve uma falha ao enviar o arquivo. Anexe novamente.").optional(),
   })
   .refine(
     (v) => {
@@ -155,7 +168,7 @@ export const publicCreateSubmissionSchema = createSubmissionSchema
       // Exatamente um dos formatos: ou a lista, ou o arquivo único.
       return temLista !== temUnico;
     },
-    { message: "Anexe o arquivo do trabalho", path: ["files"] }
+    { message: "Anexe o arquivo do trabalho (PDF, DOCX ou PPTX) para concluir o envio.", path: ["files"] }
   );
 
 /**
@@ -164,12 +177,12 @@ export const publicCreateSubmissionSchema = createSubmissionSchema
  */
 export const publicUploadPartSchema = z
   .object({
-    uploadId: z.string().uuid(),
-    index: z.number().int().min(0),
-    total: z.number().int().min(1).max(200),
-    dataBase64: z.string().min(1).max(1_000_000),
+    uploadId: z.string().uuid("Houve uma falha no envio do arquivo. Recomece o anexo."),
+    index: z.number().int().min(0, "Houve uma falha no envio do arquivo. Tente anexar novamente."),
+    total: z.number().int().min(1).max(200, "O arquivo é grande demais para o envio. Reduza o tamanho e tente de novo."),
+    dataBase64: z.string().min(1, "Parte do arquivo vazia. Tente anexar novamente.").max(1_000_000, "O arquivo é grande demais para o envio. Reduza o tamanho e tente de novo."),
   })
-  .refine((v) => v.index < v.total, { message: "Parte inválida", path: ["index"] });
+  .refine((v) => v.index < v.total, { message: "Houve uma falha no envio do arquivo. Tente anexar novamente.", path: ["index"] });
 
 export const publicSubmissionIdParams = z.object({ submissionId: z.string().uuid() });
 

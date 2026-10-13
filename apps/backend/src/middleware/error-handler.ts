@@ -21,6 +21,18 @@ export function errorHandler(error: FastifyError | Error, request: FastifyReques
     return reply.status(422).send(fail("VALIDATION_ERROR", "Dados inválidos", error.flatten()));
   }
 
+  // Erros do Fastify/plugins (rate-limit 429, corpo JSON invalido 400, CORS,
+  // payload grande 413...) ja trazem um statusCode proprio. Sem tratar isto
+  // eles caiam no 500 generico abaixo — ex.: quem batia no limite de envios
+  // via "Erro interno do servidor" em vez do 429 "aguarde alguns minutos"
+  // (e o front nem conseguia mostrar a mensagem certa, que depende do 429).
+  const status = (error as FastifyError).statusCode;
+  if (typeof status === "number" && status >= 400 && status < 500) {
+    request.log.warn({ err: error, reqId: request.id, statusCode: status }, "client_error");
+    const code = status === 429 ? "RATE_LIMITED" : ((error as FastifyError).code ?? "BAD_REQUEST");
+    return reply.status(status).send(fail(code, error.message));
+  }
+
   request.log.error({ err: error, reqId: request.id }, "unhandled_error");
   return reply.status(500).send(fail("INTERNAL_ERROR", "Erro interno do servidor"));
 }
