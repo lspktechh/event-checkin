@@ -16,7 +16,8 @@
     "seed": "tsx prisma/seed.ts",
     "seed:modelos": "tsx prisma/seed-modelos-certificado.ts",
     "seed:semantix": "tsx prisma/seed-evento-semantix.ts",
-    "seed:ecohub": "tsx prisma/seed-evento-ecohub.ts"
+    "seed:ecohub": "tsx prisma/seed-evento-ecohub.ts",
+    "seed:inova-saude": "tsx prisma/seed-evento-inova-saude.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

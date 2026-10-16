@@ -8,7 +8,7 @@ export const createInscriptionSchema = z.object({
   // Opcional para suportar tanto o formulário novo (sem seleção) quanto chamadas legadas
   category: z.string().trim().max(50).optional(),
   institution: z.string().trim().max(200).optional().nullable(),
-  notes: z.string().trim().max(1000).optional().nullable(),
+  notes: z.string().trim().max(50000).optional().nullable(),
 
   // Versao do termo que estava na tela quando a pessoa marcou o aceite.
   //
