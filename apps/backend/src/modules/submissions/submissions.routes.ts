@@ -15,6 +15,8 @@ import {
   publicCreateSubmissionSchema,
   publicSubmissionIdParams,
   publicUploadPartSchema,
+  resubmitSubmissionSchema,
+  searchSubmissionsByEmailQuery,
   submissionFileParams,
   submissionIdParams,
   submissionSettingsSchema,
@@ -351,6 +353,73 @@ export async function submissionsRoutes(app: FastifyInstance) {
     async (request) => {
       const { submissionId } = publicSubmissionIdParams.parse(request.params);
       return ok(await service.regeneratePayment(submissionId));
+    }
+  );
+
+  // ── Área pública do autor (consulta e reenvio de correções) ─────────────
+
+  app.get(
+    "/public/events/:slugOrId/submissions",
+    async (request) => {
+      const { slugOrId } = request.params as { slugOrId: string };
+      const { email } = searchSubmissionsByEmailQuery.parse(request.query);
+      return ok(await service.searchPublicSubmissionsByEmail(slugOrId, email));
+    }
+  );
+
+  app.get(
+    "/public/events/:slugOrId/submissions/:submissionId/edit-details",
+    async (request) => {
+      const { slugOrId, submissionId } = request.params as {
+        slugOrId: string;
+        submissionId: string;
+      };
+      const { email } = searchSubmissionsByEmailQuery.parse(request.query);
+      return ok(await service.getPublicSubmissionForEdit(slugOrId, submissionId, email));
+    }
+  );
+
+  app.post(
+    "/public/events/:slugOrId/submissions/:submissionId/resubmit",
+    {
+      bodyLimit: 20 * 1024 * 1024,
+      config: {
+        rateLimit: {
+          max: process.env.NODE_ENV === "test" ? 10_000 : 20,
+          timeWindow: "10 minutes",
+        },
+      },
+    },
+    async (request) => {
+      const { slugOrId, submissionId } = request.params as {
+        slugOrId: string;
+        submissionId: string;
+      };
+      const input = resubmitSubmissionSchema.parse(request.body);
+      const s = await service.resubmitPublicSubmission(slugOrId, submissionId, input);
+      await recordAudit(request, "submissions.resubmit", "Submission", submissionId, {
+        authorEmail: input.authorEmail,
+      });
+      return ok(s);
+    }
+  );
+
+  app.get(
+    "/public/submissions/:submissionId/files/:fileId",
+    async (request, reply) => {
+      const { submissionId, fileId } = request.params as {
+        submissionId: string;
+        fileId: string;
+      };
+      const { buffer, fileName, tipo, contentType } =
+        await service.readPublicSubmissionFile(submissionId, fileId);
+      return reply
+        .header("Content-Type", contentType)
+        .header(
+          "Content-Disposition",
+          `${tipo === "pdf" ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`
+        )
+        .send(buffer);
     }
   );
 }

@@ -278,7 +278,7 @@ export interface SubmissionPublicStatus {
   id: string;
   code: string;
   title: string;
-  status: "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "REJECTED" | "WITHDRAWN";
+  status: "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "RESUBMITTED" | "REJECTED" | "WITHDRAWN";
   paymentStatus: "NOT_REQUIRED" | "PENDING" | "PAID";
   feeAmount: number | null;
   paymentUrl: string | null;

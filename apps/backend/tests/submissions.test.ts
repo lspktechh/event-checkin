@@ -819,4 +819,99 @@ describe("envio público pelo site, com taxa no Mercado Pago", () => {
     const consulta = await get(`/events/${eventId}/submissions/${s.id}`);
     expect(consulta.statusCode).toBe(404);
   });
+
+  describe("consulta e reenvio público pelo autor", () => {
+    it("consulta trabalho pelo e-mail de qualquer um dos coautores", async () => {
+      const s = (
+        await postPublico(
+          `/public/events/${eventId}/submissions`,
+          envio({
+            authors: [
+              { name: "Primeira Autora", email: "primeira@uni.br", isPresenter: true },
+              { name: "Segundo Coautor", email: "coautor.segundo@usp.br", isPresenter: false },
+            ],
+          })
+        )
+      ).json().data;
+
+      // Consulta pelo e-mail da primeira autora
+      const res1 = await getPublico(`/public/events/${eventId}/submissions?email=primeira@uni.br`);
+      expect(res1.statusCode).toBe(200);
+      expect(res1.json().data.submissions.some((item: { id: string }) => item.id === s.id)).toBe(true);
+
+      // Consulta pelo e-mail do segundo coautor
+      const res2 = await getPublico(`/public/events/${eventId}/submissions?email=coautor.segundo@usp.br`);
+      expect(res2.statusCode).toBe(200);
+      expect(res2.json().data.submissions.some((item: { id: string }) => item.id === s.id)).toBe(true);
+    });
+
+    it("autor edita trabalho aprovado com ressalva e status vira RESUBMITTED", async () => {
+      const s = (
+        await postPublico(
+          `/public/events/${eventId}/submissions`,
+          envio({
+            title: "Trabalho com ressalva para correcao",
+            authors: [{ name: "Ana Pesquisadora", email: "ana.pesq@uni.br", isPresenter: true }],
+          })
+        )
+      ).json().data;
+
+      // Comissão aprova com ressalva
+      await post(`/events/${eventId}/submissions/${s.id}/decide`, {
+        decision: "APPROVED_WITH_RESERVATIONS",
+        reason: "Favor corrigir a formatação da ABNT e incluir mais gráficos.",
+      });
+
+      // Autor busca detalhes para edição
+      const detalhes = await getPublico(
+        `/public/events/${eventId}/submissions/${s.id}/edit-details?email=ana.pesq@uni.br`
+      );
+      expect(detalhes.statusCode).toBe(200);
+      expect(detalhes.json().data.submission.decisionReason).toBe(
+        "Favor corrigir a formatação da ABNT e incluir mais gráficos."
+      );
+
+      // Autor reenvia trabalho corrigido com novo arquivo
+      const resubmit = await app.inject({
+        method: "POST",
+        url: `/public/events/${eventId}/submissions/${s.id}/resubmit`,
+        payload: {
+          authorEmail: "ana.pesq@uni.br",
+          title: "Trabalho com ressalva para correcao (Versão Corrigida)",
+          abstract:
+            "Estudo revisado com correção das normas e inclusão dos gráficos requisitados pela comissão avaliadora.",
+          keywords: ["cárie", "saúde bucal", "revisado"],
+          modalityId,
+          topicId,
+          authors: [{ name: "Ana Pesquisadora", email: "ana.pesq@uni.br", isPresenter: true }],
+          keepFileIds: [],
+          newFiles: [
+            {
+              fileName: "artigo_corrigido.pdf",
+              dataBase64: Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF").toString("base64"),
+            },
+          ],
+          correctionsNotes: "Ajustamos todas as referências ABNT.",
+        },
+      });
+
+      expect(resubmit.statusCode).toBe(200);
+      expect(resubmit.json().data.status).toBe("RESUBMITTED");
+      expect(resubmit.json().data.title).toBe(
+        "Trabalho com ressalva para correcao (Versão Corrigida)"
+      );
+
+      // No painel, o trabalho agora está como RESUBMITTED e a comissão pode aprovar
+      const listaAdmin = await get(`/events/${eventId}/submissions`);
+      const trabalhoNoAdmin = listaAdmin.json().data.items.find((item: { id: string }) => item.id === s.id);
+      expect(trabalhoNoAdmin.status).toBe("RESUBMITTED");
+
+      // Comissão pode reavaliar e aprovar definitivamente
+      const aprovacaoFinal = await post(`/events/${eventId}/submissions/${s.id}/decide`, {
+        decision: "APPROVED",
+      });
+      expect(aprovacaoFinal.statusCode).toBe(200);
+      expect(aprovacaoFinal.json().data.status).toBe("APPROVED");
+    });
+  });
 });

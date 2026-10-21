@@ -8,6 +8,7 @@ const STATUS_LABEL: Record<api.SubmissionStatus, string> = {
   UNDER_REVIEW: "Em avaliação",
   APPROVED: "Aprovado",
   APPROVED_WITH_RESERVATIONS: "Aprovado com ressalva",
+  RESUBMITTED: "Corrigido pelo autor",
   REJECTED: "Recusado",
   WITHDRAWN: "Retirado",
 };
@@ -43,6 +44,7 @@ const STATUS_BADGE: Record<api.SubmissionStatus, string> = {
   UNDER_REVIEW: "badge-warning",
   APPROVED: "badge-success",
   APPROVED_WITH_RESERVATIONS: "badge-warning",
+  RESUBMITTED: "badge-info",
   REJECTED: "badge-danger",
   WITHDRAWN: "badge-muted",
 };
@@ -485,7 +487,8 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                   {canManage &&
                     (s.status === "SUBMITTED" ||
                       s.status === "UNDER_REVIEW" ||
-                      s.status === "APPROVED_WITH_RESERVATIONS") && (
+                      s.status === "APPROVED_WITH_RESERVATIONS" ||
+                      s.status === "RESUBMITTED") && (
                     <>
                       <button
                         type="button"

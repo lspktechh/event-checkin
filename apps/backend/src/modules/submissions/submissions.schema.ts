@@ -96,7 +96,7 @@ export const decideSubmissionSchema = z
 
 export const listSubmissionsQuery = z.object({
   status: z
-    .enum(["DRAFT", "SUBMITTED", "UNDER_REVIEW", "APPROVED", "APPROVED_WITH_RESERVATIONS", "REJECTED", "WITHDRAWN"])
+    .enum(["DRAFT", "SUBMITTED", "UNDER_REVIEW", "APPROVED", "APPROVED_WITH_RESERVATIONS", "RESUBMITTED", "REJECTED", "WITHDRAWN"])
     .optional(),
   modalityId: z.string().uuid().optional(),
   topicId: z.string().uuid().optional(),
@@ -104,6 +104,50 @@ export const listSubmissionsQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
+
+export const searchSubmissionsByEmailQuery = z.object({
+  email: z.string().trim().min(3, "Informe um e-mail válido"),
+});
+
+export const resubmitSubmissionSchema = z.object({
+  authorEmail: z.string().trim().min(3, "Informe o e-mail de um dos autores"),
+  title: z
+    .string()
+    .trim()
+    .min(5, "O título precisa ter pelo menos 5 caracteres.")
+    .max(300, "O título ficou longo demais — use no máximo 300 caracteres."),
+  abstract: z
+    .string()
+    .trim()
+    .min(50, "O resumo precisa ter pelo menos 50 caracteres.")
+    .max(10000, "O resumo ficou longo demais — use no máximo 10.000 caracteres."),
+  keywords: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(2, "Cada palavra-chave precisa ter pelo menos 2 letras.")
+        .max(50, "Cada palavra-chave pode ter no máximo 50 caracteres.")
+    )
+    .min(1, "Informe pelo menos uma palavra-chave.")
+    .max(10, "Informe no máximo 10 palavras-chave."),
+  modalityId: z.string().uuid().nullable().optional(),
+  topicId: z.string().uuid().nullable().optional(),
+  authors: z.array(authorSchema).min(1, "Informe pelo menos um autor.").max(20, "Informe no máximo 20 autores."),
+  keepFileIds: z.array(z.string().uuid()).optional().default([]),
+  newFiles: z
+    .array(
+      z.object({
+        fileName: z.string().trim().min(1),
+        dataBase64: z.string().min(1),
+      })
+    )
+    .optional()
+    .default([]),
+  correctionsNotes: z.string().trim().max(3000).optional(),
+});
+
+export type ResubmitSubmissionInput = z.infer<typeof resubmitSubmissionSchema>;
 
 export type CreateSubmissionInput = z.infer<typeof createSubmissionSchema>;
 export type SubmissionSettingsInput = z.infer<typeof submissionSettingsSchema>;

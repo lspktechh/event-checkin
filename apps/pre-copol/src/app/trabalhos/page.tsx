@@ -204,6 +204,35 @@ export default function TrabalhosPage() {
       <main style={{ flex: 1, padding: "32px 16px 56px" }}>
         <div className="container-page" style={{ maxWidth: 760 }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 30 }}>Submissão de Trabalhos</h1>
+          <div
+            style={{
+              margin: "0 0 20px",
+              padding: "12px 16px",
+              borderRadius: 10,
+              background: "rgba(59, 130, 246, 0.1)",
+              border: "1px solid rgba(59, 130, 246, 0.25)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 13, color: "var(--foreground)" }}>
+              Já enviou seu trabalho e precisa ver o parecer ou enviar correções da comissão?
+            </span>
+            <a
+              href="https://lspkeventos.vercel.app/copol/trabalhos"
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#60a5fa",
+                textDecoration: "none",
+              }}
+            >
+              Consultar e Reenviar Correções →
+            </a>
+          </div>
           <p style={{ margin: "0 0 24px", color: "var(--muted-foreground)", lineHeight: 1.6 }}>
             Envie seu trabalho para avaliação da comissão científica. O arquivo pode ser em{" "}
             <strong>PDF</strong>, <strong>DOCX</strong> (Word) ou <strong>PPTX</strong> (PowerPoint)

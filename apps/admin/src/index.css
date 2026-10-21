@@ -155,6 +155,10 @@ tr:hover td {
   background: rgba(161, 161, 161, 0.15);
   color: var(--text-muted);
 }
+.badge-info {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
 
 .error-text {
   color: #f87171;

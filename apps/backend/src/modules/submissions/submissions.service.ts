@@ -18,6 +18,7 @@ import type {
   CreateSubmissionInput,
   PublicCreateSubmissionInput,
   PublicUploadPartInput,
+  ResubmitSubmissionInput,
   SubmissionSettingsInput,
 } from "./submissions.schema.js";
 
@@ -1208,4 +1209,248 @@ export async function notificarEnvioDeTrabalho(
   } catch (err) {
     console.error("[Submissions] Erro inesperado ao notificar envio de trabalho:", err);
   }
+}
+
+// ─── Área pública do autor (consulta e reenvio de correções) ───────────────
+
+export async function resolveEvent(slugOrId: string) {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
+  const event = await prisma.event.findFirst({
+    where: {
+      OR: [
+        ...(isUuid ? [{ id: slugOrId }] : []),
+        { slug: { equals: slugOrId, mode: "insensitive" as const } },
+        { name: { equals: slugOrId, mode: "insensitive" as const } },
+      ],
+    },
+  });
+  if (!event) throw new NotFoundError("Evento não encontrado");
+  return event;
+}
+
+export async function searchPublicSubmissionsByEmail(slugOrId: string, email: string) {
+  const event = await resolveEvent(slugOrId);
+  await requireModule(event.id);
+  const limpo = email.trim().toLowerCase();
+  if (!limpo) return { event: { id: event.id, name: event.name, slug: event.slug }, submissions: [] };
+
+  const items = await prisma.submission.findMany({
+    where: {
+      eventId: event.id,
+      authors: {
+        some: {
+          email: { equals: limpo, mode: "insensitive" },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      authors: { orderBy: { position: "asc" } },
+      files: {
+        orderBy: { position: "asc" },
+        select: { id: true, fileName: true, fileSizeBytes: true, position: true },
+      },
+      modality: { select: { id: true, name: true } },
+      topic: { select: { id: true, name: true } },
+    },
+  });
+
+  return {
+    event: {
+      id: event.id,
+      name: event.name,
+      slug: event.slug,
+    },
+    submissions: items,
+  };
+}
+
+export async function getPublicSubmissionForEdit(
+  slugOrId: string,
+  submissionId: string,
+  authorEmail: string
+) {
+  const event = await resolveEvent(slugOrId);
+  await requireModule(event.id);
+
+  const s = await prisma.submission.findFirst({
+    where: { id: submissionId, eventId: event.id },
+    include: {
+      authors: { orderBy: { position: "asc" } },
+      files: {
+        orderBy: { position: "asc" },
+        select: { id: true, fileName: true, fileSizeBytes: true, position: true },
+      },
+      modality: { select: { id: true, name: true } },
+      topic: { select: { id: true, name: true } },
+    },
+  });
+  if (!s) throw new NotFoundError("Trabalho não encontrado");
+
+  // Confere se o e-mail informado pertence a algum dos autores deste trabalho
+  const limpo = authorEmail.trim().toLowerCase();
+  const autorValido = s.authors.some((a) => a.email.trim().toLowerCase() === limpo);
+  if (!autorValido) {
+    throw new ValidationError("E-mail não autorizado para visualizar ou editar este trabalho.");
+  }
+
+  const [modalities, topics] = await Promise.all([
+    prisma.submissionModality.findMany({
+      where: { eventId: event.id, active: true },
+      orderBy: { position: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.submissionTopic.findMany({
+      where: { eventId: event.id, active: true },
+      orderBy: { position: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  return {
+    event: { id: event.id, name: event.name, slug: event.slug },
+    submission: s,
+    modalities,
+    topics,
+  };
+}
+
+export async function resubmitPublicSubmission(
+  slugOrId: string,
+  submissionId: string,
+  input: ResubmitSubmissionInput
+) {
+  const event = await resolveEvent(slugOrId);
+  await requireModule(event.id);
+  const settings = await getSettings(event.id);
+
+  const s = await prisma.submission.findFirst({
+    where: { id: submissionId, eventId: event.id },
+    include: {
+      authors: { orderBy: { position: "asc" } },
+      files: { orderBy: { position: "asc" } },
+    },
+  });
+  if (!s) throw new NotFoundError("Trabalho não encontrado");
+
+  const limpo = input.authorEmail.trim().toLowerCase();
+  const autorExistente = s.authors.some((a) => a.email.trim().toLowerCase() === limpo);
+  if (!autorExistente) {
+    throw new ValidationError("E-mail não autorizado para enviar correções deste trabalho.");
+  }
+
+  if (s.status === "APPROVED") {
+    throw new ValidationError("Este trabalho já foi aprovado definitivamente e não pode ser editado.");
+  }
+  if (s.status === "WITHDRAWN") {
+    throw new ValidationError("Este trabalho foi retirado e não pode ser editado.");
+  }
+
+  // Validação dos novos arquivos
+  const novosArquivos = (input.newFiles || []).map((f) => ({
+    fileName: f.fileName,
+    buffer: Buffer.from(f.dataBase64, "base64"),
+  }));
+  for (const a of novosArquivos) {
+    if (a.buffer.length === 0 || !tipoDoArquivo(a.buffer)) {
+      throw new ValidationError(FORMATO_INVALIDO);
+    }
+  }
+
+  // Arquivos mantidos
+  const arquivosMantidos = s.files.filter((f) => (input.keepFileIds || []).includes(f.id));
+  const totalArquivos = arquivosMantidos.length + novosArquivos.length;
+  if (totalArquivos === 0) {
+    throw new ValidationError("O trabalho precisa ter pelo menos um arquivo anexado.");
+  }
+  if (totalArquivos > MAX_ARQUIVOS_POR_TRABALHO) {
+    throw new ValidationError(
+      `São permitidos no máximo ${MAX_ARQUIVOS_POR_TRABALHO} arquivos por trabalho.`
+    );
+  }
+
+  const bytesMantidos = arquivosMantidos.reduce((tot, f) => tot + (f.fileSizeBytes ?? 0), 0);
+  const bytesNovos = novosArquivos.reduce((tot, a) => tot + a.buffer.length, 0);
+  const limiteBytes = settings.maxFileSizeMb * 1024 * 1024;
+  if (bytesMantidos + bytesNovos > limiteBytes) {
+    throw new ValidationError(
+      `Os arquivos somam mais que o limite do evento (${settings.maxFileSizeMb} MB no total).`
+    );
+  }
+
+  // Remove os arquivos que o autor descartou
+  const arquivosRemovidos = s.files.filter((f) => !(input.keepFileIds || []).includes(f.id));
+  for (const f of arquivosRemovidos) {
+    await certificateStorage.remove(f.fileKey).catch(() => {});
+    await prisma.submissionFile.delete({ where: { id: f.id } }).catch(() => {});
+  }
+
+  // Salva novos arquivos
+  let nextPos = arquivosMantidos.length
+    ? Math.max(...arquivosMantidos.map((f) => f.position)) + 1
+    : 0;
+  for (const a of novosArquivos) {
+    const { key, tamanho } = await salvarArquivo(event.id, s.id, a.buffer, nextPos);
+    await prisma.submissionFile.create({
+      data: {
+        submissionId: s.id,
+        fileKey: key,
+        fileName: a.fileName,
+        fileSizeBytes: tamanho,
+        position: nextPos,
+      },
+    });
+    nextPos += 1;
+  }
+
+  // Atualiza autores
+  await prisma.submissionAuthor.deleteMany({ where: { submissionId: s.id } });
+  const temApresentador = input.authors.some((a) => a.isPresenter);
+  await prisma.submissionAuthor.createMany({
+    data: input.authors.map((a, i) => ({
+      submissionId: s.id,
+      name: a.name.trim(),
+      email: a.email.trim().toLowerCase(),
+      institution: a.institution?.trim() || null,
+      isPresenter: a.isPresenter ?? (!temApresentador && i === 0),
+      position: i,
+    })),
+  });
+
+  // Atualiza os dados do trabalho e status para RESUBMITTED
+  const atualizado = await prisma.submission.update({
+    where: { id: s.id },
+    data: {
+      title: input.title.trim(),
+      abstract: input.abstract.trim(),
+      keywords: input.keywords.map((k) => k.trim()).filter(Boolean),
+      modalityId: input.modalityId ?? null,
+      topicId: input.topicId ?? null,
+      status: "RESUBMITTED",
+      updatedAt: new Date(),
+    },
+    include: {
+      authors: { orderBy: { position: "asc" } },
+      files: { orderBy: { position: "asc" } },
+      modality: { select: { id: true, name: true } },
+      topic: { select: { id: true, name: true } },
+    },
+  });
+
+  return atualizado;
+}
+
+export async function readPublicSubmissionFile(submissionId: string, fileId: string) {
+  const file = await prisma.submissionFile.findFirst({
+    where: { id: fileId, submissionId },
+    include: { submission: { select: { eventId: true } } },
+  });
+  if (!file) throw new NotFoundError("Arquivo não encontrado.");
+
+  const { buffer, fileName, tipo, contentType } = await readFile(
+    file.submission.eventId,
+    submissionId,
+    fileId
+  );
+  return { buffer, fileName, tipo, contentType };
 }

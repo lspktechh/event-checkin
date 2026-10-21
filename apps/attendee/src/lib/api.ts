@@ -166,3 +166,129 @@ export function connectSSE(
     eventSource.close();
   };
 }
+
+// --- Consulta e Reenvio de Trabalhos ---
+
+export interface PublicAuthor {
+  id?: string;
+  name: string;
+  email: string;
+  institution: string | null;
+  isPresenter: boolean;
+  position?: number;
+}
+
+export interface PublicFile {
+  id: string;
+  fileName: string | null;
+  fileSizeBytes: number | null;
+  position: number;
+}
+
+export interface PublicSubmission {
+  id: string;
+  code: string;
+  title: string;
+  abstract: string;
+  keywords: string[];
+  status:
+    | "DRAFT"
+    | "SUBMITTED"
+    | "UNDER_REVIEW"
+    | "APPROVED"
+    | "APPROVED_WITH_RESERVATIONS"
+    | "RESUBMITTED"
+    | "REJECTED"
+    | "WITHDRAWN";
+  decisionReason: string | null;
+  modality: { id: string; name: string } | null;
+  topic: { id: string; name: string } | null;
+  authors: PublicAuthor[];
+  files: PublicFile[];
+  paymentStatus: string;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  updatedAt: string;
+}
+
+export interface SearchSubmissionsResponse {
+  event: { id: string; name: string; slug: string | null };
+  submissions: PublicSubmission[];
+}
+
+export interface SubmissionEditDetailsResponse {
+  event: { id: string; name: string; slug: string | null };
+  submission: PublicSubmission;
+  modalities: { id: string; name: string }[];
+  topics: { id: string; name: string }[];
+}
+
+export interface ResubmitInput {
+  authorEmail: string;
+  title: string;
+  abstract: string;
+  keywords: string[];
+  modalityId?: string | null;
+  topicId?: string | null;
+  authors: {
+    name: string;
+    email: string;
+    institution?: string | null;
+    isPresenter?: boolean;
+  }[];
+  keepFileIds: string[];
+  newFiles: {
+    fileName: string;
+    dataBase64: string;
+  }[];
+  correctionsNotes?: string;
+}
+
+export async function searchSubmissionsByEmail(
+  slug: string,
+  email: string
+): Promise<SearchSubmissionsResponse> {
+  const res = await fetch(
+    `/api/publico/trabalhos/${encodeURIComponent(slug)}?email=${encodeURIComponent(email)}`
+  );
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error?.message ?? "Falha ao buscar trabalhos");
+  }
+  return data.data;
+}
+
+export async function getSubmissionEditDetails(
+  slug: string,
+  submissionId: string,
+  email: string
+): Promise<SubmissionEditDetailsResponse> {
+  const res = await fetch(
+    `/api/publico/trabalhos/${encodeURIComponent(slug)}/${encodeURIComponent(submissionId)}?email=${encodeURIComponent(email)}`
+  );
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error?.message ?? "Falha ao carregar trabalho");
+  }
+  return data.data;
+}
+
+export async function resubmitSubmission(
+  slug: string,
+  submissionId: string,
+  input: ResubmitInput
+): Promise<PublicSubmission> {
+  const res = await fetch(
+    `/api/publico/trabalhos/${encodeURIComponent(slug)}/${encodeURIComponent(submissionId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error?.message ?? "Falha ao enviar correções");
+  }
+  return data.data;
+}

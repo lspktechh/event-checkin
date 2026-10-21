@@ -813,7 +813,7 @@ export interface CatalogItem {
   submissionCount: number;
 }
 export type SubmissionStatus =
-  | "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "REJECTED" | "WITHDRAWN";
+  | "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "RESUBMITTED" | "REJECTED" | "WITHDRAWN";
 export interface SubmissionAuthorRecord {
   id: string;
   name: string;
