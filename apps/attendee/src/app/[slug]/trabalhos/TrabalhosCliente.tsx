@@ -9,6 +9,22 @@ import {
   type PublicAuthor,
   type SubmissionEditDetailsResponse,
 } from "@/lib/api";
+import {
+  AlertCircleIcon,
+  AlertTriangleIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  DownloadIcon,
+  EyeIcon,
+  FileTextIcon,
+  InfoIcon,
+  PaperclipIcon,
+  PencilIcon,
+  PlusIcon,
+  StarIcon,
+  XCircleIcon,
+  XIcon,
+} from "@/components/Icons";
 
 function lerBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -40,55 +56,63 @@ interface ArquivoVisualizacao {
 
 const STATUS_CONFIG: Record<
   string,
-  { label: string; bg: string; color: string; border: string }
+  { label: string; bg: string; color: string; border: string; dot: string }
 > = {
   DRAFT: {
     label: "Rascunho",
-    bg: "rgba(161, 161, 161, 0.15)",
-    color: "#9a968d",
-    border: "rgba(161, 161, 161, 0.3)",
+    bg: "rgba(113, 113, 122, 0.15)",
+    color: "#a1a1aa",
+    border: "rgba(113, 113, 122, 0.35)",
+    dot: "#a1a1aa",
   },
   SUBMITTED: {
     label: "Enviado à comissão",
-    bg: "rgba(245, 158, 11, 0.15)",
-    color: "#facc15",
-    border: "rgba(245, 158, 11, 0.3)",
+    bg: "rgba(59, 130, 246, 0.15)",
+    color: "#60a5fa",
+    border: "rgba(59, 130, 246, 0.4)",
+    dot: "#3b82f6",
   },
   UNDER_REVIEW: {
     label: "Em avaliação",
-    bg: "rgba(245, 158, 11, 0.15)",
-    color: "#facc15",
-    border: "rgba(245, 158, 11, 0.3)",
+    bg: "rgba(168, 85, 247, 0.18)",
+    color: "#c084fc",
+    border: "rgba(168, 85, 247, 0.4)",
+    dot: "#a855f7",
   },
   APPROVED_WITH_RESERVATIONS: {
     label: "Aprovado com ressalva",
     bg: "rgba(245, 158, 11, 0.22)",
     color: "#fbbf24",
-    border: "#f59e0b",
+    border: "rgba(245, 158, 11, 0.55)",
+    dot: "#f59e0b",
   },
   RESUBMITTED: {
     label: "Corrigido pelo autor",
-    bg: "rgba(59, 130, 246, 0.22)",
-    color: "#60a5fa",
-    border: "#3b82f6",
+    bg: "rgba(14, 165, 233, 0.2)",
+    color: "#38bdf8",
+    border: "rgba(14, 165, 233, 0.5)",
+    dot: "#0ea5e9",
   },
   APPROVED: {
     label: "Aprovado",
     bg: "rgba(34, 197, 94, 0.2)",
     color: "#4ade80",
-    border: "#22c55e",
+    border: "rgba(34, 197, 94, 0.45)",
+    dot: "#22c55e",
   },
   REJECTED: {
     label: "Recusado",
     bg: "rgba(239, 68, 68, 0.2)",
     color: "#f87171",
-    border: "#ef4444",
+    border: "rgba(239, 68, 68, 0.45)",
+    dot: "#ef4444",
   },
   WITHDRAWN: {
     label: "Retirado",
-    bg: "rgba(161, 161, 161, 0.15)",
-    color: "#9a968d",
-    border: "rgba(161, 161, 161, 0.3)",
+    bg: "rgba(71, 85, 105, 0.15)",
+    color: "#94a3b8",
+    border: "rgba(71, 85, 105, 0.35)",
+    dot: "#64748b",
   },
 };
 
@@ -370,13 +394,15 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
 
         {/* Mensagens de Sucesso e Erro */}
         {sucesso && (
-          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-400">
-            ✓ {sucesso}
+          <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-400">
+            <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-400" />
+            <span>{sucesso}</span>
           </div>
         )}
         {erro && (
-          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-400">
-            ✕ {erro}
+          <div className="flex items-center gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-400">
+            <AlertCircleIcon className="h-5 w-5 shrink-0 text-red-400" />
+            <span>{erro}</span>
           </div>
         )}
 
@@ -409,9 +435,12 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                   {carregando ? "Buscando..." : "Buscar Trabalhos"}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-                💡 Dica: Você pode consultar informando o e-mail do autor principal ou
-                de qualquer coautor cadastrado na submissão.
+              <p className="mt-2.5 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+                <InfoIcon className="h-3.5 w-3.5 shrink-0 text-[var(--primary)]" />
+                <span>
+                  Dica: Você pode consultar informando o e-mail do autor principal ou
+                  de qualquer coautor cadastrado na submissão.
+                </span>
               </p>
             </div>
           </form>
@@ -466,13 +495,17 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                       </div>
 
                       <div
-                        className="inline-flex items-center self-start rounded-full px-3 py-1 text-xs font-semibold"
+                        className="inline-flex items-center gap-1.5 self-start rounded-full px-3 py-1 text-xs font-semibold shadow-sm"
                         style={{
                           backgroundColor: statusStyle.bg,
                           color: statusStyle.color,
                           border: `1px solid ${statusStyle.border}`,
                         }}
                       >
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: statusStyle.dot }}
+                        />
                         {statusStyle.label}
                       </div>
                     </div>
@@ -493,17 +526,28 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                           }`,
                         }}
                       >
-                        <strong
-                          className="block text-xs font-bold uppercase tracking-wider"
-                          style={{
-                            color:
-                              sub.status === "APPROVED_WITH_RESERVATIONS"
-                                ? "#fbbf24"
-                                : "#f87171",
-                          }}
-                        >
-                          ⚠️ Parecer da comissão / O que precisa ser corrigido:
-                        </strong>
+                        <div className="flex items-center gap-2">
+                          <AlertTriangleIcon
+                            className="h-4 w-4 shrink-0"
+                            style={{
+                              color:
+                                sub.status === "APPROVED_WITH_RESERVATIONS"
+                                  ? "#fbbf24"
+                                  : "#f87171",
+                            }}
+                          />
+                          <strong
+                            className="block text-xs font-bold uppercase tracking-wider"
+                            style={{
+                              color:
+                                sub.status === "APPROVED_WITH_RESERVATIONS"
+                                  ? "#fbbf24"
+                                  : "#f87171",
+                            }}
+                          >
+                            Parecer da comissão / O que precisa ser corrigido:
+                          </strong>
+                        </div>
                         <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--foreground)]">
                           {sub.decisionReason}
                         </p>
@@ -529,10 +573,17 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                         {sub.authors.map((a) => (
                           <span
                             key={a.id || a.email}
-                            className="rounded-lg bg-[var(--background)] px-2.5 py-1 text-xs text-[var(--foreground)]"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)]/50 bg-[var(--background)] px-2.5 py-1 text-xs text-[var(--foreground)]"
                           >
-                            {a.name} ({a.email})
-                            {a.isPresenter ? " ⭐ [Apresentador]" : ""}
+                            <span>
+                              {a.name} ({a.email})
+                            </span>
+                            {a.isPresenter && (
+                              <span className="inline-flex items-center gap-1 rounded bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-400/20">
+                                <StarIcon className="h-2.5 w-2.5 text-amber-400 fill-amber-400" />
+                                Apresentador
+                              </span>
+                            )}
                           </span>
                         ))}
                       </div>
@@ -556,7 +607,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                                 className="flex items-center gap-1.5 font-medium hover:text-[var(--primary)] transition cursor-pointer text-left"
                                 title="Abrir e visualizar documento sem sair da página"
                               >
-                                <span>👁️</span>
+                                <EyeIcon className="h-3.5 w-3.5 shrink-0 text-[var(--primary)]" />
                                 <span className="underline decoration-dotted underline-offset-2">
                                   {f.fileName ?? "Arquivo"}
                                 </span>
@@ -572,7 +623,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                                 className="text-[var(--muted-foreground)] hover:text-white ml-1 p-0.5"
                                 title="Baixar arquivo no dispositivo"
                               >
-                                ⬇️
+                                <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
                               </a>
                             </div>
                           ))}
@@ -587,15 +638,17 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                           type="button"
                           onClick={() => handleIniciarEdicao(sub)}
                           disabled={carregandoEdicao}
-                          className="flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-5 py-2.5 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/30"
+                          className="flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-5 py-2.5 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/30 cursor-pointer"
                         >
-                          ✏️ {sub.status === "APPROVED_WITH_RESERVATIONS"
+                          <PencilIcon className="h-4 w-4 shrink-0" />
+                          {sub.status === "APPROVED_WITH_RESERVATIONS"
                             ? "Enviar Correções Solicitadas"
                             : "Editar Trabalho"}
                         </button>
                       ) : sub.status === "APPROVED" ? (
-                        <div className="text-xs text-emerald-400 font-medium">
-                          ✓ Trabalho aprovado em definitivo pela comissão.
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                          <CheckIcon className="h-4 w-4 shrink-0" />
+                          Trabalho aprovado em definitivo pela comissão.
                         </div>
                       ) : null}
                     </div>
@@ -622,7 +675,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
               <button
                 type="button"
                 onClick={() => setEditDetails(null)}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-white"
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-white cursor-pointer"
               >
                 Voltar
               </button>
@@ -631,10 +684,13 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
             {/* Parecer do Corretor em Destaque no Topo do Formulário */}
             {editDetails.submission.decisionReason && (
               <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
-                <strong className="block text-xs font-bold uppercase tracking-wider text-amber-400">
-                  ⚠️ Parecer da comissão — O que você precisa corrigir:
-                </strong>
-                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">
+                <div className="flex items-center gap-2">
+                  <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-400" />
+                  <strong className="block text-xs font-bold uppercase tracking-wider text-amber-400">
+                    Parecer da comissão — O que você precisa corrigir:
+                  </strong>
+                </div>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">
                   {editDetails.submission.decisionReason}
                 </p>
               </div>
@@ -737,9 +793,10 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                 <button
                   type="button"
                   onClick={handleAddAutor}
-                  className="rounded-lg border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--primary)] transition hover:bg-[var(--primary)]/20"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--primary)] transition hover:bg-[var(--primary)]/20 cursor-pointer"
                 >
-                  + Adicionar Coautor
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Adicionar Coautor
                 </button>
               </div>
 
@@ -800,10 +857,10 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                         <button
                           type="button"
                           onClick={() => handleRemoverAutor(idx)}
-                          className="text-xs text-red-400 hover:text-red-300"
+                          className="p-1 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10 transition cursor-pointer"
                           title="Remover autor"
                         >
-                          ✕
+                          <XIcon className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
@@ -832,8 +889,12 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                           key={file.id}
                           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)]/60 px-4 py-3 text-xs"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span>{mantido ? "📎" : "❌"}</span>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {mantido ? (
+                              <PaperclipIcon className="h-4 w-4 shrink-0 text-[var(--primary)]" />
+                            ) : (
+                              <XCircleIcon className="h-4 w-4 shrink-0 text-red-400" />
+                            )}
                             <button
                               type="button"
                               onClick={() =>
@@ -867,16 +928,17 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                                   editDetails.submission.title
                                 )
                               }
-                              className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)] transition flex items-center gap-1 cursor-pointer"
+                              className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)] transition flex items-center gap-1.5 cursor-pointer"
                               title="Visualizar documento sem sair do formulário"
                             >
-                              👁️ Abrir
+                              <EyeIcon className="h-3.5 w-3.5" />
+                              Abrir
                             </button>
 
                             <button
                               type="button"
                               onClick={() => toggleKeepFile(file.id)}
-                              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
                                 mantido
                                   ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
                                   : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
@@ -916,18 +978,22 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                     {formNovosArquivos.map((f, i) => (
                       <div
                         key={i}
-                        className="flex items-center justify-between rounded-lg bg-[var(--background)]/60 p-2 text-xs text-[var(--muted-foreground)]"
+                        className="flex items-center justify-between rounded-lg bg-[var(--background)]/60 p-2 text-xs text-[var(--muted-foreground)] border border-[var(--border)]/40"
                       >
-                        <span className="truncate">
-                          • {f.name} ({formatarBytes(f.size)})
-                        </span>
+                        <div className="flex items-center gap-2 truncate">
+                          <PaperclipIcon className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                          <span className="truncate">
+                            {f.name} ({formatarBytes(f.size)})
+                          </span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => abrirNovoArquivo(f)}
-                          className="ml-2 flex shrink-0 items-center gap-1 rounded border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--foreground)] transition hover:border-[var(--primary)] cursor-pointer"
+                          className="ml-2 flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-[11px] font-medium text-[var(--foreground)] transition hover:border-[var(--primary)] cursor-pointer"
                           title="Pré-visualizar novo arquivo anexado"
                         >
-                          👁️ Pré-visualizar
+                          <EyeIcon className="h-3 w-3" />
+                          Pré-visualizar
                         </button>
                       </div>
                     ))}
@@ -955,14 +1021,14 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
               <button
                 type="button"
                 onClick={() => setEditDetails(null)}
-                className="rounded-xl border border-[var(--border)] px-5 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--border)]"
+                className="rounded-xl border border-[var(--border)] px-5 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--border)] cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={enviandoCorrecao}
-                className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-50"
+                className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
               >
                 {enviandoCorrecao
                   ? "Enviando Trabalho Corrigido..."
@@ -986,8 +1052,8 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
             {/* Header do Visualizador */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-[var(--border)] bg-[var(--background)]/90">
               <div className="flex items-center gap-3 min-w-0">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/15 text-lg text-[var(--primary)]">
-                  📄
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/15 text-[var(--primary)]">
+                  <FileTextIcon className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
                   <h4 className="text-sm font-bold text-[var(--foreground)] truncate">
@@ -1014,7 +1080,8 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                   className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] transition"
                   title="Baixar cópia no dispositivo"
                 >
-                  ⬇️ <span className="hidden sm:inline">Baixar arquivo</span>
+                  <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Baixar arquivo</span>
                 </a>
 
                 <button
@@ -1023,7 +1090,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-white/10 hover:text-white transition cursor-pointer"
                   title="Fechar visualizador (ESC)"
                 >
-                  ✕
+                  <XIcon className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -1049,7 +1116,9 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                 </>
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center p-8 text-center space-y-4">
-                  <span className="text-5xl">📄</span>
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--muted)]/10 text-[var(--muted-foreground)]">
+                    <FileTextIcon className="h-8 w-8" />
+                  </div>
                   <div className="max-w-md space-y-2">
                     <h5 className="text-base font-semibold text-[var(--foreground)]">
                       Documento {arquivoAberto.tipo?.toUpperCase() || "anexado"}
@@ -1061,21 +1130,21 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                   <a
                     href={arquivoAberto.downloadUrl}
                     download={arquivoAberto.nomeArquivo}
-                    className="rounded-xl bg-[var(--primary)] px-6 py-2.5 text-xs font-bold text-white transition hover:opacity-90"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-xs font-bold text-white transition hover:opacity-90"
                   >
+                    <DownloadIcon className="h-4 w-4" />
                     Baixar {arquivoAberto.nomeArquivo}
                   </a>
                 </div>
               )}
             </div>
 
-            {/* Rodapé informativo */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 border-t border-[var(--border)] bg-[var(--background)]/90 text-[11px] text-[var(--muted-foreground)]">
-              <span>💡 Documento aberto diretamente no sistema sem sair da página</span>
+            {/* Rodapé do Visualizador */}
+            <div className="flex items-center justify-end px-4 sm:px-6 py-2.5 border-t border-[var(--border)] bg-[var(--background)]/90">
               <button
                 type="button"
                 onClick={() => setArquivoAberto(null)}
-                className="underline hover:text-white transition cursor-pointer"
+                className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-white transition cursor-pointer"
               >
                 Fechar
               </button>

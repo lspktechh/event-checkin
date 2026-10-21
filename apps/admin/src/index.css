@@ -159,6 +159,20 @@ tr:hover td {
   background: rgba(59, 130, 246, 0.2);
   color: #60a5fa;
 }
+.badge-amber {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.badge-purple {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+.badge-cyan {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.4);
+}
 
 .error-text {
   color: #f87171;

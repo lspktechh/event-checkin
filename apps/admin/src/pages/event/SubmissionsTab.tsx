@@ -40,11 +40,11 @@ function extensao(fileName: string): string {
 
 const STATUS_BADGE: Record<api.SubmissionStatus, string> = {
   DRAFT: "badge-muted",
-  SUBMITTED: "badge-warning",
-  UNDER_REVIEW: "badge-warning",
+  SUBMITTED: "badge-info",
+  UNDER_REVIEW: "badge-purple",
   APPROVED: "badge-success",
-  APPROVED_WITH_RESERVATIONS: "badge-warning",
-  RESUBMITTED: "badge-info",
+  APPROVED_WITH_RESERVATIONS: "badge-amber",
+  RESUBMITTED: "badge-cyan",
   REJECTED: "badge-danger",
   WITHDRAWN: "badge-muted",
 };
