@@ -7,6 +7,7 @@ const STATUS_LABEL: Record<api.SubmissionStatus, string> = {
   SUBMITTED: "Enviado",
   UNDER_REVIEW: "Em avaliação",
   APPROVED: "Aprovado",
+  APPROVED_WITH_RESERVATIONS: "Aprovado com ressalva",
   REJECTED: "Recusado",
   WITHDRAWN: "Retirado",
 };
@@ -41,6 +42,7 @@ const STATUS_BADGE: Record<api.SubmissionStatus, string> = {
   SUBMITTED: "badge-warning",
   UNDER_REVIEW: "badge-warning",
   APPROVED: "badge-success",
+  APPROVED_WITH_RESERVATIONS: "badge-warning",
   REJECTED: "badge-danger",
   WITHDRAWN: "badge-muted",
 };
@@ -86,6 +88,10 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
 
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
+  const [ressalvaModal, setRessalvaModal] = useState<{
+    submission: api.SubmissionRecord;
+    reason: string;
+  } | null>(null);
 
   async function carregar() {
     setCarregando(true);
@@ -361,12 +367,38 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                 <div className="spread">
                   <div>
                     <strong>{s.title}</strong>
-                    <div className="muted">
-                      <span className="monospace">{s.code}</span>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      <span className="monospace" style={{ fontWeight: 600 }}>{s.code}</span>
                       {s.modality ? ` · ${s.modality.name}` : ""}
-                      {s.topic ? ` · ${s.topic.name}` : ""} ·{" "}
-                      {s.authors.map((a) => a.name).join(", ")}
+                      {s.topic ? ` · ${s.topic.name}` : ""}
                     </div>
+                    {(() => {
+                      const principal = s.authors.find((a) => a.isPresenter) ?? s.authors[0];
+                      return principal ? (
+                        <div style={{ marginTop: 6, fontSize: 13, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span className="muted">Enviado por:</span>
+                          <strong style={{ color: "var(--foreground)" }}>{principal.name}</strong>
+                          <span
+                            style={{
+                              background: "rgba(59, 130, 246, 0.12)",
+                              color: "#60a5fa",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontFamily: "monospace",
+                              fontSize: 12,
+                            }}
+                            title="E-mail de quem enviou / apresentador"
+                          >
+                            ✉️ {principal.email}
+                          </span>
+                          {s.authors.length > 1 && (
+                            <span className="muted" style={{ fontSize: 12 }}>
+                              ({s.authors.length} autores)
+                            </span>
+                          )}
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                   <div className="row" style={{ gap: 6 }}>
                     {s.paymentStatus === "PAID" && (
@@ -450,7 +482,10 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                     </button>
                   )}
 
-                  {canManage && (s.status === "SUBMITTED" || s.status === "UNDER_REVIEW") && (
+                  {canManage &&
+                    (s.status === "SUBMITTED" ||
+                      s.status === "UNDER_REVIEW" ||
+                      s.status === "APPROVED_WITH_RESERVATIONS") && (
                     <>
                       <button
                         type="button"
@@ -466,6 +501,24 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                         }}
                       >
                         Aprovar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{
+                          background: "#d97706",
+                          color: "#ffffff",
+                          borderColor: "#d97706",
+                        }}
+                        disabled={ocupado === `ressalva-${s.id}`}
+                        onClick={() => {
+                          setRessalvaModal({
+                            submission: s,
+                            reason: s.decisionReason || "",
+                          });
+                        }}
+                      >
+                        Aprovar com ressalva
                       </button>
                       <button
                         type="button"
@@ -537,6 +590,150 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
           </div>
         )}
       </section>
+
+      {ressalvaModal && (
+        <div
+          role="dialog"
+          aria-modal
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#000000aa",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            padding: 16,
+          }}
+          onClick={() => setRessalvaModal(null)}
+        >
+          <div
+            className="card stack"
+            style={{
+              width: 560,
+              maxWidth: "100%",
+              gap: 16,
+              maxHeight: "90vh",
+              overflowY: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="spread" style={{ alignItems: "flex-start" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, color: "#f59e0b" }}>
+                  Aprovar com Ressalva
+                </h3>
+                <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
+                  Protocolo: <strong className="monospace">{ressalvaModal.submission.code}</strong> — {ressalvaModal.submission.title}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: 18,
+                  cursor: "pointer",
+                  color: "var(--text-muted)",
+                }}
+                onClick={() => setRessalvaModal(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                background: "rgba(245, 158, 11, 0.1)",
+                border: "1px solid rgba(245, 158, 11, 0.3)",
+                borderRadius: "var(--radius)",
+                padding: 12,
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "var(--foreground)",
+              }}
+            >
+              <strong>Instrução aos autores:</strong> Explique o que está errado e o que precisa ser corrigido antes do reenvio. Este parecer será salvo no trabalho e enviado por e-mail a todos os autores.
+            </div>
+
+            <label className="field" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                O que está errado e o que precisa ser corrigido? <span style={{ color: "var(--danger)" }}>*</span>
+              </span>
+              <textarea
+                rows={5}
+                value={ressalvaModal.reason}
+                placeholder="Exemplo: Ajustar a formatação das referências bibliográficas para normas ABNT; incluir a descrição da amostra na metodologia; corrigir termos na conclusão..."
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  background: "var(--background)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  color: "var(--foreground)",
+                  outline: "none",
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                  lineHeight: 1.5,
+                }}
+                onChange={(e) =>
+                  setRessalvaModal({ ...ressalvaModal, reason: e.target.value })
+                }
+              />
+              <span className="muted" style={{ fontSize: 12 }}>
+                Obrigatório para aprovação com ressalva.
+              </span>
+            </label>
+
+            <div className="row" style={{ justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setRessalvaModal(null)}
+                disabled={ocupado === `ressalva-${ressalvaModal.submission.id}`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  background: "#d97706",
+                  color: "#ffffff",
+                  borderColor: "#d97706",
+                }}
+                disabled={
+                  !ressalvaModal.reason.trim() ||
+                  ocupado === `ressalva-${ressalvaModal.submission.id}`
+                }
+                onClick={async () => {
+                  const sub = ressalvaModal.submission;
+                  const motivo = ressalvaModal.reason.trim();
+                  if (!motivo) return;
+                  setRessalvaModal(null);
+                  await acao(
+                    `ressalva-${sub.id}`,
+                    () =>
+                      api.decideSubmission(
+                        eventId,
+                        sub.id,
+                        "APPROVED_WITH_RESERVATIONS",
+                        motivo
+                      ),
+                    (r) => `${sub.code} aprovado com ressalva. ${resumoDoAviso(r)}`
+                  );
+                }}
+              >
+                {ocupado === `ressalva-${ressalvaModal.submission.id}`
+                  ? "Enviando..."
+                  : "Confirmar Aprovação com Ressalva"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -571,9 +768,53 @@ function ResumoDoTrabalho({ s }: { s: api.SubmissionRecord }) {
       <p className="muted" style={{ margin: "6px 0 0" }}>
         <strong>Autores:</strong>{" "}
         {s.authors
-          .map((a) => `${a.name}${a.institution ? ` (${a.institution})` : ""}${a.isPresenter ? " — apresentador" : ""}`)
+          .map(
+            (a) =>
+              `${a.name} (${a.email})${a.institution ? ` — ${a.institution}` : ""}${a.isPresenter ? " [Apresentador]" : ""}`
+          )
           .join("; ")}
       </p>
+
+      {s.decisionReason && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 14px",
+            borderRadius: 8,
+            background:
+              s.status === "APPROVED_WITH_RESERVATIONS"
+                ? "rgba(245, 158, 11, 0.12)"
+                : "rgba(239, 68, 68, 0.1)",
+            borderLeft: `4px solid ${
+              s.status === "APPROVED_WITH_RESERVATIONS" ? "#f59e0b" : "#ef4444"
+            }`,
+          }}
+        >
+          <strong
+            style={{
+              display: "block",
+              marginBottom: 4,
+              color: s.status === "APPROVED_WITH_RESERVATIONS" ? "#f59e0b" : "#f87171",
+              fontSize: 13,
+            }}
+          >
+            {s.status === "APPROVED_WITH_RESERVATIONS"
+              ? "⚠️ Ressalvas da comissão para correção:"
+              : "Parecer da comissão:"}
+          </strong>
+          <p
+            style={{
+              margin: 0,
+              whiteSpace: "pre-line",
+              fontSize: 13,
+              color: "var(--foreground)",
+              lineHeight: 1.5,
+            }}
+          >
+            {s.decisionReason}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -813,7 +813,7 @@ export interface CatalogItem {
   submissionCount: number;
 }
 export type SubmissionStatus =
-  | "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+  | "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "REJECTED" | "WITHDRAWN";
 export interface SubmissionAuthorRecord {
   id: string;
   name: string;
@@ -837,6 +837,7 @@ export interface SubmissionRecord {
   files: { id: string; fileName: string | null; fileSizeBytes: number | null; position: number }[];
   submittedAt: string | null;
   decidedAt: string | null;
+  decisionReason?: string | null;
   // Nulos quando o evento não tem catálogo (trabalho enviado pelo site).
   modality: { id: string; name: string } | null;
   topic: { id: string; name: string } | null;
@@ -948,7 +949,7 @@ export function withdrawSubmission(eventId: string, submissionId: string) {
 export function decideSubmission(
   eventId: string,
   submissionId: string,
-  decision: "APPROVED" | "REJECTED",
+  decision: "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "REJECTED",
   reason?: string
 ) {
   // Os autores recebem o resultado por e-mail; a resposta diz quantos avisos saíram.

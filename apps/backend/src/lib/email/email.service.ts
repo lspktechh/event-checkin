@@ -67,8 +67,8 @@ export interface SendSubmissionDecisionParams {
   submissionId: string;
   code: string;
   title: string;
-  decision: "APPROVED" | "REJECTED";
-  /** Parecer da comissão, se ela escreveu um. Vai no e-mail da recusa. */
+  decision: "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "REJECTED";
+  /** Parecer da comissão, se ela escreveu um. Vai no e-mail da recusa ou da aprovação com ressalva. */
   reason?: string | null;
 }
 
@@ -336,19 +336,30 @@ export class EmailService {
   ): Promise<ResultadoDoEnvio> {
     const s = this.configuracao(evento);
     const aprovado = params.decision === "APPROVED";
+    const aprovadoComRessalva = params.decision === "APPROVED_WITH_RESERVATIONS";
     const titulo = escaparHtml(params.title);
     const protocolo = escaparHtml(params.code);
     const nomeDoEvento = escaparHtml(evento.name);
 
     const parecer = params.reason?.trim()
-      ? `<div style="margin: 0 0 24px; padding: 16px 18px; background-color: #F1F5F9; border-radius: 10px;">
-          <div style="font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #64748B; margin-bottom: 6px;">Parecer da comissão</div>
+      ? `<div style="margin: 0 0 24px; padding: 16px 18px; background-color: #F1F5F9; border-radius: 10px; border-left: 4px solid ${aprovadoComRessalva ? "#D97706" : "#64748B"};">
+          <div style="font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: ${aprovadoComRessalva ? "#B45309" : "#64748B"}; margin-bottom: 6px;">
+            ${aprovadoComRessalva ? "Parecer da comissão e correções necessárias" : "Parecer da comissão"}
+          </div>
           <div style="font-size: 15px; line-height: 1.6; color: #334155; white-space: pre-line;">${escaparHtml(params.reason.trim())}</div>
         </div>`
       : "";
 
-    const corpo = aprovado
-      ? `
+    let corpo: string;
+    let assunto: string;
+    let eyebrow: string;
+    let subtitle: string;
+
+    if (aprovado) {
+      assunto = `Trabalho aprovado — ${evento.name}`;
+      eyebrow = "TRABALHO APROVADO";
+      subtitle = "SUBMISSÃO DE TRABALHOS";
+      corpo = `
       <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
         Olá, <strong>${escaparHtml(params.authorName)}</strong>!
       </p>
@@ -361,8 +372,30 @@ export class EmailService {
       <p style="font-size: 15px; line-height: 1.6; margin: 0 0 24px; color: #475569;">
         Em breve a comissão enviará as orientações para a apresentação. Parabéns!
       </p>
-      ${botao(s, s.siteUrl, "Acessar página do evento")}`
-      : `
+      ${botao(s, s.siteUrl, "Acessar página do evento")}`;
+    } else if (aprovadoComRessalva) {
+      assunto = `Trabalho aprovado com ressalva — ${evento.name}`;
+      eyebrow = "TRABALHO APROVADO COM RESSALVA";
+      subtitle = "SUBMISSÃO DE TRABALHOS";
+      corpo = `
+      <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
+        Olá, <strong>${escaparHtml(params.authorName)}</strong>!
+      </p>
+      <p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px; color: #475569;">
+        Informamos que o trabalho <strong>${titulo}</strong> foi
+        <strong style="color: #D97706;">aprovado com ressalva</strong> pela comissão científica do ${nomeDoEvento}.
+      </p>
+      <p style="font-size: 14px; margin: 0 0 20px; color: #64748B;">Protocolo: <strong>${protocolo}</strong></p>
+      ${parecer}
+      <p style="font-size: 15px; line-height: 1.6; margin: 0 0 24px; color: #475569;">
+        Por favor, atente-se às correções apontadas no parecer acima e faça os ajustes necessários para reenviar o seu trabalho.
+      </p>
+      ${botao(s, s.siteUrl, "Acessar página do evento")}`;
+    } else {
+      assunto = `Resultado da avaliação do trabalho — ${evento.name}`;
+      eyebrow = "RESULTADO DA AVALIAÇÃO";
+      subtitle = "TRABALHO NÃO APROVADO";
+      corpo = `
       <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
         Olá, <strong>${escaparHtml(params.authorName)}</strong>.
       </p>
@@ -376,19 +409,18 @@ export class EmailService {
         Obrigado pelo interesse — esperamos contar com você no evento.
       </p>
       ${botao(s, s.siteUrl, "Acessar página do evento")}`;
+    }
 
     return this.enviar(
       s,
       {
         to: params.to,
-        subject: aprovado
-          ? `Trabalho aprovado — ${evento.name}`
-          : `Resultado da avaliação do trabalho — ${evento.name}`,
+        subject: assunto,
         html: montarEmail({
           settings: s,
           eventName: evento.name,
-          eyebrow: aprovado ? "TRABALHO APROVADO" : "RESULTADO DA AVALIAÇÃO",
-          subtitle: aprovado ? "SUBMISSÃO DE TRABALHOS" : "TRABALHO NÃO APROVADO",
+          eyebrow,
+          subtitle,
           body: corpo,
         }),
         tags: [{ name: "tipo", value: "trabalho-decisao" }, { name: "evento", value: tagSegura(evento.id) }],

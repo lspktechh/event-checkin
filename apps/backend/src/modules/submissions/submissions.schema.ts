@@ -78,14 +78,25 @@ export const createSubmissionSchema = z.object({
 
 export const updateSubmissionSchema = createSubmissionSchema.partial();
 
-export const decideSubmissionSchema = z.object({
-  decision: z.enum(["APPROVED", "REJECTED"]),
-  reason: z.string().trim().max(2000).optional(),
-});
+export const decideSubmissionSchema = z
+  .object({
+    decision: z.enum(["APPROVED", "APPROVED_WITH_RESERVATIONS", "REJECTED"]),
+    reason: z.string().trim().max(2000).optional(),
+  })
+  .refine(
+    (data) =>
+      data.decision !== "APPROVED_WITH_RESERVATIONS" ||
+      Boolean(data.reason && data.reason.trim().length > 0),
+    {
+      message:
+        "Informe o que está errado e o que precisa ser corrigido pelo autor para aprovar com ressalva.",
+      path: ["reason"],
+    }
+  );
 
 export const listSubmissionsQuery = z.object({
   status: z
-    .enum(["DRAFT", "SUBMITTED", "UNDER_REVIEW", "APPROVED", "REJECTED", "WITHDRAWN"])
+    .enum(["DRAFT", "SUBMITTED", "UNDER_REVIEW", "APPROVED", "APPROVED_WITH_RESERVATIONS", "REJECTED", "WITHDRAWN"])
     .optional(),
   modalityId: z.string().uuid().optional(),
   topicId: z.string().uuid().optional(),

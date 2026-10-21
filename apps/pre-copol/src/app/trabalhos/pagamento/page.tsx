@@ -28,6 +28,7 @@ const STATUS_TEXTO: Record<SubmissionPublicStatus["status"], string> = {
   SUBMITTED: "Enviado para a comissão",
   UNDER_REVIEW: "Em avaliação",
   APPROVED: "Aprovado",
+  APPROVED_WITH_RESERVATIONS: "Aprovado com ressalva",
   REJECTED: "Recusado",
   WITHDRAWN: "Retirado",
 };

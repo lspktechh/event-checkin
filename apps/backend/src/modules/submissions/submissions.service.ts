@@ -383,6 +383,7 @@ export async function listSubmissions(
             { title: { contains: q.search, mode: "insensitive" as const } },
             { code: { contains: q.search, mode: "insensitive" as const } },
             { authors: { some: { name: { contains: q.search, mode: "insensitive" as const } } } },
+            { authors: { some: { email: { contains: q.search, mode: "insensitive" as const } } } },
           ],
         }
       : {}),
@@ -476,7 +477,7 @@ export async function withdrawSubmission(eventId: string, submissionId: string) 
 export async function decideSubmission(
   eventId: string,
   submissionId: string,
-  decision: "APPROVED" | "REJECTED",
+  decision: "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "REJECTED",
   reason?: string
 ) {
   const s = await getSubmission(eventId, submissionId);
@@ -486,18 +487,27 @@ export async function decideSubmission(
   if (s.status === "WITHDRAWN") {
     throw new ValidationError("O autor retirou este trabalho");
   }
-  // Clique repetido na mesma decisão: nada muda, e ninguém recebe o
+  if (decision === "APPROVED_WITH_RESERVATIONS" && (!reason || !reason.trim())) {
+    throw new ValidationError(
+      "Informe o que está errado e o que precisa ser corrigido pelo autor para aprovação com ressalva."
+    );
+  }
+  // Clique repetido na mesma decisão e mesmo parecer: nada muda, e ninguém recebe o
   // mesmo e-mail duas vezes.
-  if (s.status === decision) {
+  if (s.status === decision && (!reason || s.decisionReason === reason.trim())) {
     return { ...s, autoresAvisados: 0, falhasNoAviso: 0 };
   }
 
   const atualizado = await prisma.submission.update({
     where: { id: submissionId },
-    data: { status: decision, decidedAt: new Date() },
+    data: {
+      status: decision,
+      decidedAt: new Date(),
+      decisionReason: reason?.trim() || null,
+    },
   });
 
-  const aviso = await avisarAutores(eventId, s, decision, reason);
+  const aviso = await avisarAutores(eventId, s, decision, reason?.trim());
   return { ...atualizado, autoresAvisados: aviso.enviados, falhasNoAviso: aviso.falhas };
 }
 
@@ -510,7 +520,7 @@ export async function decideSubmission(
 async function avisarAutores(
   eventId: string,
   s: { id: string; code: string; title: string; authors: { name: string; email: string }[] },
-  decision: "APPROVED" | "REJECTED",
+  decision: "APPROVED" | "APPROVED_WITH_RESERVATIONS" | "REJECTED",
   reason?: string,
 ): Promise<{ enviados: number; falhas: number }> {
   const evento = await prisma.event.findUnique({

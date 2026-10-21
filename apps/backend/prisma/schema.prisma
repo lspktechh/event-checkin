@@ -34,6 +34,7 @@ enum SubmissionStatus {
   SUBMITTED
   UNDER_REVIEW
   APPROVED
+  APPROVED_WITH_RESERVATIONS
   REJECTED
   WITHDRAWN
 }
@@ -409,6 +410,7 @@ model Submission {
   submittedAt DateTime?
   withdrawnAt DateTime?
   decidedAt   DateTime?
+  decisionReason String?   @db.Text
 
   /// Similaridade com os OUTROS trabalhos do mesmo evento, de 0 a 1.
   /// Calculada internamente (pg_trgm), sem serviço externo. Null = ainda

@@ -271,6 +271,49 @@ describe("trabalho — criar, listar, decidir", () => {
     expect(res.json().data.decidedAt).toBeTruthy();
   });
 
+  it("aprova um trabalho com ressalva, exige parecer e grava no banco", async () => {
+    const s = (await post(`/events/${eventId}/submissions`, trabalho())).json().data;
+    await prisma.submissionFile.create({
+      data: { submissionId: s.id, fileKey: "k", fileName: "t.pdf", fileSizeBytes: 10, position: 0 },
+    });
+    await post(`/events/${eventId}/submissions/${s.id}/submit`);
+
+    // Sem motivo para ressalva é recusado
+    const semParecer = await post(`/events/${eventId}/submissions/${s.id}/decide`, {
+      decision: "APPROVED_WITH_RESERVATIONS",
+    });
+    expect(semParecer.statusCode).toBeGreaterThanOrEqual(400);
+
+    // Com parecer salva ressalva
+    const res = await post(`/events/${eventId}/submissions/${s.id}/decide`, {
+      decision: "APPROVED_WITH_RESERVATIONS",
+      reason: "Ajustar normas ABNT e a conclusão.",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.status).toBe("APPROVED_WITH_RESERVATIONS");
+    expect(res.json().data.decisionReason).toBe("Ajustar normas ABNT e a conclusão.");
+
+    const banco = await prisma.submission.findUnique({ where: { id: s.id } });
+    expect(banco?.status).toBe("APPROVED_WITH_RESERVATIONS");
+    expect(banco?.decisionReason).toBe("Ajustar normas ABNT e a conclusão.");
+  });
+
+  it("busca trabalho pelo e-mail do autor", async () => {
+    const s = (
+      await post(
+        `/events/${eventId}/submissions`,
+        trabalho({
+          title: "Trabalho com email especifico",
+          authors: [{ name: "Carlos Autor", email: "carlos.pesquisa@uni.br", institution: "USP" }],
+        })
+      )
+    ).json().data;
+
+    const res = await get(`/events/${eventId}/submissions?search=carlos.pesquisa@uni.br`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.items.some((item: { id: string }) => item.id === s.id)).toBe(true);
+  });
+
   it("retirada pelo autor não apaga o trabalho", async () => {
     // Os anais precisam do histórico: "retirado pelo autor" e "reprovado
     // pela comissão" são coisas diferentes, e nenhuma delas é "sumiu".
