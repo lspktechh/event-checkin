@@ -6,6 +6,7 @@ export async function GET(
   ctx: { params: Promise<{ submissionId: string; fileId: string }> }
 ) {
   const { submissionId, fileId } = await ctx.params;
+  const isDownload = request.nextUrl.searchParams.get("download") === "1";
 
   const res = await proxyRequest(
     `/public/submissions/${encodeURIComponent(submissionId)}/files/${encodeURIComponent(fileId)}`,
@@ -20,7 +21,15 @@ export async function GET(
   }
 
   const contentType = res.headers.get("content-type") || "application/octet-stream";
-  const contentDisposition = res.headers.get("content-disposition") || "attachment";
+  const upstreamDisposition = res.headers.get("content-disposition") || "";
+
+  const match = upstreamDisposition.match(/filename="?([^";]+)"?/);
+  const fname = match ? match[1] : "documento";
+
+  const contentDisposition = isDownload
+    ? `attachment; filename="${fname}"`
+    : `inline; filename="${fname}"`;
+
   const buffer = await res.arrayBuffer();
 
   return new NextResponse(buffer, {

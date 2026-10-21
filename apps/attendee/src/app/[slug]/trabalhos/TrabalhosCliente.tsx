@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   searchSubmissionsByEmail,
   getSubmissionEditDetails,
@@ -27,6 +27,15 @@ function formatarBytes(bytes: number | null): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface ArquivoVisualizacao {
+  titulo: string;
+  url: string;
+  downloadUrl: string;
+  nomeArquivo: string;
+  tamanho?: number;
+  tipo?: string;
 }
 
 const STATUS_CONFIG: Record<
@@ -109,6 +118,62 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
   const [formNovosArquivos, setFormNovosArquivos] = useState<File[]>([]);
   const [formNotas, setFormNotas] = useState("");
   const [enviandoCorrecao, setEnviandoCorrecao] = useState(false);
+
+  // Modal de visualização de documento dentro da página
+  const [arquivoAberto, setArquivoAberto] = useState<ArquivoVisualizacao | null>(null);
+  const [carregandoViewer, setCarregandoViewer] = useState(true);
+
+  // Escuta tecla ESC e trava scroll quando visualizador está aberto
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && arquivoAberto) {
+        setArquivoAberto(null);
+      }
+    };
+    if (arquivoAberto) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [arquivoAberto]);
+
+  function abrirDocumento(
+    submissionId: string,
+    file: { id: string; fileName?: string | null; fileSizeBytes?: number | null },
+    subTitle: string
+  ) {
+    const nome = file.fileName || "documento.pdf";
+    const ext = nome.split(".").pop()?.toLowerCase() || "pdf";
+    const url = `/api/publico/trabalhos/arquivo/${encodeURIComponent(submissionId)}/${encodeURIComponent(file.id)}`;
+    setCarregandoViewer(true);
+    setArquivoAberto({
+      titulo: subTitle,
+      nomeArquivo: nome,
+      url,
+      downloadUrl: `${url}?download=1`,
+      tamanho: file.fileSizeBytes ?? undefined,
+      tipo: ext,
+    });
+  }
+
+  function abrirNovoArquivo(file: File) {
+    const url = URL.createObjectURL(file);
+    const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+    setCarregandoViewer(true);
+    setArquivoAberto({
+      titulo: "Novo arquivo selecionado",
+      nomeArquivo: file.name,
+      url,
+      downloadUrl: url,
+      tamanho: file.size,
+      tipo: ext,
+    });
+  }
 
   async function handleBuscar(e: React.FormEvent) {
     e.preventDefault();
@@ -298,24 +363,24 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
           </h1>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-[var(--muted-foreground)]">
             {editDetails
-              ? `Editando protocolo ${editDetails.submission.code}. Altere os dados ou anexe novos arquivos conforme solicitado pela comissão.`
+              ? "Edite as informações e reenvie os arquivos corrigidos. Quando enviado, a comissão avaliadora verá o status 'Corrigido pelo autor' para nova avaliação."
               : "Consulte os trabalhos enviados, confira o parecer e correções solicitadas pela comissão avaliadora e reenvie as alterações."}
           </p>
         </div>
 
-        {/* Mensagens de Sucesso ou Erro */}
-        {erro && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {erro}
+        {/* Mensagens de Sucesso e Erro */}
+        {sucesso && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-400">
+            ✓ {sucesso}
           </div>
         )}
-        {sucesso && (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-            {sucesso}
+        {erro && (
+          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-400">
+            ✕ {erro}
           </div>
         )}
 
-        {/* MODO 1: Formulário de Busca por E-mail (se não estiver editando) */}
+        {/* MODO 1: Campo de Busca por E-mail */}
         {!editDetails && (
           <form onSubmit={handleBuscar} className="cartao space-y-4 p-6">
             <div>
@@ -330,9 +395,9 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                   id="email"
                   type="email"
                   required
+                  placeholder="exemplo@universidade.edu.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="exemplo@universidade.edu.br"
                   autoComplete="email"
                   className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--background)]/60 px-4 py-3 text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
                 />
@@ -473,7 +538,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                       </div>
                     </div>
 
-                    {/* Arquivos */}
+                    {/* Arquivos com Visualizador Integrado */}
                     {sub.files && sub.files.length > 0 && (
                       <div>
                         <span className="text-xs font-semibold text-[var(--muted-foreground)]">
@@ -481,20 +546,35 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                         </span>
                         <div className="mt-1.5 flex flex-wrap gap-2">
                           {sub.files.map((f) => (
-                            <a
+                            <div
                               key={f.id}
-                              href={`/api/publico/trabalhos/arquivo/${encodeURIComponent(sub.id)}/${encodeURIComponent(f.id)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/80 px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition hover:border-[var(--primary)]"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)]/80 px-3 py-1.5 text-xs text-[var(--foreground)] transition hover:border-[var(--primary)]"
                             >
-                              📎 {f.fileName ?? "Arquivo"}
+                              <button
+                                type="button"
+                                onClick={() => abrirDocumento(sub.id, f, sub.title)}
+                                className="flex items-center gap-1.5 font-medium hover:text-[var(--primary)] transition cursor-pointer text-left"
+                                title="Abrir e visualizar documento sem sair da página"
+                              >
+                                <span>👁️</span>
+                                <span className="underline decoration-dotted underline-offset-2">
+                                  {f.fileName ?? "Arquivo"}
+                                </span>
+                              </button>
                               {f.fileSizeBytes && (
                                 <span className="text-[var(--muted-foreground)]">
                                   ({formatarBytes(f.fileSizeBytes)})
                                 </span>
                               )}
-                            </a>
+                              <a
+                                href={`/api/publico/trabalhos/arquivo/${encodeURIComponent(sub.id)}/${encodeURIComponent(f.id)}?download=1`}
+                                download={f.fileName ?? "arquivo"}
+                                className="text-[var(--muted-foreground)] hover:text-white ml-1 p-0.5"
+                                title="Baixar arquivo no dispositivo"
+                              >
+                                ⬇️
+                              </a>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -603,7 +683,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                   onChange={(e) => setFormArea(e.target.value)}
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
                 >
-                  <option value="">Selecione uma área</option>
+                  <option value="">Selecione uma área temática</option>
                   {editDetails.topics.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
@@ -619,16 +699,16 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                 <label className="block text-sm font-medium text-[var(--foreground)]">
                   Resumo do Trabalho <span className="text-red-400">*</span>
                 </label>
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  {formResumo.length} caracteres (mínimo 50)
+                <span className="mono text-xs text-[var(--muted-foreground)]">
+                  {formResumo.length} caracteres
                 </span>
               </div>
               <textarea
-                rows={6}
                 required
+                rows={8}
                 value={formResumo}
                 onChange={(e) => setFormResumo(e.target.value)}
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 text-sm text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 text-sm leading-relaxed text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none"
               />
             </div>
 
@@ -732,7 +812,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
               </div>
             </div>
 
-            {/* Arquivos Existentes e Novos Arquivos */}
+            {/* Arquivos Existentes e Novos Arquivos com Visualizador Integrado */}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-[var(--foreground)]">
                 Arquivos do Trabalho (PDF, DOCX, PPTX)
@@ -750,35 +830,61 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                       return (
                         <div
                           key={file.id}
-                          className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--background)]/60 px-4 py-2.5 text-xs"
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)]/60 px-4 py-3 text-xs"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <span>{mantido ? "📎" : "❌"}</span>
-                            <span
-                              className={
-                                mantido
-                                  ? "font-medium text-[var(--foreground)]"
-                                  : "line-through text-red-400"
+                            <button
+                              type="button"
+                              onClick={() =>
+                                abrirDocumento(
+                                  editDetails.submission.id,
+                                  file,
+                                  editDetails.submission.title
+                                )
                               }
+                              className={`truncate font-medium text-left hover:text-[var(--primary)] transition cursor-pointer ${
+                                mantido
+                                  ? "text-[var(--foreground)]"
+                                  : "line-through text-red-400"
+                              }`}
+                              title="Abrir e visualizar documento sem sair do formulário"
                             >
                               {file.fileName ?? "Arquivo"}
-                            </span>
-                            <span className="text-[var(--muted-foreground)]">
+                            </button>
+                            <span className="text-[var(--muted-foreground)] shrink-0">
                               ({formatarBytes(file.fileSizeBytes)})
                             </span>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => toggleKeepFile(file.id)}
-                            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-                              mantido
-                                ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                                : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                            }`}
-                          >
-                            {mantido ? "Remover" : "Manter arquivo"}
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                abrirDocumento(
+                                  editDetails.submission.id,
+                                  file,
+                                  editDetails.submission.title
+                                )
+                              }
+                              className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] hover:border-[var(--primary)] transition flex items-center gap-1 cursor-pointer"
+                              title="Visualizar documento sem sair do formulário"
+                            >
+                              👁️ Abrir
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => toggleKeepFile(file.id)}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                                mantido
+                                  ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                                  : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                              }`}
+                            >
+                              {mantido ? "Remover" : "Manter arquivo"}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -803,14 +909,27 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                   className="block w-full text-xs text-[var(--muted-foreground)] file:mr-4 file:rounded-xl file:border-0 file:bg-[var(--primary)]/15 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-[var(--primary)] hover:file:bg-[var(--primary)]/25"
                 />
                 {formNovosArquivos.length > 0 && (
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-2 space-y-1.5">
                     <span className="text-[11px] text-emerald-400 font-medium">
                       Novos arquivos selecionados:
                     </span>
                     {formNovosArquivos.map((f, i) => (
-                      <p key={i} className="text-xs text-[var(--muted-foreground)]">
-                        • {f.name} ({formatarBytes(f.size)})
-                      </p>
+                      <div
+                        key={i}
+                        className="flex items-center justify-between rounded-lg bg-[var(--background)]/60 p-2 text-xs text-[var(--muted-foreground)]"
+                      >
+                        <span className="truncate">
+                          • {f.name} ({formatarBytes(f.size)})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => abrirNovoArquivo(f)}
+                          className="ml-2 flex shrink-0 items-center gap-1 rounded border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--foreground)] transition hover:border-[var(--primary)] cursor-pointer"
+                          title="Pré-visualizar novo arquivo anexado"
+                        >
+                          👁️ Pré-visualizar
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -853,6 +972,117 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
           </form>
         )}
       </div>
+
+      {/* Modal Visualizador de Documento Integrado na Página */}
+      {arquivoAberto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 md:p-6"
+          onClick={() => setArquivoAberto(null)}
+        >
+          <div
+            className="relative flex flex-col w-full max-w-5xl h-[92vh] rounded-2xl border border-[var(--border)] bg-[#101214] shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header do Visualizador */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-[var(--border)] bg-[var(--background)]/90">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/15 text-lg text-[var(--primary)]">
+                  📄
+                </span>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-bold text-[var(--foreground)] truncate">
+                    {arquivoAberto.nomeArquivo}
+                  </h4>
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
+                    <span className="truncate max-w-[200px] sm:max-w-md">
+                      {arquivoAberto.titulo}
+                    </span>
+                    {arquivoAberto.tamanho ? (
+                      <>
+                        <span>•</span>
+                        <span>{formatarBytes(arquivoAberto.tamanho)}</span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={arquivoAberto.downloadUrl}
+                  download={arquivoAberto.nomeArquivo}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:border-[var(--primary)] transition"
+                  title="Baixar cópia no dispositivo"
+                >
+                  ⬇️ <span className="hidden sm:inline">Baixar arquivo</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setArquivoAberto(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-white/10 hover:text-white transition cursor-pointer"
+                  title="Fechar visualizador (ESC)"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Corpo do Visualizador */}
+            <div className="relative flex-1 bg-[#181a1d] overflow-hidden flex flex-col">
+              {arquivoAberto.tipo === "pdf" ? (
+                <>
+                  {carregandoViewer && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#101214]">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
+                      <span className="text-xs text-[var(--muted-foreground)]">
+                        Carregando documento...
+                      </span>
+                    </div>
+                  )}
+                  <iframe
+                    src={`${arquivoAberto.url}#toolbar=1&navpanes=0`}
+                    title={arquivoAberto.nomeArquivo}
+                    className="w-full h-full border-0"
+                    onLoad={() => setCarregandoViewer(false)}
+                  />
+                </>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center p-8 text-center space-y-4">
+                  <span className="text-5xl">📄</span>
+                  <div className="max-w-md space-y-2">
+                    <h5 className="text-base font-semibold text-[var(--foreground)]">
+                      Documento {arquivoAberto.tipo?.toUpperCase() || "anexado"}
+                    </h5>
+                    <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                      Arquivos do formato <strong>.{arquivoAberto.tipo}</strong> não são abertos diretamente pelo leitor embutido de navegador sem software proprietário. Você pode baixar uma cópia diretamente para abri-la no seu aplicativo.
+                    </p>
+                  </div>
+                  <a
+                    href={arquivoAberto.downloadUrl}
+                    download={arquivoAberto.nomeArquivo}
+                    className="rounded-xl bg-[var(--primary)] px-6 py-2.5 text-xs font-bold text-white transition hover:opacity-90"
+                  >
+                    Baixar {arquivoAberto.nomeArquivo}
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé informativo */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 border-t border-[var(--border)] bg-[var(--background)]/90 text-[11px] text-[var(--muted-foreground)]">
+              <span>💡 Documento aberto diretamente no sistema sem sair da página</span>
+              <button
+                type="button"
+                onClick={() => setArquivoAberto(null)}
+                className="underline hover:text-white transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
