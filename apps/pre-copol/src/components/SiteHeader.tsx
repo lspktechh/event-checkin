@@ -11,6 +11,7 @@ const LINKS = [
   // espaco de que o nome do evento precisava para nao ser truncado.
   { href: "/", label: "Eventos", soNoAmplo: true },
   { href: "/programacao/", label: "Programação" },
+  { href: "/hands-on/", label: "Hands On" },
   { href: "/trabalhos/", label: "Trabalhos" },
   { href: "/parcerias/", label: "Parcerias" },
 ];
@@ -98,7 +99,9 @@ export function SiteHeader({ eventTitle = "Pré-Copol", eventYear = "2026", subt
 
         <nav style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           {LINKS.map((link) => {
-            const active = pathname === link.href;
+            const active =
+              pathname === link.href ||
+              (link.href !== "/" && pathname?.startsWith(link.href));
             return (
               <Link
                 key={link.href}

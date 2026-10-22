@@ -6,7 +6,7 @@ import { listActiveEvents, getSchedule, type EventData, type ScheduleItem } from
 import { COPOL_FALLBACK_SCHEDULE } from "@/lib/copol-schedule-data";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { CalendarIcon, MapPinIcon, ClockIcon } from "@/components/Icons";
+import { CalendarIcon, MapPinIcon, ClockIcon, ArrowRightIcon } from "@/components/Icons";
 
 const DAY_TABS = [
   { id: "all", label: "Todos os Dias" },
@@ -322,6 +322,35 @@ export default function SchedulePage() {
                                 <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.5, whiteSpace: "pre-line" }}>
                                   {item.description}
                                 </p>
+                              )}
+
+                              {item.type?.toLowerCase().includes("hands on") && (
+                                <div style={{ marginTop: 12 }}>
+                                  <Link
+                                    href={
+                                      item.date?.includes("2026-11-05")
+                                        ? "/hands-on/?dia=quinta"
+                                        : item.date?.includes("2026-11-06")
+                                        ? "/hands-on/?dia=sexta"
+                                        : "/hands-on/"
+                                    }
+                                    className="btn-primary"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      fontSize: 13,
+                                      padding: "8px 16px",
+                                      borderRadius: 8,
+                                      textDecoration: "none",
+                                      fontWeight: 700,
+                                      color: "var(--primary-foreground)",
+                                    }}
+                                  >
+                                    <span>Ver os Hands On & Inscrever-se</span>
+                                    <ArrowRightIcon size={14} />
+                                  </Link>
+                                </div>
                               )}
                             </div>
                           </div>

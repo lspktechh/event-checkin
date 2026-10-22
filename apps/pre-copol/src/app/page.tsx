@@ -721,6 +721,35 @@ export default function HomePage() {
                                       {item.description}
                                     </p>
                                   )}
+
+                                  {item.type?.toLowerCase().includes("hands on") && (
+                                    <div style={{ marginTop: 12 }}>
+                                      <Link
+                                        href={
+                                          item.date?.includes("2026-11-05")
+                                            ? "/hands-on/?dia=quinta"
+                                            : item.date?.includes("2026-11-06")
+                                            ? "/hands-on/?dia=sexta"
+                                            : "/hands-on/"
+                                        }
+                                        className="btn-primary"
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 8,
+                                          fontSize: 13,
+                                          padding: "8px 16px",
+                                          borderRadius: 8,
+                                          textDecoration: "none",
+                                          fontWeight: 700,
+                                          color: "var(--primary-foreground)",
+                                        }}
+                                      >
+                                        <span>Ver os Hands On & Inscrever-se</span>
+                                        <ArrowRightIcon size={14} />
+                                      </Link>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
