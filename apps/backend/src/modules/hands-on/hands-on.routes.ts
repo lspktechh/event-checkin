@@ -88,6 +88,20 @@ export async function handsOnRoutes(app: FastifyInstance) {
   );
 
   /**
+   * DELETE /events/:eventId/hands-on/inscriptions
+   * Admin — Remove todas as inscrições de Hands On deste evento
+   */
+  app.delete(
+    "/events/:eventId/hands-on/inscriptions",
+    { preHandler: requirePermission("participants.edit") },
+    async (request, reply) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const result = await handsOnService.deleteAllRegistrations(eventId);
+      return reply.send(ok({ deletedCount: result.count }));
+    }
+  );
+
+  /**
    * DELETE /events/:eventId/hands-on/inscriptions/:id
    * Admin — Exclui definitivamente um inscrito do Hands On
    */

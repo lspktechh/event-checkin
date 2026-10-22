@@ -1268,6 +1268,12 @@ export function deleteHandsOnRegistration(eventId: string, id: string) {
   });
 }
 
+export function deleteAllHandsOnRegistrations(eventId: string) {
+  return request<{ deletedCount: number }>(`/events/${eventId}/hands-on/inscriptions`, {
+    method: "DELETE",
+  });
+}
+
 export function checkInHandsOn(eventId: string, idOrToken: string) {
   return request<{ registration: HandsOnRegistrationRecord; alreadyCheckedIn: boolean }>(
     `/events/${eventId}/hands-on/checkin`,

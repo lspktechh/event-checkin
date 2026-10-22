@@ -207,4 +207,8 @@ export const handsOnService = {
     if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
     return handsOnRepository.delete(id);
   },
+
+  async deleteAllRegistrations(eventId: string) {
+    return handsOnRepository.deleteAllByEvent(eventId);
+  },
 };

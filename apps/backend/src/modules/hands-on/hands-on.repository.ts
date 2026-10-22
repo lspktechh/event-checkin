@@ -158,4 +158,10 @@ export const handsOnRepository = {
       where: { id },
     });
   },
+
+  async deleteAllByEvent(eventId: string) {
+    return prisma.handsOnRegistration.deleteMany({
+      where: { eventId },
+    });
+  },
 };

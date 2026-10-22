@@ -318,6 +318,30 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     }
   }
 
+  async function handleDeleteAllRegistrations() {
+    if (registrations.length === 0) {
+      alert("Não há nenhum inscrito cadastrado nos Hands On.");
+      return;
+    }
+    const conf = prompt(
+      `ATENÇÃO: Deseja EXCLUIR MANUALMENTE todos os ${registrations.length} inscritos dos workshops Hands On?\n\nAs inscrições oficiais do congresso COPOL NÃO serão afetadas.\n\nPara confirmar esta exclusão, digite EXCLUIR abaixo:`
+    );
+    if (conf !== "EXCLUIR") {
+      alert("Operação cancelada. Nenhuma inscrição foi excluída.");
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await api.deleteAllHandsOnRegistrations(eventId);
+      await loadData();
+      alert(`${res.deletedCount} inscrições de Hands On foram excluídas com sucesso!`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao excluir inscrições de Hands On");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function exportWorkshopCsv(workshop: WorkshopDef, list: api.HandsOnRegistrationRecord[]) {
     const headers = [
       "Nome",
@@ -918,6 +942,25 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               >
                 📥 Exportar Todos os Inscritos (CSV)
               </button>
+
+              {registrations.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={handleDeleteAllRegistrations}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "rgba(239, 68, 68, 0.15)",
+                    color: "#ef4444",
+                    border: "1px solid rgba(239, 68, 68, 0.4)",
+                  }}
+                  title="Excluir manualmente todas as inscrições dos Hands On"
+                >
+                  🗑️ Excluir Todos os Inscritos do Hands On ({registrations.length})
+                </button>
+              )}
             </div>
           </div>
 
