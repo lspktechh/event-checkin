@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { handsOnService } from "./hands-on.service.js";
 import {
+  createHandsOnInscriptionSchema,
   updateHandsOnStatusSchema,
   handsOnCheckinSchema,
 } from "./hands-on.schema.js";
@@ -20,17 +21,81 @@ const inscriptionIdParams = z.object({
 
 export async function handsOnRoutes(app: FastifyInstance) {
   /**
-   * POST /events/:eventId/hands-on/inscriptions
-   * Public — Cria a inscrição em um workshop Hands On (BLOQUEADO TEMPORARIAMENTE)
+   * GET /events/:eventId/hands-on/settings
+   * Public — Retorna se as inscrições de Hands On estão abertas
    */
-  app.post("/events/:eventId/hands-on/inscriptions", async (_request, reply) => {
-    return reply.status(403).send(
-      fail(
-        "INSCRIPTIONS_PAUSED",
-        "As inscrições para os Workshops Hands On estão temporariamente pausadas pela organização do COPOL."
-      )
-    );
+  app.get("/events/:eventId/hands-on/settings", async (request) => {
+    const { eventId } = eventIdParams.parse(request.params);
+    const settings = await handsOnService.getSettings(eventId);
+    return ok(settings);
   });
+
+  /**
+   * PATCH /events/:eventId/hands-on/settings
+   * Admin — Altera se as inscrições de Hands On estão abertas ou fechadas
+   */
+  app.patch(
+    "/events/:eventId/hands-on/settings",
+    { preHandler: requirePermission("participants.edit") },
+    async (request) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const { open } = z.object({ open: z.boolean() }).parse(request.body);
+      const result = await handsOnService.updateSettings(eventId, open);
+      return ok(result);
+    }
+  );
+
+  /**
+   * POST /events/:eventId/hands-on/inscriptions
+   * Public — Cria a inscrição em um workshop Hands On (valida abertura e limite)
+   */
+  app.post("/events/:eventId/hands-on/inscriptions", async (request, reply) => {
+    const { eventId } = eventIdParams.parse(request.params);
+    const body = createHandsOnInscriptionSchema.parse(request.body);
+
+    const registration = await handsOnService.register(eventId, {
+      ...body,
+      amount: body.amount,
+      phone: body.phone ?? null,
+      location: body.location ?? null,
+      sponsor: body.sponsor ?? null,
+      category: body.category ?? null,
+      institution: body.institution ?? null,
+      notes: body.notes ?? null,
+    });
+
+    return reply.status(201).send(ok(registration));
+  });
+
+  /**
+   * POST /events/:eventId/hands-on/inscriptions/manual
+   * Admin — Inscreve um participante manualmente pelo painel admin
+   */
+  app.post(
+    "/events/:eventId/hands-on/inscriptions/manual",
+    { preHandler: requirePermission("participants.edit") },
+    async (request, reply) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const manualSchema = createHandsOnInscriptionSchema.extend({
+        status: z.enum(["CONFIRMED", "PENDING"]).optional().default("CONFIRMED"),
+      });
+      const body = manualSchema.parse(request.body);
+
+      const registration = await handsOnService.registerManual(eventId, {
+        ...body,
+        amount: body.amount,
+        phone: body.phone ?? null,
+        location: body.location ?? null,
+        sponsor: body.sponsor ?? null,
+        category: body.category ?? null,
+        institution: body.institution ?? null,
+        status: body.status,
+        notes: body.notes ?? null,
+      });
+
+      return reply.status(201).send(ok(registration));
+    }
+  );
 
   /**
    * GET /events/:eventId/hands-on/stats

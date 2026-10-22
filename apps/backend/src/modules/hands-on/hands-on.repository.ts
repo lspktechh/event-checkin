@@ -19,6 +19,7 @@ export interface CreateHandsOnData {
   status?: string;
   qrToken: string;
   notes?: string | null;
+  paidAt?: Date | null;
 }
 
 export const handsOnRepository = {
@@ -43,6 +44,7 @@ export const handsOnRepository = {
         status: data.status ?? (data.amount === 0 ? "CONFIRMED" : "PENDING"),
         qrToken: data.qrToken,
         notes: data.notes ?? null,
+        paidAt: data.paidAt !== undefined ? data.paidAt : (data.amount === 0 ? new Date() : null),
       },
     });
   },

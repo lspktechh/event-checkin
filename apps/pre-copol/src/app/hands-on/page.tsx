@@ -48,11 +48,41 @@ function HandsOnContent() {
     initialDia === "quinta" ? "quinta" : initialDia === "sexta" ? "sexta" : "todos"
   );
 
+  const [handsOnOpen, setHandsOnOpen] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [stats, setStats] = useState<Record<string, { total: number; confirmed: number; pending: number }>>({});
+
   useEffect(() => {
     if (initialDia === "quinta" || initialDia === "sexta") {
       setActiveTab(initialDia);
     }
   }, [initialDia]);
+
+  useEffect(() => {
+    const targetEventId = "f1b36d08-e85d-459b-8606-69119ab05a78";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://137-131-233-254.sslip.io";
+
+    // 1. Busca se as inscrições estão abertas ou fechadas
+    fetch(`${apiUrl}/events/${targetEventId}/hands-on/settings`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.data?.open !== undefined) {
+          setHandsOnOpen(Boolean(json.data.open));
+        }
+      })
+      .catch(() => setHandsOnOpen(false))
+      .finally(() => setLoadingSettings(false));
+
+    // 2. Busca estatísticas de vagas preenchidas
+    fetch(`${apiUrl}/events/${targetEventId}/hands-on/stats`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.data) {
+          setStats(json.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const quintaItems = HANDS_ON_LIST.filter((h) => h.diaId === "quinta");
   const sextaItems = HANDS_ON_LIST.filter((h) => h.diaId === "sexta");
@@ -166,28 +196,54 @@ function HandsOnContent() {
             </div>
           </div>
 
-          {/* Banner de Inscrições Pausadas */}
-          <div
-            style={{
-              maxWidth: 720,
-              margin: "0 auto 32px",
-              padding: "16px 20px",
-              borderRadius: 12,
-              background: "rgba(239, 68, 68, 0.12)",
-              border: "1.5px solid rgba(239, 68, 68, 0.5)",
-              color: "#fca5a5",
-              textAlign: "center",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              fontSize: 14,
-              fontWeight: 700,
-            }}
-          >
-            <span style={{ fontSize: 18 }}>🔒</span>
-            <span>Inscrições temporariamente pausadas pela organização do COPOL 2026.</span>
-          </div>
+          {/* Banner Dinâmico: Aberto vs Pausado */}
+          {!loadingSettings && !handsOnOpen && (
+            <div
+              style={{
+                maxWidth: 720,
+                margin: "0 auto 32px",
+                padding: "16px 20px",
+                borderRadius: 12,
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1.5px solid rgba(239, 68, 68, 0.5)",
+                color: "#fca5a5",
+                textAlign: "center",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              <span style={{ fontSize: 18 }}>🔒</span>
+              <span>Inscrições temporariamente pausadas pela organização do COPOL 2026.</span>
+            </div>
+          )}
+
+          {!loadingSettings && handsOnOpen && (
+            <div
+              style={{
+                maxWidth: 720,
+                margin: "0 auto 32px",
+                padding: "14px 20px",
+                borderRadius: 12,
+                background: "rgba(45, 212, 191, 0.1)",
+                border: "1.5px solid rgba(45, 212, 191, 0.4)",
+                color: "var(--primary)",
+                textAlign: "center",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              <span style={{ fontSize: 18 }}>✨</span>
+              <span>Inscrições ABERTAS! Escolha seu workshop e garanta sua vaga antes que esgote.</span>
+            </div>
+          )}
 
           {/* Abas de Navegação dos Dias */}
           <div
@@ -291,9 +347,17 @@ function HandsOnContent() {
               gap: 22,
             }}
           >
-            {displayedItems.map((item) => (
-              <HandsOnCard key={item.id} item={item} />
-            ))}
+            {displayedItems.map((item) => {
+              const workshopStat = stats[item.id] || stats[item.slug];
+              return (
+                <HandsOnCard
+                  key={item.id}
+                  item={item}
+                  isOpen={handsOnOpen}
+                  stats={workshopStat}
+                />
+              );
+            })}
           </div>
 
           {/* Seção Informativa de Apoio / Dúvidas */}
@@ -378,8 +442,19 @@ function HandsOnContent() {
   );
 }
 
-function HandsOnCard({ item }: { item: HandsOnItem }) {
+function HandsOnCard({
+  item,
+  isOpen,
+  stats,
+}: {
+  item: HandsOnItem;
+  isOpen: boolean;
+  stats?: { total: number; confirmed: number; pending: number };
+}) {
   const isGratuito = item.preco === 0;
+  const confirmedCount = stats?.confirmed ?? 0;
+  const vagasRestantes = Math.max(0, item.vagas - confirmedCount);
+  const isFull = confirmedCount >= item.vagas;
 
   return (
     <div
@@ -430,8 +505,8 @@ function HandsOnCard({ item }: { item: HandsOnItem }) {
             style={{
               fontSize: 12,
               fontWeight: 700,
-              color: "var(--primary)",
-              background: "rgba(45, 212, 191, 0.12)",
+              color: isFull ? "#fca5a5" : "var(--primary)",
+              background: isFull ? "rgba(239, 68, 68, 0.15)" : "rgba(45, 212, 191, 0.12)",
               padding: "4px 10px",
               borderRadius: 999,
               display: "inline-flex",
@@ -444,10 +519,14 @@ function HandsOnCard({ item }: { item: HandsOnItem }) {
                 width: 6,
                 height: 6,
                 borderRadius: "50%",
-                background: "var(--primary)",
+                background: isFull ? "#ef4444" : "var(--primary)",
               }}
             />
-            {item.vagas} vagas
+            {isFull
+              ? "Vagas Esgotadas"
+              : confirmedCount > 0
+              ? `${vagasRestantes} vagas restantes`
+              : `${item.vagas} vagas`}
           </span>
         </div>
 
@@ -551,27 +630,69 @@ function HandsOnCard({ item }: { item: HandsOnItem }) {
           </strong>
         </div>
 
-        <button
-          type="button"
-          disabled
-          style={{
-            padding: "10px 18px",
-            fontSize: 13,
-            fontWeight: 700,
-            borderRadius: 10,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            background: "rgba(255, 255, 255, 0.08)",
-            color: "var(--muted-foreground)",
-            border: "1px solid var(--border)",
-            cursor: "not-allowed",
-            whiteSpace: "nowrap",
-            opacity: 0.8,
-          }}
-        >
-          <span>🔒 Inscrições Pausadas</span>
-        </button>
+        {!isOpen ? (
+          <button
+            type="button"
+            disabled
+            style={{
+              padding: "10px 18px",
+              fontSize: 13,
+              fontWeight: 700,
+              borderRadius: 10,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(255, 255, 255, 0.08)",
+              color: "var(--muted-foreground)",
+              border: "1px solid var(--border)",
+              cursor: "not-allowed",
+              whiteSpace: "nowrap",
+              opacity: 0.8,
+            }}
+          >
+            <span>🔒 Inscrições Pausadas</span>
+          </button>
+        ) : isFull ? (
+          <button
+            type="button"
+            disabled
+            style={{
+              padding: "10px 18px",
+              fontSize: 13,
+              fontWeight: 700,
+              borderRadius: 10,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(239, 68, 68, 0.12)",
+              color: "#fca5a5",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              cursor: "not-allowed",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>Esgotado</span>
+          </button>
+        ) : (
+          <Link
+            href={`/hands-on/inscricao?id=${item.id}`}
+            className="btn-primary"
+            style={{
+              padding: "10px 18px",
+              fontSize: 13,
+              fontWeight: 700,
+              borderRadius: 10,
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>Inscrever-se</span>
+            <ArrowRightIcon size={14} />
+          </Link>
+        )}
       </div>
     </div>
   );

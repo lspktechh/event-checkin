@@ -1,12 +1,93 @@
 import { handsOnRepository, type CreateHandsOnData } from "./hands-on.repository.js";
 import { generateQrToken } from "../../shared/tokens.js";
-import { NotFoundError } from "../../shared/errors.js";
+import { NotFoundError, ConflictError } from "../../shared/errors.js";
 import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { prisma } from "../../database/prisma.js";
 import { env } from "../../config/env.js";
+import type { Prisma } from "@prisma/client";
+
+export const HANDS_ON_CAPACITY: Record<string, number> = {
+  "clareamento-dental-caseiro": 10,
+  "fechamento-diastema-manequim": 12,
+  "preenchimento-labial": 12,
+  "cirurgia-guiada-implantodontia": 12,
+  "resina-injetada-dvo": 12,
+  "radiotech-tomografia-visita": 12,
+  "toxina-botulinica-hof": 14,
+  "simplificando-resina-composta": 18,
+  "fotografia-smartphone": 12,
+  "integrale-cirurgia-implante-protetico": 20,
+  "reabilitacao-resina-composta": 20,
+  "cimentacao-pino-fibra": 20,
+  "lprf-poder-regenerativo": 12,
+};
 
 export const handsOnService = {
+  async getSettings(eventId: string): Promise<{ open: boolean }> {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { siteContent: true },
+    });
+    const siteContent = (event?.siteContent as Record<string, unknown>) ?? {};
+    return { open: Boolean(siteContent.handsOnOpen ?? false) };
+  },
+
+  async updateSettings(eventId: string, open: boolean): Promise<{ open: boolean }> {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { siteContent: true },
+    });
+    const siteContent =
+      typeof event?.siteContent === "object" && event?.siteContent !== null
+        ? { ...(event.siteContent as Record<string, unknown>) }
+        : {};
+    siteContent.handsOnOpen = open;
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { siteContent: siteContent as Prisma.InputJsonValue },
+    });
+    return { open };
+  },
+
   async register(eventId: string, input: Omit<CreateHandsOnData, "eventId" | "qrToken">) {
+    // 1. Verifica se as inscrições estão liberadas
+    const settings = await handsOnService.getSettings(eventId);
+    if (!settings.open) {
+      throw new ConflictError(
+        "HANDS_ON_CLOSED",
+        "As inscrições para os Workshops Hands On estão temporariamente fechadas pela organização do COPOL."
+      );
+    }
+
+    // 2. Verifica limite de vagas do workshop
+    const targetId =
+      input.handsOnId === "reabilitacao-resina-composta"
+        ? "integrale-cirurgia-implante-protetico"
+        : input.handsOnId;
+    const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+
+    const confirmedCount = await prisma.handsOnRegistration.count({
+      where: {
+        eventId,
+        handsOnId: {
+          in: [
+            targetId,
+            targetId === "integrale-cirurgia-implante-protetico"
+              ? "reabilitacao-resina-composta"
+              : targetId,
+          ],
+        },
+        status: "CONFIRMED",
+      },
+    });
+
+    if (confirmedCount >= maxVagas) {
+      throw new ConflictError(
+        "WORKSHOP_FULL",
+        `As vagas para o workshop "${input.title}" estão esgotadas (${confirmedCount}/${maxVagas} confirmadas).`
+      );
+    }
+
     const qrToken = `HO-${generateQrToken()}`;
     const registration = await handsOnRepository.create({
       ...input,
@@ -210,5 +291,20 @@ export const handsOnService = {
 
   async deleteAllRegistrations(eventId: string) {
     return handsOnRepository.deleteAllByEvent(eventId);
+  },
+
+  async registerManual(
+    eventId: string,
+    input: Omit<CreateHandsOnData, "eventId" | "qrToken">
+  ) {
+    const qrToken = `HO-${generateQrToken()}`;
+    const status = input.status || "CONFIRMED";
+    return handsOnRepository.create({
+      ...input,
+      eventId,
+      qrToken,
+      status,
+      paidAt: status === "CONFIRMED" ? new Date() : undefined,
+    });
   },
 };

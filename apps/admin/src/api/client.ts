@@ -1274,6 +1274,43 @@ export function deleteAllHandsOnRegistrations(eventId: string) {
   });
 }
 
+export function getHandsOnSettings(eventId: string) {
+  return request<{ open: boolean }>(`/events/${eventId}/hands-on/settings`);
+}
+
+export function updateHandsOnSettings(eventId: string, open: boolean) {
+  return request<{ open: boolean }>(`/events/${eventId}/hands-on/settings`, {
+    method: "PATCH",
+    body: { open },
+  });
+}
+
+export interface CreateManualHandsOnData {
+  handsOnId: string;
+  title: string;
+  speaker: string;
+  date: string;
+  time: string;
+  location?: string | null;
+  sponsor?: string | null;
+  amount: number;
+  name: string;
+  email: string;
+  document: string;
+  phone?: string | null;
+  category?: string | null;
+  institution?: string | null;
+  status?: "CONFIRMED" | "PENDING";
+  notes?: string | null;
+}
+
+export function createManualHandsOnRegistration(eventId: string, data: CreateManualHandsOnData) {
+  return request<HandsOnRegistrationRecord>(`/events/${eventId}/hands-on/inscriptions/manual`, {
+    method: "POST",
+    body: data,
+  });
+}
+
 export function checkInHandsOn(eventId: string, idOrToken: string) {
   return request<{ registration: HandsOnRegistrationRecord; alreadyCheckedIn: boolean }>(
     `/events/${eventId}/hands-on/checkin`,

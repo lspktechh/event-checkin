@@ -182,12 +182,34 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   const [statusFilter, setStatusFilter] = useState<"ALL" | "CONFIRMED" | "PENDING">("ALL");
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  // Controle de liberação das inscrições no site
+  const [handsOnOpen, setHandsOnOpen] = useState(false);
+  const [togglingOpen, setTogglingOpen] = useState(false);
+
+  // Modal de Inscrição Manual
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [manualWorkshopId, setManualWorkshopId] = useState(WORKSHOPS_CATALOG[0]?.id || "");
+  const [manualName, setManualName] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualDocument, setManualDocument] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualCategory, setManualCategory] = useState("Estudante");
+  const [manualInstitution, setManualInstitution] = useState("");
+  const [manualStatus, setManualStatus] = useState<"CONFIRMED" | "PENDING">("CONFIRMED");
+  const [manualNotes, setManualNotes] = useState("");
+  const [savingManual, setSavingManual] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.listHandsOnRegistrations(eventId);
+      const [data, settings] = await Promise.all([
+        api.listHandsOnRegistrations(eventId),
+        api.getHandsOnSettings(eventId).catch(() => ({ open: false })),
+      ]);
       setRegistrations(data);
+      setHandsOnOpen(settings.open);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar inscrições de Hands On");
     } finally {
@@ -342,6 +364,103 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     }
   }
 
+  async function handleToggleOpen() {
+    const nextState = !handsOnOpen;
+    const msg = nextState
+      ? "Deseja LIBERAR as inscrições dos Hands On no site público do COPOL?\n\nOs participantes poderão se inscrever e efetuar pagamentos via Pix normalmente."
+      : "Deseja FECHAR / PAUSAR as inscrições dos Hands On no site público?\n\nO público não conseguirá mais enviar inscrições até que você reabra.";
+    if (!confirm(msg)) return;
+
+    try {
+      setTogglingOpen(true);
+      const res = await api.updateHandsOnSettings(eventId, nextState);
+      setHandsOnOpen(res.open);
+      alert(
+        res.open
+          ? "Inscrições dos Hands On LIBERADAS com sucesso no site!"
+          : "Inscrições dos Hands On FECHADAS / PAUSADAS com sucesso!"
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao alterar status das inscrições");
+    } finally {
+      setTogglingOpen(false);
+    }
+  }
+
+  function openManualModal(workshopId?: string) {
+    setManualWorkshopId(workshopId || selectedWorkshopId || WORKSHOPS_CATALOG[0]?.id || "");
+    setManualName("");
+    setManualEmail("");
+    setManualDocument("");
+    setManualPhone("");
+    setManualCategory("Estudante");
+    setManualInstitution("");
+    setManualStatus("CONFIRMED");
+    setManualNotes("Inscrição manual via painel");
+    setManualError(null);
+    setIsManualModalOpen(true);
+  }
+
+  async function handleSaveManual(e: React.FormEvent) {
+    e.preventDefault();
+    setManualError(null);
+
+    const nomeTrim = manualName.trim();
+    const emailTrim = manualEmail.trim().toLowerCase();
+    const docClean = manualDocument.replace(/\D/g, "");
+
+    if (!nomeTrim || nomeTrim.length < 3) {
+      setManualError("Informe o nome completo do participante (ao menos 3 letras).");
+      return;
+    }
+    if (!emailTrim || !emailTrim.includes("@")) {
+      setManualError("Informe um e-mail válido.");
+      return;
+    }
+    if (!docClean || docClean.length < 11) {
+      setManualError("Informe um CPF válido (11 dígitos).");
+      return;
+    }
+
+    const workshop = WORKSHOPS_CATALOG.find((w) => w.id === manualWorkshopId);
+    if (!workshop) {
+      setManualError("Workshop selecionado não encontrado.");
+      return;
+    }
+
+    try {
+      setSavingManual(true);
+      await api.createManualHandsOnRegistration(eventId, {
+        handsOnId: workshop.id,
+        title: workshop.titulo,
+        speaker: workshop.ministrante,
+        date: workshop.data === "05/11/2026" ? "2026-11-05" : "2026-11-06",
+        time: workshop.horario,
+        location: workshop.local,
+        sponsor: workshop.patrocinio || null,
+        amount: workshop.preco,
+        name: nomeTrim,
+        email: emailTrim,
+        document: docClean,
+        phone: manualPhone.trim() || null,
+        category: manualCategory || null,
+        institution: manualInstitution.trim() || null,
+        status: manualStatus,
+        notes: manualNotes.trim() || null,
+      });
+
+      await loadData();
+      setIsManualModalOpen(false);
+      alert(
+        `Inscrição de "${nomeTrim}" adicionada com sucesso no Hands On "${workshop.titulo}"!`
+      );
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : "Erro ao adicionar inscrição manual");
+    } finally {
+      setSavingManual(false);
+    }
+  }
+
   function exportWorkshopCsv(workshop: WorkshopDef, list: api.HandsOnRegistrationRecord[]) {
     const headers = [
       "Nome",
@@ -486,6 +605,15 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               📥 Exportar Lista deste Workshop (CSV)
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => openManualModal(selectedWorkshop.id)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              ➕ Adicionar Inscrito Neste Workshop
             </button>
           </div>
 
@@ -924,7 +1052,53 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               </p>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              {/* Controle de Liberação no Site */}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "5px 10px",
+                  borderRadius: 8,
+                  background: handsOnOpen ? "rgba(34, 197, 94, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                  border: `1px solid ${handsOnOpen ? "rgba(34, 197, 94, 0.35)" : "rgba(239, 68, 68, 0.35)"}`,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: handsOnOpen ? "var(--success)" : "var(--danger)",
+                  }}
+                >
+                  {handsOnOpen ? "🟢 Inscrições ABERTAS no Site" : "🔴 Inscrições FECHADAS / PAUSADAS"}
+                </span>
+
+                <button
+                  type="button"
+                  className={handsOnOpen ? "btn btn-danger btn-sm" : "btn btn-primary btn-sm"}
+                  disabled={togglingOpen}
+                  onClick={handleToggleOpen}
+                  style={{ fontSize: 11, padding: "3px 8px" }}
+                >
+                  {togglingOpen
+                    ? "Salvando…"
+                    : handsOnOpen
+                    ? "🔒 Fechar / Pausar"
+                    : "🔓 Liberar no Site"}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => openManualModal()}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                ➕ Novo Inscrito Manual
+              </button>
+
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -940,7 +1114,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 onClick={exportAllWorkshopsCsv}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                📥 Exportar Todos os Inscritos (CSV)
+                📥 Exportar CSV
               </button>
 
               {registrations.length > 0 && (
@@ -958,7 +1132,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   }}
                   title="Excluir manualmente todas as inscrições dos Hands On"
                 >
-                  🗑️ Excluir Todos os Inscritos do Hands On ({registrations.length})
+                  🗑️ Excluir Todos ({registrations.length})
                 </button>
               )}
             </div>
@@ -1205,6 +1379,233 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Inscrição Manual */}
+      {isManualModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.65)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: 540,
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 24,
+              border: "1px solid var(--border)",
+              boxShadow: "0 12px 36px rgba(0,0,0,0.4)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 16,
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                ➕ Adicionar Inscrito no Hands On
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsManualModalOpen(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  fontSize: 22,
+                  cursor: "pointer",
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {manualError && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  background: "rgba(239, 68, 68, 0.15)",
+                  color: "#ef4444",
+                  fontSize: 13,
+                  marginBottom: 16,
+                }}
+              >
+                {manualError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveManual} className="stack" style={{ gap: 12 }}>
+              <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                <span>Workshop Hands On *</span>
+                <select
+                  value={manualWorkshopId}
+                  onChange={(e) => setManualWorkshopId(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                  required
+                >
+                  <optgroup label="Quinta-feira (05/11)">
+                    {WORKSHOPS_CATALOG.filter((w) => w.diaId === "quinta").map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.titulo} — {w.ministrante} (R$ {w.preco})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Sexta-feira (06/11)">
+                    {WORKSHOPS_CATALOG.filter((w) => w.diaId === "sexta").map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.titulo} — {w.ministrante} (R$ {w.preco})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </label>
+
+              <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                <span>Nome Completo do Participante *</span>
+                <input
+                  type="text"
+                  placeholder="Nome completo"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                  required
+                />
+              </label>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                  <span>E-mail *</span>
+                  <input
+                    type="email"
+                    placeholder="email@exemplo.com"
+                    value={manualEmail}
+                    onChange={(e) => setManualEmail(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                    required
+                  />
+                </label>
+
+                <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                  <span>CPF (apenas números) *</span>
+                  <input
+                    type="text"
+                    placeholder="000.000.000-00"
+                    value={manualDocument}
+                    onChange={(e) => setManualDocument(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                    required
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                  <span>Telefone / WhatsApp</span>
+                  <input
+                    type="tel"
+                    placeholder="(43) 99999-9999"
+                    value={manualPhone}
+                    onChange={(e) => setManualPhone(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                  />
+                </label>
+
+                <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                  <span>Categoria</span>
+                  <select
+                    value={manualCategory}
+                    onChange={(e) => setManualCategory(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                  >
+                    <option value="Estudante">Estudante de Graduação</option>
+                    <option value="Profissional">Cirurgião-Dentista / Profissional</option>
+                    <option value="Pós-Graduando">Pós-Graduando / Especializando</option>
+                    <option value="Docente">Docente / Palestrante</option>
+                    <option value="Cortesia / VIP">Cortesia / VIP / Patrocinador</option>
+                  </select>
+                </label>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                  <span>Faculdade / Instituição</span>
+                  <input
+                    type="text"
+                    placeholder="Ex: Universidade Positivo / UEL"
+                    value={manualInstitution}
+                    onChange={(e) => setManualInstitution(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                  />
+                </label>
+
+                <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                  <span>Status da Inscrição *</span>
+                  <select
+                    value={manualStatus}
+                    onChange={(e) => setManualStatus(e.target.value as any)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                  >
+                    <option value="CONFIRMED">✓ Confirmado (Vaga Garantida)</option>
+                    <option value="PENDING">⏳ Pendente</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
+                <span>Observações Internas (opcional)</span>
+                <input
+                  type="text"
+                  placeholder="Ex: Pago em dinheiro / Cortesia comissão"
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                />
+              </label>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                  marginTop: 14,
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsManualModalOpen(false)}
+                  disabled={savingManual}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingManual}
+                >
+                  {savingManual ? "Salvando…" : "Salvar Inscrição"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
