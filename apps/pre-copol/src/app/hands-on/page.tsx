@@ -145,7 +145,7 @@ function HandsOnContent() {
                   fontWeight: 600,
                 }}
               >
-                <ClockIcon size={15} /> 14:00 às 18:00 (Período da tarde)
+                <ClockIcon size={15} /> Período da tarde (ver horários abaixo)
               </div>
               <div
                 style={{
@@ -305,11 +305,10 @@ function HandsOnContent() {
                   }}
                 >
                   <strong style={{ color: "var(--gold)", display: "block", marginBottom: 6, fontSize: 15 }}>
-                    Horários Simultâneos
+                    Horários dos Workshops
                   </strong>
                   <p style={{ margin: 0, fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.5 }}>
-                    Os Hands On acontecem no mesmo período (14:00 às 18:00). Por isso, sugerimos escolher{" "}
-                    <strong>1 workshop para quinta-feira</strong> e <strong>1 para sexta-feira</strong>.
+                    Cada Hands On possui seu horário individual de início e término indicado no card. Atente-se aos horários para não haver sobreposição de atividades no mesmo dia.
                   </p>
                 </div>
 

@@ -23,7 +23,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "quinta",
     diaSemana: "Quinta-feira",
     data: "05/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "14:00 às 15:30",
     titulo: "Clareamento dental caseiro, do molde ao produto",
     ministrante: "Profª Marcela Moreira",
     preco: 20,
@@ -35,7 +35,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "quinta",
     diaSemana: "Quinta-feira",
     data: "05/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "15:30 às 17:30",
     titulo: "Fechamento de diastema no manequim",
     ministrante: "Profª Marcela Moreira",
     preco: 20,
@@ -47,7 +47,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "quinta",
     diaSemana: "Quinta-feira",
     data: "05/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "13:30 às 15:00",
     titulo: "Preenchimento labial",
     ministrante: "Profª Ana Paula Pereira",
     preco: 50,
@@ -59,7 +59,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "quinta",
     diaSemana: "Quinta-feira",
     data: "05/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "16:00 às 17:30",
     titulo: "Cirurgia Guiada em Implantodontia",
     ministrante: "Prof. Marcos Guskuma",
     preco: 20,
@@ -72,7 +72,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "quinta",
     diaSemana: "Quinta-feira",
     data: "05/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "14:00 às 15:30",
     titulo: "Resina composta injetada para aumento de DVO: dicas clínicas",
     ministrante: "Prof. Carlos Archangelo",
     preco: 20,
@@ -84,13 +84,13 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "quinta",
     diaSemana: "Quinta-feira",
     data: "05/11/2026",
-    horario: "15:00 – 18:00",
+    horario: "Palestra às 15:00 · Hands On às 18:30",
     titulo: "Palestra: “Tomografia sem mistérios” e Hands On na Radiotech",
     ministrante: "Dra. Mariana Paião",
     preco: 0,
     vagas: 12,
     local: "Auditório Positivo & Radiotech Londrina",
-    observacao: "Visita técnica (12 vagas) com palestra prévia",
+    observacao: "Visita técnica (12 vagas às 18:30) com palestra prévia às 15:00",
   },
 
   // SEXTA-FEIRA (06/11)
@@ -99,7 +99,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "sexta",
     diaSemana: "Sexta-feira",
     data: "06/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "14:30 às 16:30",
     titulo: "Toxina Botulínica: como iniciar na Harmonização facial com segurança",
     ministrante: "Profª Marcia Palla",
     preco: 30,
@@ -111,7 +111,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "sexta",
     diaSemana: "Sexta-feira",
     data: "06/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "13:30 às 16:30",
     titulo: "Simplificando o dia a dia com Resina Composta",
     ministrante: "Dr. Paulo Chagas",
     preco: 20,
@@ -124,7 +124,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "sexta",
     diaSemana: "Sexta-feira",
     data: "06/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "15:30 às 16:30",
     titulo: "Hands on de fotografia com smartphone",
     ministrante: "Dra. Herica Delalíbera",
     preco: 15,
@@ -132,24 +132,24 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     local: "Sala Fotográfica / Auditório Positivo",
   },
   {
-    id: "reabilitacao-resina-composta",
+    id: "integrale-cirurgia-implante-protetico",
     diaId: "sexta",
     diaSemana: "Sexta-feira",
     data: "06/11/2026",
-    horario: "14:00 – 18:00",
-    titulo: "Hands on Reabilitação em Resina Composta",
-    ministrante: "Dr. Pedro Urnau",
+    horario: "17:00 às 18:00",
+    titulo: "Hands on Integrale: cirurgia de implante e componente protético",
+    ministrante: "Prof. Alessandro Batistella e Paulo Lucchese",
     preco: 20,
     vagas: 20,
     patrocinio: "Integrale",
-    local: "Laboratório de Prótese Positivo",
+    local: "Laboratório de Prótese / Clínica Positivo",
   },
   {
     id: "cimentacao-pino-fibra",
     diaId: "sexta",
     diaSemana: "Sexta-feira",
     data: "06/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "15:30 às 16:30",
     titulo: "Hands on de Cimentações de Pino de Fibra de Vidro",
     ministrante: "Prof. Lucas",
     preco: 20,
@@ -162,7 +162,7 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
     diaId: "sexta",
     diaSemana: "Sexta-feira",
     data: "06/11/2026",
-    horario: "14:00 – 18:00",
+    horario: "16:00 às 17:00",
     titulo: "Hands on L-PRF: O PODER REGENERATIVO DO PRÓPRIO SANGUE",
     ministrante: "Prof. João Rozante",
     preco: 20,
@@ -206,13 +206,17 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       map[def.id] = { total: 0, confirmed: 0, pending: 0, checkedIn: 0 };
     }
     for (const reg of registrations) {
-      if (!map[reg.handsOnId]) {
-        map[reg.handsOnId] = { total: 0, confirmed: 0, pending: 0, checkedIn: 0 };
+      const targetId =
+        reg.handsOnId === "reabilitacao-resina-composta"
+          ? "integrale-cirurgia-implante-protetico"
+          : reg.handsOnId;
+      if (!map[targetId]) {
+        map[targetId] = { total: 0, confirmed: 0, pending: 0, checkedIn: 0 };
       }
-      map[reg.handsOnId].total += 1;
-      if (reg.status === "CONFIRMED") map[reg.handsOnId].confirmed += 1;
-      if (reg.status === "PENDING") map[reg.handsOnId].pending += 1;
-      if (reg.checkedInAt) map[reg.handsOnId].checkedIn += 1;
+      map[targetId].total += 1;
+      if (reg.status === "CONFIRMED") map[targetId].confirmed += 1;
+      if (reg.status === "PENDING") map[targetId].pending += 1;
+      if (reg.checkedInAt) map[targetId].checkedIn += 1;
     }
     return map;
   }, [registrations]);
@@ -241,7 +245,13 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   const workshopRegistrations = useMemo(() => {
     if (!selectedWorkshopId) return [];
     return registrations
-      .filter((r) => r.handsOnId === selectedWorkshopId)
+      .filter((r) => {
+        const targetId =
+          r.handsOnId === "reabilitacao-resina-composta"
+            ? "integrale-cirurgia-implante-protetico"
+            : r.handsOnId;
+        return targetId === selectedWorkshopId;
+      })
       .filter((r) => {
         if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
         if (participantSearch.trim()) {

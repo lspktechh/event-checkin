@@ -27,7 +27,7 @@ export interface HandsOnItem {
 
 export const HANDS_ON_LIST: HandsOnItem[] = [
   // ==========================================
-  // QUINTA-FEIRA — 05/11/2026 (14:00 às 18:00)
+  // QUINTA-FEIRA — 05/11/2026
   // ==========================================
   {
     id: "clareamento-dental-caseiro",
@@ -39,7 +39,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Quinta-feira, 05/11/2026",
     diaId: "quinta",
     data: "2026-11-05",
-    horario: "14:00 – 18:00",
+    horario: "14:00 às 15:30",
     patrocinio: null,
     descricao:
       "Abordagem clínica prática do clareamento dental caseiro supervisionado. Técnicas de moldagem de precisão, confecção e individualização de moldeiras flexíveis de acetato, seleção criteriosa do gel clareador (peróxido de carbamida vs. peróxido de hidrogênio) e orientações ao paciente para evitar sensibilidade.",
@@ -55,7 +55,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Quinta-feira, 05/11/2026",
     diaId: "quinta",
     data: "2026-11-05",
-    horario: "14:00 – 18:00",
+    horario: "15:30 às 17:30",
     patrocinio: null,
     descricao:
       "Treinamento prático direto em manequim odontológico focado no fechamento harmônico de diastemas em dentes anteriores. Proporções áureas, planejamento estético, seleção de cor, estratificação com resinas compostas, uso de matrizes individualizadas e acabamento e polimento de alto brilho.",
@@ -71,7 +71,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Quinta-feira, 05/11/2026",
     diaId: "quinta",
     data: "2026-11-05",
-    horario: "14:00 – 18:00",
+    horario: "13:30 às 15:00",
     patrocinio: null,
     descricao:
       "Fundamentos científicos e práticos do preenchimento labial com ácido hialurônico na Harmonização Orofacial. Anatomia vascular crítica, análise do contorno e tubérculos labiais, técnicas com agulha e cânula, escultura do arco de cupido, hidratação, volumização e protocolo de segurança contra intercorrências.",
@@ -87,7 +87,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Quinta-feira, 05/11/2026",
     diaId: "quinta",
     data: "2026-11-05",
-    horario: "14:00 – 18:00",
+    horario: "16:00 às 17:30",
     patrocinio: "Straumann",
     descricao:
       "Imersão prática nos protocolos de cirurgia guiada com o sistema Straumann. Do fluxo digital (escaneamento intraoral + tomografia) ao posicionamento tridimensional do implante guiado por computador, kit cirúrgico guiado e instrumentação prática em biomodelos.",
@@ -103,7 +103,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Quinta-feira, 05/11/2026",
     diaId: "quinta",
     data: "2026-11-05",
-    horario: "14:00 – 18:00",
+    horario: "14:00 às 15:30",
     patrocinio: null,
     descricao:
       "Técnica restauradora injetada passo a passo para restabelecimento da Dimensão Vertical de Oclusão (DVO). Planejamento funcional com enceramento diagnóstico, confecção e adaptação de guias transparentes de silicone, dicas clínicas operatórias e injeção com resina fluida de alta carga com mínima necessidade de ajustes.",
@@ -116,20 +116,20 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     ministrante: "Mariana Paião",
     preco: 0.0,
     vagas: 12,
-    vagasTexto: "12 vagas para Hands On / Visita Técnica (Palestra às 15:00 com vagas ilimitadas)",
+    vagasTexto: "12 vagas no Hands On na Radiotech (às 18:30) / Palestra às 15:00 (vagas ilimitadas)",
     diaSemana: "Quinta-feira, 05/11/2026",
     diaId: "quinta",
     data: "2026-11-05",
-    horario: "14:00 – 18:00 (Palestra às 15:00)",
+    horario: "Palestra às 15:00 · Hands On às 18:30",
     patrocinio: "Radiotech",
     patrocinioLogo: "/partners/radiotech.png",
     descricao:
-      "Palestra especial às 15:00: “Tomografia sem mistérios: princípios, indicações e aplicação na prática odontológica” ministrada por Mariana Paião (participação livre e ilimitada na palestra) e Hands On prático exclusivo na clínica Radiotech com visita técnica e manuseio de tomógrafo e softwares diagnósticos (restrito a 12 participantes).",
-    local: "Radiotech Smart Imagem / Auditório",
+      "Palestra especial às 15:00: “Tomografia sem mistérios: princípios, indicações e aplicação na prática odontológica” ministrada por Mariana Paião (participação livre e ilimitada na palestra) e Hands On prático exclusivo às 18:30 na clínica Radiotech com visita técnica e manuseio de tomógrafo e softwares diagnósticos (restrito a 12 participantes).",
+    local: "Auditório Positivo (Palestra) & Radiotech Londrina (Hands On)",
   },
 
   // ==========================================
-  // SEXTA-FEIRA — 06/11/2026 (14:00 às 18:00)
+  // SEXTA-FEIRA — 06/11/2026
   // ==========================================
   {
     id: "toxina-botulinica-hof",
@@ -141,7 +141,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Sexta-feira, 06/11/2026",
     diaId: "sexta",
     data: "2026-11-06",
-    horario: "14:00 – 18:00",
+    horario: "14:30 às 16:30",
     patrocinio: null,
     descricao:
       "Treinamento preparatório essencial para odontologistas que desejam ingressar com total segurança na aplicação da toxina botulínica. Dinâmica muscular facial (terço superior), diluição, reconstituição, cálculo de unidades por ponto anatômico e prevenção de assimetrias e ptoses.",
@@ -157,7 +157,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Sexta-feira, 06/11/2026",
     diaId: "sexta",
     data: "2026-11-06",
-    horario: "14:00 – 18:00",
+    horario: "13:30 às 16:30",
     patrocinio: "Dental Shop",
     patrocinioLogo: "/partners/dental-dsl.png",
     descricao:
@@ -174,27 +174,27 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Sexta-feira, 06/11/2026",
     diaId: "sexta",
     data: "2026-11-06",
-    horario: "14:00 – 18:00",
+    horario: "15:30 às 16:30",
     patrocinio: null,
     descricao:
       "Prática de fotografia odontológica com o próprio smartphone. Iluminação acessível (ring lights e flashes portáteis), enquadramentos padronizados para casos clínicos, fotos de sorriso e face, e noções fundamentais de edição rápida e comunicação ética em mídias sociais.",
     local: "Universidade Positivo — Estúdio / Sala Multimídia",
   },
   {
-    id: "reabilitacao-resina-composta",
-    slug: "reabilitacao-resina-composta",
-    titulo: "Hands on Reabilitação em Resina Composta",
-    ministrante: "Dr. Pedro Urnau",
+    id: "integrale-cirurgia-implante-protetico",
+    slug: "integrale-cirurgia-implante-protetico",
+    titulo: "Hands on Integrale: cirurgia de implante e componente protético",
+    ministrante: "Prof. Alessandro Batistella e Paulo Lucchese",
     preco: 20.0,
     vagas: 20,
     diaSemana: "Sexta-feira, 06/11/2026",
     diaId: "sexta",
     data: "2026-11-06",
-    horario: "14:00 – 18:00",
+    horario: "17:00 às 18:00",
     patrocinio: "Integrale",
     patrocinioLogo: "/partners/integrale.png",
     descricao:
-      "Reabilitação estética e funcional em resina composta com metodologia Integrale. Estratificação policromática em dentes anteriores e reconstrução oclusal posterior anatômica com previsibilidade, adesão avançada e longevidade clínica.",
+      "Workshop prático com a metodologia e componentes Integrale. Protocolo cirúrgico para instalação de implantes e seleção criteriosa de componentes protéticos com foco em previsibilidade biológica e funcional.",
     local: "Universidade Positivo — Laboratório Integrale",
   },
   {
@@ -207,7 +207,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Sexta-feira, 06/11/2026",
     diaId: "sexta",
     data: "2026-11-06",
-    horario: "14:00 – 18:00",
+    horario: "15:30 às 16:30",
     patrocinio: "Angelus",
     descricao:
       "Técnica adesiva rigorosa e cimentação de pinos de fibra de vidro com produtos e tecnologias Angelus. Preparo radicular conservador, silanização, seleção de cimento resinoso e reconstrução de núcleo de preenchimento para máxima retenção estrutural.",
@@ -223,7 +223,7 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
     diaSemana: "Sexta-feira, 06/11/2026",
     diaId: "sexta",
     data: "2026-11-06",
-    horario: "14:00 – 18:00",
+    horario: "16:00 às 17:00",
     patrocinio: null,
     descricao:
       "Técnica completa de obtenção e manuseio clínico da Fibrina Rica em Plaquetas e Leucócitos (L-PRF). Parâmetros de centrifugação sanguínea, confecção de membranas, plugue de fibrina, 'sticky bone' e suas aplicações em enxertias ósseas, periodontia e implantodontia.",
@@ -232,7 +232,12 @@ export const HANDS_ON_LIST: HandsOnItem[] = [
 ];
 
 export function getHandsOnById(id: string): HandsOnItem | undefined {
-  return HANDS_ON_LIST.find((item) => item.id === id || item.slug === id);
+  return HANDS_ON_LIST.find(
+    (item) =>
+      item.id === id ||
+      item.slug === id ||
+      (id === "reabilitacao-resina-composta" && item.id === "integrale-cirurgia-implante-protetico")
+  );
 }
 
 // ============================================================
