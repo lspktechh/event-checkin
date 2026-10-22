@@ -11,8 +11,10 @@ import {
   getMyDocuments,
   downloadCertificate,
   downloadAttendanceProof,
+  getAttendeeHandsOn,
   type ParticipantData,
   type MyDocuments,
+  type AttendeeHandsOn,
 } from "@/lib/api";
 
 type CheckInStatus = "CONFIRMED" | "ALREADY_CHECKED_IN" | "REJECTED" | null;
@@ -37,6 +39,8 @@ export default function CheckInPage() {
   const [downloadingCertificate, setDownloadingCertificate] = useState(false);
   const [downloadingProof, setDownloadingProof] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [handsOnList, setHandsOnList] = useState<AttendeeHandsOn[]>([]);
+  const [loadingHandsOn, setLoadingHandsOn] = useState(false);
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadMyDocuments = useCallback(async (authToken: string, eventId: string) => {
@@ -48,6 +52,20 @@ export default function CheckInPage() {
     } catch {
       // "Meus documentos" é um bloco auxiliar — falhar aqui não deve
       // impedir o resto da tela (QR code) de funcionar.
+    }
+  }, []);
+
+  const loadHandsOn = useCallback(async (authToken: string) => {
+    setLoadingHandsOn(true);
+    try {
+      const response = await getAttendeeHandsOn(authToken);
+      if (response.success && Array.isArray(response.data)) {
+        setHandsOnList(response.data);
+      }
+    } catch {
+      // Hands On é auxiliar
+    } finally {
+      setLoadingHandsOn(false);
     }
   }, []);
 
@@ -117,6 +135,7 @@ export default function CheckInPage() {
           setParticipant(response.data);
           localStorage.setItem("attendee_data", JSON.stringify(response.data));
           loadMyDocuments(token, response.data.event.id);
+          loadHandsOn(token);
 
           // If already checked in, show status
           if (response.data.checkedIn) {
@@ -176,7 +195,7 @@ export default function CheckInPage() {
         clearTimeout(statusTimeoutRef.current);
       }
     };
-  }, [router, showStatus, loadMyDocuments]);
+  }, [router, showStatus, loadMyDocuments, loadHandsOn]);
 
   const handleLogout = () => {
     localStorage.removeItem("attendee_token");
@@ -462,6 +481,154 @@ export default function CheckInPage() {
           </button>
 
         </div>
+
+        {/* Credenciamento dos Hands On */}
+        {handsOnList.length > 0 ? (
+          <div className="cartao p-6 space-y-5 border-2 border-[var(--primary)]/30">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--primary)]/10 px-2.5 py-0.5 text-xs font-semibold text-[var(--primary)] mb-1">
+                  <span>🧪</span> Hands On Credenciamento
+                </div>
+                <h2 className="text-base font-bold text-[var(--foreground)]">
+                  Seus Workshops Inscritos
+                </h2>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Apresente o QR Code individual na porta de cada workshop para validar seu acesso.
+                </p>
+              </div>
+              <span className="rounded-full bg-[var(--muted)] px-2.5 py-1 text-xs font-bold text-[var(--muted-foreground)] shrink-0">
+                {handsOnList.length} {handsOnList.length === 1 ? "workshop" : "workshops"}
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {handsOnList.map((ho) => {
+                const isCheckedIn = !!ho.checkedInAt;
+                const isConfirmed = ho.status === "CONFIRMED";
+                const isPending = ho.status === "PENDING";
+
+                return (
+                  <div
+                    key={ho.id}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 sm:p-5 transition-all shadow-sm"
+                  >
+                    {/* Header do Workshop */}
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div>
+                        <h3 className="font-bold text-sm sm:text-base text-[var(--foreground)] leading-snug">
+                          {ho.title}
+                        </h3>
+                        <p className="text-xs font-semibold text-[var(--primary)] mt-0.5">
+                          {ho.speaker}
+                        </p>
+                      </div>
+
+                      {/* Status Pill */}
+                      {isCheckedIn ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          ✓ Presente
+                        </span>
+                      ) : isConfirmed ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                          ✓ Confirmado
+                        </span>
+                      ) : isPending ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                          ⏳ Aguardando Pix
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-zinc-500/15 px-2.5 py-0.5 text-[11px] font-bold text-zinc-500">
+                          {ho.status}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Informações Obrigatórias: Que horas é & Onde vai ser */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs py-2 px-3 rounded-lg bg-[var(--muted)]/50 mb-3 border border-[var(--border)]/50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">⏰</span>
+                        <div>
+                          <span className="text-[10px] text-[var(--muted-foreground)] block uppercase font-medium">
+                            Que horas é
+                          </span>
+                          <strong className="text-[var(--foreground)]">
+                            {ho.date} às {ho.time}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">📍</span>
+                        <div>
+                          <span className="text-[10px] text-[var(--muted-foreground)] block uppercase font-medium">
+                            Onde vai ser
+                          </span>
+                          <strong className="text-[var(--foreground)]">
+                            {ho.location || "Clínica Odontológica Positivo"}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {ho.sponsor && (
+                      <p className="text-[11px] text-[var(--muted-foreground)] mb-3">
+                        Patrocínio: <strong className="text-[var(--foreground)]">{ho.sponsor}</strong>
+                      </p>
+                    )}
+
+                    {/* QR Code específico do Hands On */}
+                    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-zinc-200 mt-2">
+                      <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2 tracking-wide">
+                        QR Code de Acesso à Sala
+                      </p>
+                      <QRCodeSVG
+                        value={ho.qrToken}
+                        size={170}
+                        level="M"
+                        includeMargin={false}
+                        className="mx-auto"
+                      />
+                      <span className="mt-2 text-[11px] font-mono font-bold text-zinc-800">
+                        {ho.qrToken}
+                      </span>
+                    </div>
+
+                    {isCheckedIn && (
+                      <p className="text-center text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-2">
+                        ✓ Check-in registrado em{" "}
+                        {new Date(ho.checkedInAt!).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : participant.event?.name?.toLowerCase().includes("copol") ? (
+          <div className="cartao p-5 text-center border border-[var(--border)] bg-gradient-to-b from-[var(--background)] to-[var(--muted)]/40">
+            <span className="text-2xl mb-1 block">🧪</span>
+            <h3 className="text-sm font-bold text-[var(--foreground)]">
+              Workshops Hands On COPOL 2026
+            </h3>
+            <p className="text-xs text-[var(--muted-foreground)] mt-1 mb-3">
+              Você ainda não possui workshops Hands On vinculados. Garanta sua vaga com vagas limitadas!
+            </p>
+            <a
+              href="https://copol2026.com.br/hands-on/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-2 text-xs font-semibold text-[var(--primary-foreground)] hover:brightness-110 transition-colors"
+            >
+              Ver Workshops e Inscrever-se &rarr;
+            </a>
+          </div>
+        ) : null}
 
         {/* Meus documentos */}
         <div className="cartao p-6">

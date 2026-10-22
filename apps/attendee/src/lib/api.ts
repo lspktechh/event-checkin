@@ -107,6 +107,34 @@ export async function getMyDocuments(token: string, eventId: string): Promise<Ap
   return res.json();
 }
 
+// --- Hands On ---
+
+export interface AttendeeHandsOn {
+  id: string;
+  handsOnId: string;
+  title: string;
+  speaker: string;
+  date: string;
+  time: string;
+  location: string | null;
+  sponsor: string | null;
+  amount: number;
+  name: string;
+  email: string;
+  document: string;
+  status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  qrToken: string;
+  checkedInAt: string | null;
+  checkedInBy?: string | null;
+}
+
+export async function getAttendeeHandsOn(token: string): Promise<ApiResponse<AttendeeHandsOn[]>> {
+  const res = await fetch("/api/attendee/hands-on", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.json();
+}
+
 async function downloadPdf(path: string, token: string, eventId: string, filename: string): Promise<void> {
   const res = await fetch(`${path}?eventId=${encodeURIComponent(eventId)}`, {
     headers: { Authorization: `Bearer ${token}` },

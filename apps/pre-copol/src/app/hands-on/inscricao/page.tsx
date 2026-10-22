@@ -164,7 +164,45 @@ function HandsOnInscricaoContent() {
     try {
       // Gera ID único da inscrição
       const randSuffix = Math.floor(1000 + Math.random() * 9000);
-      const inscriptionId = `HO-2026-${randSuffix}`;
+      let inscriptionId = `HO-2026-${randSuffix}`;
+      let finalQrToken = `HO-${randSuffix}-${Date.now()}`;
+
+      // Envia ao backend central para persistência e controle de presença
+      const targetEventId = "f1b36d08-e85d-459b-8606-69119ab05a78";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://137-131-233-254.sslip.io";
+
+      try {
+        const resp = await fetch(`${apiUrl}/events/${targetEventId}/hands-on/inscriptions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            handsOnId: workshop.id,
+            title: workshop.titulo,
+            speaker: workshop.ministrante,
+            date: workshop.data,
+            time: workshop.horario,
+            location: workshop.local,
+            sponsor: workshop.patrocinio,
+            amount: workshop.preco,
+            name: nomeTrim,
+            email: emailTrim,
+            document: docClean,
+            phone: telefone,
+            category: categoria,
+            institution: instituicao.trim() || undefined,
+          }),
+        });
+
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.data?.id) {
+            inscriptionId = json.data.id;
+            finalQrToken = json.data.qrToken;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Falha de conexão com a API central, prosseguindo com contingência local:", apiErr);
+      }
 
       // Monta código Pix Copia e Cola
       const pixCode =
@@ -482,6 +520,28 @@ function HandsOnInscricaoContent() {
                   onChange={(e) => setInstituicao(e.target.value)}
                 />
               </label>
+            </div>
+
+            {/* Aviso importante sobre confirmação de vaga */}
+            <div
+              style={{
+                marginTop: 6,
+                padding: "16px 18px",
+                borderRadius: 12,
+                background: "rgba(212, 168, 83, 0.12)",
+                border: "1.5px solid var(--gold)",
+                display: "flex",
+                gap: 12,
+                alignItems: "flex-start",
+              }}
+            >
+              <AlertTriangleIcon size={22} color="var(--gold)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 13, lineHeight: 1.55, color: "var(--foreground)" }}>
+                <strong style={{ color: "var(--gold)", display: "block", marginBottom: 2 }}>
+                  AVISO IMPORTANTE SOBRE A SUA VAGA:
+                </strong>
+                A inscrição só será confirmada após a realização do pagamento. Enquanto o pagamento estiver pendente, a vaga continuará disponível para outros participantes, podendo ser preenchida a qualquer momento.
+              </div>
             </div>
 
             {/* Aceite dos Termos */}

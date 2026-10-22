@@ -262,6 +262,7 @@ model Event {
   attendanceProofs     AttendanceProof[]
   batches              EventBatch[]
   scheduleItems        EventScheduleItem[]
+  handsOnRegistrations HandsOnRegistration[]
 
   @@map("events")
 }
@@ -856,3 +857,41 @@ model CertificateTemplate {
 
   @@map("certificate_templates")
 }
+
+/// Inscrições específicas em workshops práticos (Hands On)
+/// Permite controle individualizado de vagas, presença (check-in) e QR code
+/// exclusivo por workshop do congressista.
+model HandsOnRegistration {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  handsOnId   String    @db.VarChar(100)
+  title       String    @db.VarChar(200)
+  speaker     String    @db.VarChar(150)
+  date        String    @db.VarChar(50)
+  time        String    @db.VarChar(50)
+  location    String?   @db.VarChar(200)
+  sponsor     String?   @db.VarChar(100)
+  amount      Decimal   @db.Decimal(10, 2)
+  name        String    @db.VarChar(200)
+  email       String    @db.VarChar(200)
+  document    String    @db.VarChar(50) // CPF
+  phone       String?   @db.VarChar(50)
+  category    String?   @db.VarChar(100)
+  institution String?   @db.VarChar(200)
+  status      String    @default("PENDING") @db.VarChar(30) // PENDING, CONFIRMED, CANCELLED
+  qrToken     String    @unique @db.VarChar(100)
+  checkedInAt DateTime?
+  checkedInBy String?   @db.VarChar(100)
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([eventId])
+  @@index([handsOnId])
+  @@index([document])
+  @@index([email])
+  @@index([status])
+  @@map("hands_on_registrations")
+}
+

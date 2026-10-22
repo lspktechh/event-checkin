@@ -273,6 +273,29 @@ function PagamentoContent() {
                 </p>
               </div>
 
+              {/* Aviso Crucial sobre Confirmação da Vaga */}
+              <div
+                style={{
+                  width: "100%",
+                  padding: "16px 18px",
+                  borderRadius: 12,
+                  background: "rgba(212, 168, 83, 0.12)",
+                  border: "1.5px solid var(--gold)",
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  textAlign: "left",
+                }}
+              >
+                <AlertTriangleIcon size={24} color="var(--gold)" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ fontSize: 13, lineHeight: 1.55, color: "var(--foreground)" }}>
+                  <strong style={{ color: "var(--gold)", display: "block", marginBottom: 3, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Atenção: Confirmação de Vaga
+                  </strong>
+                  A inscrição só será confirmada após a realização do pagamento. Enquanto o pagamento estiver pendente, a vaga continuará disponível para outros participantes, podendo ser preenchida a qualquer momento.
+                </div>
+              </div>
+
               {/* Card de Pagamento */}
               <div
                 className="card"

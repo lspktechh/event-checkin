@@ -25,6 +25,7 @@ import { certificateTemplatesRoutes } from "./modules/certificate-templates/cert
 import { releasesRoutes } from "./modules/releases/releases.routes.js";
 import { batchesRoutes } from "./modules/batches/batches.routes.js";
 import { scheduleRoutes } from "./modules/schedule/schedule.routes.js";
+import { handsOnRoutes } from "./modules/hands-on/hands-on.routes.js";
 
 // Versão da API — usada pelo app do terminal para verificar compatibilidade
 // (seção 27 da especificação). Incrementar em mudanças que quebrem contrato.
@@ -115,6 +116,7 @@ export function buildApp() {
   app.register(releasesRoutes);
   app.register(batchesRoutes);
   app.register(scheduleRoutes);
+  app.register(handsOnRoutes);
 
   return app;
 }

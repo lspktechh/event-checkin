@@ -1204,5 +1204,71 @@ export function performAdminCheckIn(eventId: string, qrToken: string): Promise<A
   });
 }
 
+// --- Hands On ---
+export interface HandsOnRegistrationRecord {
+  id: string;
+  eventId: string;
+  handsOnId: string;
+  title: string;
+  speaker: string;
+  date: string;
+  time: string;
+  location: string | null;
+  sponsor: string | null;
+  amount: number;
+  name: string;
+  email: string;
+  document: string;
+  phone: string | null;
+  category: string | null;
+  institution: string | null;
+  status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  qrToken: string;
+  checkedInAt: string | null;
+  checkedInBy: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type HandsOnWorkshopStats = Record<
+  string,
+  { total: number; confirmed: number; pending: number }
+>;
+
+export function getHandsOnStats(eventId: string) {
+  return request<HandsOnWorkshopStats>(`/events/${eventId}/hands-on/stats`);
+}
+
+export function listHandsOnRegistrations(eventId: string, handsOnId?: string) {
+  const query = handsOnId ? `?handsOnId=${encodeURIComponent(handsOnId)}` : "";
+  return request<HandsOnRegistrationRecord[]>(`/events/${eventId}/hands-on/inscriptions${query}`);
+}
+
+export function confirmHandsOnPayment(eventId: string, id: string, notes?: string) {
+  return request<HandsOnRegistrationRecord>(`/events/${eventId}/hands-on/inscriptions/${id}/confirm`, {
+    method: "PATCH",
+    body: { notes },
+  });
+}
+
+export function cancelHandsOnRegistration(eventId: string, id: string, notes?: string) {
+  return request<HandsOnRegistrationRecord>(`/events/${eventId}/hands-on/inscriptions/${id}/cancel`, {
+    method: "PATCH",
+    body: { notes },
+  });
+}
+
+export function checkInHandsOn(eventId: string, idOrToken: string) {
+  return request<{ registration: HandsOnRegistrationRecord; alreadyCheckedIn: boolean }>(
+    `/events/${eventId}/hands-on/checkin`,
+    {
+      method: "POST",
+      body: { qrToken: idOrToken },
+    }
+  );
+}
+
+
 
 

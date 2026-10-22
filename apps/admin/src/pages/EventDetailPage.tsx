@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import * as api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -17,11 +17,13 @@ import { InscriptionsReportTab } from "./event/InscriptionsReportTab";
 import { BatchesTab } from "./event/BatchesTab";
 import { ScheduleTab } from "./event/ScheduleTab";
 import { CredenciamentoTab } from "./event/CredenciamentoTab";
+import { HandsOnTab } from "./event/HandsOnTab";
 
 type Tab =
   | "credenciamento"
   | "participants"
   | "inscriptions"
+  | "handson"
   | "batches"
   | "schedule"
   | "terminals"
@@ -86,12 +88,35 @@ export function EventDetailPage() {
   const { hasPermission, user } = useAuth();
   const canEditEvent = hasPermission("events.edit");
   const contaDeAcompanhamento = (user?.allowedEventIds?.length ?? 0) > 0;
-  const visibleTabs = TABS.filter(
-    (t) =>
-      hasPermission(t.permission) &&
-      (!contaDeAcompanhamento || !t.gestao || t.gestao.some((p) => hasPermission(p)))
-  );
   const [event, setEvent] = useState<api.EventRecord | null>(null);
+
+  // Apenas eventos do COPOL devem exibir a aba de Hands On
+  const isCopol = useMemo(() => {
+    if (!event) return false;
+    return (
+      event.name.toLowerCase().includes("copol") ||
+      event.id === "f1b36d08-e85d-459b-8606-69119ab05a78"
+    );
+  }, [event]);
+
+  const visibleTabs = useMemo(() => {
+    const list = [...TABS];
+    if (isCopol) {
+      // Insere "🧪 Hands On" logo após a aba "Inscritos"
+      const inscritosIdx = list.findIndex((t) => t.key === "inscriptions");
+      const insertAt = inscritosIdx >= 0 ? inscritosIdx + 1 : 1;
+      list.splice(insertAt, 0, {
+        key: "handson" as Tab,
+        label: "🧪 Hands On",
+        permission: "participants.view",
+      });
+    }
+    return list.filter(
+      (t) =>
+        hasPermission(t.permission) &&
+        (!contaDeAcompanhamento || !t.gestao || t.gestao.some((p) => hasPermission(p)))
+    );
+  }, [isCopol, hasPermission, contaDeAcompanhamento]);
   const [tab, setTab] = useState<Tab | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -318,6 +343,7 @@ export function EventDetailPage() {
       {activeTab === "credenciamento" ? <CredenciamentoTab eventId={eventId} /> : null}
       {activeTab === "participants" ? <ParticipantsTab eventId={eventId} /> : null}
       {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} /> : null}
+      {activeTab === "handson" && eventId ? <HandsOnTab eventId={eventId} /> : null}
       {activeTab === "batches" ? <BatchesTab eventId={eventId} /> : null}
       {activeTab === "schedule" ? <ScheduleTab eventId={eventId} /> : null}
       {activeTab === "terminals" ? <TerminalsTab eventId={eventId} /> : null}
