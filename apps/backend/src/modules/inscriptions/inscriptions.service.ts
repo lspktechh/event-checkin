@@ -16,6 +16,7 @@ import {
   PREFIXO_REFERENCIA_TRABALHO,
   confirmarPagamentoSubmissao,
 } from "../submissions/submissions.service.js";
+import { handsOnService } from "../hands-on/hands-on.service.js";
 
 export async function createInscription(
   eventId: string,
@@ -571,6 +572,16 @@ export async function handleMercadoPagoWebhook(
     return {
       httpStatus: 200,
       body: r.ok ? { ok: true, status: "submission_paid", detalhe: r.motivo } : { ok: true, ignorado: r.motivo },
+    };
+  }
+
+  // Hands On: mesma conta, mesmo webhook, referência com prefixo "ho:".
+  if (pagamento.referenceId.startsWith("ho:")) {
+    const registrationId = pagamento.referenceId.slice(3);
+    const r = await handsOnService.confirmMercadoPagoPayment(registrationId, pagamento);
+    return {
+      httpStatus: 200,
+      body: r.ok ? { ok: true, status: "hands_on_paid", detalhe: r.motivo } : { ok: true, ignorado: r.motivo },
     };
   }
 

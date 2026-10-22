@@ -57,6 +57,9 @@ export const updateEventSchema = z.object({
   pixKey: z.string().trim().max(150).nullable().optional(),
   pixKeyType: z.string().trim().max(50).nullable().optional(),
   pixReceiverName: z.string().trim().max(150).nullable().optional(),
+  mpAccessToken: z.string().trim().max(500).nullable().optional(),
+  mpPublicKey: z.string().trim().max(500).nullable().optional(),
+  mpWebhookSecret: z.string().trim().max(500).nullable().optional(),
 });
 
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;

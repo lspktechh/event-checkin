@@ -246,6 +246,11 @@ model Event {
   pixKeyType      String? @db.VarChar(50)
   pixReceiverName String? @db.VarChar(150)
 
+  // Integração Mercado Pago (configurável pelo painel do admin ou via env)
+  mpAccessToken   String? @db.Text
+  mpPublicKey     String? @db.Text
+  mpWebhookSecret String? @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -879,19 +884,25 @@ model HandsOnRegistration {
   phone       String?   @db.VarChar(50)
   category    String?   @db.VarChar(100)
   institution String?   @db.VarChar(200)
-  status      String    @default("PENDING") @db.VarChar(30) // PENDING, CONFIRMED, CANCELLED
-  qrToken     String    @unique @db.VarChar(100)
-  checkedInAt DateTime?
-  checkedInBy String?   @db.VarChar(100)
-  notes       String?   @db.Text
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status               String    @default("PENDING") @db.VarChar(30) // PENDING, CONFIRMED, CANCELLED
+  qrToken              String    @unique @db.VarChar(100)
+  paymentId            String?   @db.VarChar(100)
+  paymentQrCodeContent String?   @db.Text
+  paymentQrCodeBase64  String?   @db.Text
+  paymentExpiresAt     DateTime?
+  paidAt               DateTime?
+  checkedInAt          DateTime?
+  checkedInBy          String?   @db.VarChar(100)
+  notes                String?   @db.Text
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([eventId])
   @@index([handsOnId])
   @@index([document])
   @@index([email])
   @@index([status])
+  @@index([paymentId])
   @@map("hands_on_registrations")
 }
 

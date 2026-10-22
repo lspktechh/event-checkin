@@ -304,9 +304,12 @@ export interface EventRecord {
   registrationDeadline: string | null;
   registrationsClosedAt: string | null;
   registrationsOpen: boolean;
-  pixKey?: string;
-  pixKeyType?: string;
-  pixReceiverName?: string;
+  pixKey?: string | null;
+  pixKeyType?: string | null;
+  pixReceiverName?: string | null;
+  mpAccessToken?: string | null;
+  mpPublicKey?: string | null;
+  mpWebhookSecret?: string | null;
   siteContent: SiteContent | null;
   certificateSettings: CertificateSettings | null;
   emailSettings: EmailSettings | null;

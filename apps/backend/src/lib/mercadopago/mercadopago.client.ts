@@ -40,6 +40,7 @@ export interface CreatePixParams {
    *  uma cobrança nova (Pix anterior expirou) — com a mesma chave, o
    *  Mercado Pago devolveria a cobrança vencida. */
   idempotencyKey?: string;
+  accessToken?: string;
 }
 
 export interface PixPaymentResponse {
@@ -112,7 +113,8 @@ export class MercadoPagoClient {
    * devolve a MESMA cobrança em vez de criar uma segunda.
    */
   async createPixPayment(params: CreatePixParams): Promise<PixPaymentResponse> {
-    if (!this.configurado) {
+    const token = params.accessToken || env.MP_ACCESS_TOKEN;
+    if (!token) {
       // Modo simulado — desenvolvimento e testes.
       return {
         paymentId: `mock-${params.referenceId}`,
@@ -142,7 +144,7 @@ export class MercadoPagoClient {
     const resposta = await fetch(`${API}/v1/payments`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "X-Idempotency-Key": params.idempotencyKey ?? params.referenceId,
       },
@@ -278,8 +280,9 @@ export class MercadoPagoClient {
    * Consulta o pagamento na API — a única fonte de verdade sobre valor e
    * situação.
    */
-  async conferirPagamento(paymentId: string): Promise<ResultadoConferencia> {
-    if (!this.configurado) {
+  async conferirPagamento(paymentId: string, customToken?: string): Promise<ResultadoConferencia> {
+    const token = customToken || env.MP_ACCESS_TOKEN;
+    if (!token) {
       return {
         ok: true,
         dados: {
@@ -296,7 +299,7 @@ export class MercadoPagoClient {
     let resposta: Response;
     try {
       resposta = await fetch(`${API}/v1/payments/${encodeURIComponent(paymentId)}`, {
-        headers: { Authorization: `Bearer ${env.MP_ACCESS_TOKEN}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
     } catch {
       return { ok: false, erro: "mp_inacessivel" };
@@ -367,8 +370,10 @@ export class MercadoPagoClient {
     xSignature: string | null;
     xRequestId: string | null;
     dataId: string | null;
+    webhookSecret?: string;
   }): { ok: boolean; motivo?: string } {
-    if (!env.MP_WEBHOOK_SECRET) return { ok: false, motivo: "sem_segredo_configurado" };
+    const secret = opcoes.webhookSecret || env.MP_WEBHOOK_SECRET;
+    if (!secret) return { ok: false, motivo: "sem_segredo_configurado" };
     if (!opcoes.xSignature) return { ok: false, motivo: "sem_assinatura" };
 
     const partes = new Map(
@@ -394,7 +399,7 @@ export class MercadoPagoClient {
     if (opcoes.xRequestId) manifesto += `request-id:${opcoes.xRequestId};`;
     manifesto += `ts:${ts};`;
 
-    const esperado = createHmac("sha256", env.MP_WEBHOOK_SECRET).update(manifesto).digest("hex");
+    const esperado = createHmac("sha256", secret).update(manifesto).digest("hex");
 
     // Comparação em tempo constante: a comum para no primeiro byte
     // diferente, e essa diferença de tempo permite descobrir a assinatura

@@ -28,6 +28,14 @@ export function ConfigTab({ eventId }: { eventId: string }) {
   const [avisoPix, setAvisoPix] = useState<string | null>(null);
   const [errorPix, setErrorPix] = useState<string | null>(null);
 
+  // Configurações da API Mercado Pago (Pix Automático)
+  const [mpAccessToken, setMpAccessToken] = useState("");
+  const [mpPublicKey, setMpPublicKey] = useState("");
+  const [mpWebhookSecret, setMpWebhookSecret] = useState("");
+  const [salvandoMp, setSalvandoMp] = useState(false);
+  const [avisoMp, setAvisoMp] = useState<string | null>(null);
+  const [errorMp, setErrorMp] = useState<string | null>(null);
+
   function carregar() {
     api
       .getEventConfig(eventId)
@@ -48,6 +56,9 @@ export function ConfigTab({ eventId }: { eventId: string }) {
         setPixKey(ev.pixKey ?? "");
         setPixKeyType(ev.pixKeyType ?? "EMAIL");
         setPixReceiverName(ev.pixReceiverName ?? "");
+        setMpAccessToken(ev.mpAccessToken ?? "");
+        setMpPublicKey(ev.mpPublicKey ?? "");
+        setMpWebhookSecret(ev.mpWebhookSecret ?? "");
       })
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar dados do evento")
@@ -94,6 +105,31 @@ export function ConfigTab({ eventId }: { eventId: string }) {
       setErrorPix(err instanceof Error ? err.message : "Falha ao salvar configurações de PIX");
     } finally {
       setSalvandoPix(false);
+    }
+  }
+
+  async function salvarMercadoPago(e: FormEvent) {
+    e.preventDefault();
+    if (!event) return;
+    setErrorMp(null);
+    setAvisoMp(null);
+    setSalvandoMp(true);
+    try {
+      await api.updateEvent(event.id, {
+        mpAccessToken: mpAccessToken.trim() === "" ? null : mpAccessToken.trim(),
+        mpPublicKey: mpPublicKey.trim() === "" ? null : mpPublicKey.trim(),
+        mpWebhookSecret: mpWebhookSecret.trim() === "" ? null : mpWebhookSecret.trim(),
+      });
+      setAvisoMp("Credenciais do Mercado Pago salvas com sucesso.");
+      carregar();
+    } catch (err) {
+      setErrorMp(
+        err instanceof Error
+          ? err.message
+          : "Falha ao salvar credenciais do Mercado Pago"
+      );
+    } finally {
+      setSalvandoMp(false);
     }
   }
 
@@ -244,6 +280,93 @@ export function ConfigTab({ eventId }: { eventId: string }) {
 
           <button type="submit" className="btn" disabled={salvandoPix || !event}>
             {salvandoPix ? "Salvando…" : "Salvar Configurações de PIX"}
+          </button>
+        </form>
+      </section>
+
+      <section className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3>Integração Mercado Pago (PIX Automático & Webhook)</h3>
+          {mpAccessToken ? (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#10b981",
+                background: "rgba(16, 185, 129, 0.12)",
+                padding: "3px 10px",
+                borderRadius: 999,
+              }}
+            >
+              ● Conectado / Ativo
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--muted)",
+                background: "rgba(255, 255, 255, 0.08)",
+                padding: "3px 10px",
+                borderRadius: 999,
+              }}
+            >
+              ○ Não configurado
+            </span>
+          )}
+        </div>
+
+        <p className="muted">
+          Com as credenciais cadastradas, o sistema gera cobranças Pix transparentes em tempo real
+          para inscrições e Hands On, exibindo QR Code dinâmico, código Copia e Cola e realizando
+          a baixa automática imediata via webhook.
+        </p>
+
+        {errorMp && <p className="error-text">{errorMp}</p>}
+        {avisoMp && <p style={{ color: "var(--success)" }}>{avisoMp}</p>}
+
+        <form onSubmit={salvarMercadoPago} className="stack">
+          <label>
+            Access Token (Produção)
+            <input
+              type="password"
+              value={mpAccessToken}
+              onChange={(e) => setMpAccessToken(e.target.value)}
+              placeholder="APP_USR-..."
+            />
+            <small className="muted">
+              Token de acesso da sua aplicação no painel Mercado Pago Developers.
+            </small>
+          </label>
+
+          <label>
+            Public Key
+            <input
+              type="text"
+              value={mpPublicKey}
+              onChange={(e) => setMpPublicKey(e.target.value)}
+              placeholder="APP_USR-..."
+            />
+            <small className="muted">
+              Chave pública correspondente da mesma aplicação.
+            </small>
+          </label>
+
+          <label>
+            Webhook Secret
+            <input
+              type="password"
+              value={mpWebhookSecret}
+              onChange={(e) => setMpWebhookSecret(e.target.value)}
+              placeholder="Assinatura secreta do Webhook"
+            />
+            <small className="muted">
+              Chave secreta obtida ao configurar o endpoint de Notificações / Webhooks no Mercado Pago.
+            </small>
+          </label>
+
+          <button type="submit" className="btn" disabled={salvandoMp || !event}>
+            {salvandoMp ? "Salvando…" : "Salvar Credenciais do Mercado Pago"}
           </button>
         </form>
       </section>

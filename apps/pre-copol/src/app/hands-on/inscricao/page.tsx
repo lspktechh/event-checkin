@@ -166,6 +166,9 @@ function HandsOnInscricaoContent() {
       const randSuffix = Math.floor(1000 + Math.random() * 9000);
       let inscriptionId = `HO-2026-${randSuffix}`;
       let finalQrToken = `HO-${randSuffix}-${Date.now()}`;
+      let mpPixCode = "";
+      let mpPixBase64 = "";
+      let mpPaymentId = "";
 
       // Envia ao backend central para persistência e controle de presença
       const targetEventId = "f1b36d08-e85d-459b-8606-69119ab05a78";
@@ -198,14 +201,19 @@ function HandsOnInscricaoContent() {
           if (json.data?.id) {
             inscriptionId = json.data.id;
             finalQrToken = json.data.qrToken;
+            if (json.data.pixCode) {
+              mpPixCode = json.data.pixCode;
+              mpPixBase64 = json.data.pixQrCodeBase64 || "";
+              mpPaymentId = json.data.paymentId || "";
+            }
           }
         }
       } catch (apiErr) {
         console.warn("Falha de conexão com a API central, prosseguindo com contingência local:", apiErr);
       }
 
-      // Monta código Pix Copia e Cola
-      const pixCode =
+      // Se o Mercado Pago gerou o Pix dinâmico, usa ele; senão usa contingência padrão BR Code
+      const fallbackPixCode =
         workshop.preco > 0
           ? generatePixPayload({
               amount: workshop.preco,
@@ -232,7 +240,9 @@ function HandsOnInscricaoContent() {
         status: workshop.preco === 0 ? "CONFIRMADO" : "PENDENTE",
         pixKey: PIX_CONFIG.chave,
         pixReceiverName: PIX_CONFIG.titular,
-        pixCode: pixCode,
+        pixCode: mpPixCode || fallbackPixCode,
+        pixQrCodeBase64: mpPixBase64 || undefined,
+        mercadoPagoPaymentId: mpPaymentId || undefined,
         createdAt: new Date().toISOString(),
       };
 

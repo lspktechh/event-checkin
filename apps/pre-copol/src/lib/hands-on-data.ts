@@ -354,6 +354,9 @@ export interface HandsOnInscription {
   pixKey: string;
   pixReceiverName: string;
   pixCode: string;
+  pixQrCodeBase64?: string;
+  mercadoPagoPaymentId?: string;
+  qrToken?: string;
   createdAt: string;
 }
 

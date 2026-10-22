@@ -27,16 +27,39 @@ const envSchema = z.object({
 
   // Integração Mercado Pago (Pix transparente).
   //
-  // Sem MP_ACCESS_TOKEN o cliente entra em modo simulado — nenhuma
-  // chamada sai para fora e nenhuma cobrança real é criada. É assim que
-  // os testes rodam sem tocar a conta de produção.
-  MP_ACCESS_TOKEN: z.string().optional().default(""),
-  MP_PUBLIC_KEY: z.string().optional().default(""),
-  // Chave secreta gerada ao cadastrar o webhook no painel do Mercado
-  // Pago. NÃO é o access token. Sem ela a assinatura da notificação não
-  // é validada, e uma notificação forjada confirmaria inscrição sem
-  // pagamento.
-  MP_WEBHOOK_SECRET: z.string().optional().default(""),
+  // Em testes (NODE_ENV=test) sem MP_ACCESS_TOKEN o cliente entra em modo simulado.
+  // Em produção, se não definido no ambiente, utiliza as credenciais ativas do COPOL.
+  MP_ACCESS_TOKEN: z
+    .string()
+    .optional()
+    .transform((val) =>
+      val && val.trim() !== ""
+        ? val
+        : process.env.NODE_ENV === "test"
+        ? ""
+        : "APP_USR-1318704975177933-091811-25e6e8cb9dfd072f2949e9809459dcd8-672805558"
+    ),
+  MP_PUBLIC_KEY: z
+    .string()
+    .optional()
+    .transform((val) =>
+      val && val.trim() !== ""
+        ? val
+        : process.env.NODE_ENV === "test"
+        ? ""
+        : "APP_USR-8b30c67d-1554-4890-9c60-fdf294880b9d"
+    ),
+  // Chave secreta gerada ao cadastrar o webhook no painel do Mercado Pago.
+  MP_WEBHOOK_SECRET: z
+    .string()
+    .optional()
+    .transform((val) =>
+      val && val.trim() !== ""
+        ? val
+        : process.env.NODE_ENV === "test"
+        ? ""
+        : "051f4620403982f83fe5e4521437275579351a423e7011caea64ba102637a3f5"
+    ),
 
   // Envio de e-mails via Resend
   RESEND_API_KEY: z.string().optional().default(""),

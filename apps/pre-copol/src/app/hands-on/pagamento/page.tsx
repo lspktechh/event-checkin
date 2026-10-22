@@ -7,6 +7,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
   getHandsOnInscription,
+  saveHandsOnInscription,
   formatarReais,
   type HandsOnInscription,
   PIX_CONFIG,
@@ -60,9 +61,85 @@ function PagamentoContent() {
     const record = getHandsOnInscription(id);
     if (record) {
       setInscricao(record);
+      setCarregando(false);
     }
-    setCarregando(false);
+
+    // Se não encontrou no localStorage local, busca da API central pública
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://137-131-233-254.sslip.io";
+    fetch(`${apiUrl}/public/hands-on/inscriptions/${encodeURIComponent(id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.data) {
+          const d = json.data;
+          setInscricao((prev) => {
+            const merged: HandsOnInscription = {
+              id: d.id,
+              handsOnId: d.handsOnId,
+              handsOnTitulo: d.title,
+              ministrante: d.speaker,
+              diaSemana: d.date === "2026-11-05" ? "Quinta-feira, 05/11/2026" : "Sexta-feira, 06/11/2026",
+              horario: d.time,
+              preco: Number(d.amount),
+              local: d.location ?? undefined,
+              nome: d.name,
+              email: d.email,
+              documento: d.document,
+              telefone: prev?.telefone || "",
+              status: d.status === "CONFIRMED" ? "CONFIRMADO" : "PENDENTE",
+              pixKey: prev?.pixKey || PIX_CONFIG.chave,
+              pixReceiverName: prev?.pixReceiverName || PIX_CONFIG.titular,
+              pixCode: d.pixCode || prev?.pixCode || "",
+              pixQrCodeBase64: d.pixQrCodeBase64 || prev?.pixQrCodeBase64,
+              mercadoPagoPaymentId: d.paymentId || prev?.mercadoPagoPaymentId,
+              qrToken: d.qrToken,
+              createdAt: prev?.createdAt || new Date().toISOString(),
+            };
+            saveHandsOnInscription(merged);
+            return merged;
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCarregando(false));
   }, [id]);
+
+  // Polling para detectar pagamento confirmado via Pix em tempo real
+  useEffect(() => {
+    if (!id || !inscricao || inscricao.status === "CONFIRMADO") return;
+
+    let cancelado = false;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://137-131-233-254.sslip.io";
+
+    async function checarStatus() {
+      try {
+        const res = await fetch(`${apiUrl}/public/hands-on/inscriptions/${encodeURIComponent(id)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.data && (json.data.status === "CONFIRMED" || json.data.status === "CONFIRMADO")) {
+          if (!cancelado) {
+            setInscricao((prev) => {
+              if (!prev) return prev;
+              const atualizado: HandsOnInscription = {
+                ...prev,
+                status: "CONFIRMADO",
+                qrToken: json.data.qrToken || prev.qrToken,
+              };
+              saveHandsOnInscription(atualizado);
+              return atualizado;
+            });
+          }
+        }
+      } catch {
+        // Ignora erros transitórios no loop de polling
+      }
+    }
+
+    const timer = setInterval(checarStatus, 3500);
+    return () => {
+      cancelado = true;
+      clearInterval(timer);
+    };
+  }, [id, inscricao?.status]);
 
   function handleCopyPix() {
     if (!inscricao?.pixCode) return;
@@ -173,17 +250,19 @@ function PagamentoContent() {
                     letterSpacing: 1,
                   }}
                 >
-                  Inscrição Confirmada · Gratuita
+                  {inscricao.preco === 0 ? "Inscrição Confirmada · Gratuita" : "Pagamento Confirmado · Vaga Garantida"}
                 </div>
                 <h1 style={{ fontSize: "clamp(24px, 4vw, 32px)", fontWeight: 800, margin: "14px 0 8px" }}>
                   Sua vaga está garantida!
                 </h1>
                 <p style={{ color: "var(--muted-foreground)", fontSize: 15, margin: 0 }}>
-                  Parabéns! Sua participação no Hands On gratuito foi registrada com sucesso.
+                  {inscricao.preco === 0
+                    ? "Parabéns! Sua participação no Hands On gratuito foi registrada com sucesso."
+                    : "Pagamento via Pix confirmado pelo Mercado Pago com sucesso. Apresente este QR Code na entrada do workshop."}
                 </p>
               </div>
 
-              {/* Card de Detalhes da Inscrição */}
+              {/* Card de Detalhes da Inscrição e Credenciamento */}
               <div className="card" style={{ padding: 26, width: "100%", textAlign: "left" }}>
                 <div
                   style={{
@@ -197,6 +276,62 @@ function PagamentoContent() {
                   <strong style={{ fontFamily: "monospace", color: "var(--primary)", fontSize: 15 }}>
                     {inscricao.id}
                   </strong>
+                </div>
+
+                {/* QR Code de Acesso / Credenciamento */}
+                <div
+                  style={{
+                    textAlign: "center",
+                    margin: "18px 0",
+                    padding: "16px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    borderRadius: 12,
+                    border: "1px dashed var(--border)",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "var(--muted-foreground)",
+                      display: "block",
+                      marginBottom: 10,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      fontWeight: 600,
+                    }}
+                  >
+                    QR Code de Entrada / Credenciamento
+                  </span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                      inscricao.qrToken || `HO-${inscricao.id}`
+                    )}`}
+                    alt="QR Code de Credenciamento"
+                    width={180}
+                    height={180}
+                    style={{
+                      width: 180,
+                      height: 180,
+                      background: "#fff",
+                      padding: 8,
+                      borderRadius: 10,
+                      display: "inline-block",
+                      boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: "var(--primary)",
+                      display: "block",
+                      marginTop: 8,
+                      fontFamily: "monospace",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {inscricao.qrToken || `HO-${inscricao.id}`}
+                  </span>
                 </div>
 
                 <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10, fontSize: 14 }}>
@@ -216,6 +351,12 @@ function PagamentoContent() {
                       <strong style={{ color: "var(--foreground)" }}>Horário:</strong> {inscricao.horario}
                     </span>
                   </div>
+                  {inscricao.local && (
+                    <div>
+                      <span style={{ color: "var(--muted-foreground)", display: "block", fontSize: 12 }}>Local:</span>
+                      <span style={{ color: "var(--foreground)" }}>{inscricao.local}</span>
+                    </div>
+                  )}
                   <div>
                     <span style={{ color: "var(--muted-foreground)", display: "block", fontSize: 12 }}>Participante:</span>
                     <span style={{ color: "var(--foreground)" }}>
@@ -344,7 +485,23 @@ function PagamentoContent() {
 
                 {/* QR Code Pix */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "center" }}>
-                  {inscricao.pixCode && (
+                  {inscricao.pixQrCodeBase64 ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={`data:image/png;base64,${inscricao.pixQrCodeBase64}`}
+                      alt="QR Code Pix Mercado Pago"
+                      width={220}
+                      height={220}
+                      style={{
+                        width: 220,
+                        height: 220,
+                        background: "#fff",
+                        padding: 10,
+                        borderRadius: 12,
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+                      }}
+                    />
+                  ) : inscricao.pixCode ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
@@ -362,7 +519,7 @@ function PagamentoContent() {
                         boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
                       }}
                     />
-                  )}
+                  ) : null}
 
                   {/* Informação do Titular / Beneficiário */}
                   <div

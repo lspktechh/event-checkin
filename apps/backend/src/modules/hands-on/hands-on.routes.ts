@@ -175,4 +175,14 @@ export async function handsOnRoutes(app: FastifyInstance) {
 
     return reply.send(ok(list));
   });
+
+  /**
+   * GET /public/hands-on/inscriptions/:id
+   * Public — Retorna os dados e status da inscrição em Hands On (usado no polling de pagamento)
+   */
+  app.get("/public/hands-on/inscriptions/:id", async (request, reply) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+    const reg = await handsOnService.getPublicRegistration(id);
+    return reply.send(ok(reg));
+  });
 }

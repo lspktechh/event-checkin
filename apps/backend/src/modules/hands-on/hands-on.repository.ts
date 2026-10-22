@@ -108,6 +108,35 @@ export const handsOnRepository = {
       where: { id },
       data: {
         status,
+        ...(status === "CONFIRMED" ? { paidAt: new Date() } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+      },
+    });
+  },
+
+  async updatePaymentInfo(
+    id: string,
+    data: {
+      paymentId?: string | null;
+      paymentQrCodeContent?: string | null;
+      paymentQrCodeBase64?: string | null;
+      paymentExpiresAt?: Date | null;
+      paymentUrl?: string | null;
+    }
+  ) {
+    return prisma.handsOnRegistration.update({
+      where: { id },
+      data,
+    });
+  },
+
+  async confirmPaid(id: string, paymentId?: string, notes?: string | null) {
+    return prisma.handsOnRegistration.update({
+      where: { id },
+      data: {
+        status: "CONFIRMED",
+        paidAt: new Date(),
+        ...(paymentId ? { paymentId } : {}),
         ...(notes !== undefined ? { notes } : {}),
       },
     });
