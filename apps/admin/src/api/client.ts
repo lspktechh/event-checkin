@@ -1262,6 +1262,12 @@ export function cancelHandsOnRegistration(eventId: string, id: string, notes?: s
   });
 }
 
+export function deleteHandsOnRegistration(eventId: string, id: string) {
+  return request<{ deleted: boolean }>(`/events/${eventId}/hands-on/inscriptions/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export function checkInHandsOn(eventId: string, idOrToken: string) {
   return request<{ registration: HandsOnRegistrationRecord; alreadyCheckedIn: boolean }>(
     `/events/${eventId}/hands-on/checkin`,

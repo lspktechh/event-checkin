@@ -121,139 +121,7 @@ function HandsOnInscricaoContent() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErro(null);
-
-    const nomeTrim = nome.trim();
-    const emailTrim = email.trim().toLowerCase();
-    const docClean = documento.replace(/\D/g, "");
-
-    if (!nomeTrim || nomeTrim.length < 3) {
-      setErro("Informe seu nome completo (ao menos 3 letras).");
-      return;
-    }
-
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(emailTrim)) {
-      setErro("Por favor, digite um e-mail válido.");
-      return;
-    }
-
-    const typoTldRegex = /\.(ckm|con|cpm|cmo|gmai\.com|hotmai\.com|outloo\.com)$/i;
-    if (typoTldRegex.test(emailTrim)) {
-      setErro("O domínio do seu e-mail parece ter um erro de digitação (ex: .com). Revise antes de continuar.");
-      return;
-    }
-
-    if (!isValidCPF(docClean)) {
-      setErro("CPF inválido. Por favor, confira os 11 dígitos informados.");
-      return;
-    }
-
-    if (!telefone.trim() || telefone.replace(/\D/g, "").length < 10) {
-      setErro("Informe um telefone/WhatsApp válido com DDD.");
-      return;
-    }
-
-    if (!aceitou) {
-      setErro("Você precisa aceitar os termos de inscrição para continuar.");
-      return;
-    }
-
-    setEnviando(true);
-
-    try {
-      // Gera ID único da inscrição
-      const randSuffix = Math.floor(1000 + Math.random() * 9000);
-      let inscriptionId = `HO-2026-${randSuffix}`;
-      let finalQrToken = `HO-${randSuffix}-${Date.now()}`;
-      let mpPixCode = "";
-      let mpPixBase64 = "";
-      let mpPaymentId = "";
-
-      // Envia ao backend central para persistência e controle de presença
-      const targetEventId = "f1b36d08-e85d-459b-8606-69119ab05a78";
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://137-131-233-254.sslip.io";
-
-      try {
-        const resp = await fetch(`${apiUrl}/events/${targetEventId}/hands-on/inscriptions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            handsOnId: workshop.id,
-            title: workshop.titulo,
-            speaker: workshop.ministrante,
-            date: workshop.data,
-            time: workshop.horario,
-            location: workshop.local,
-            sponsor: workshop.patrocinio,
-            amount: workshop.preco,
-            name: nomeTrim,
-            email: emailTrim,
-            document: docClean,
-            phone: telefone,
-            category: categoria,
-            institution: instituicao.trim() || undefined,
-          }),
-        });
-
-        if (resp.ok) {
-          const json = await resp.json();
-          if (json.data?.id) {
-            inscriptionId = json.data.id;
-            finalQrToken = json.data.qrToken;
-            if (json.data.pixCode) {
-              mpPixCode = json.data.pixCode;
-              mpPixBase64 = json.data.pixQrCodeBase64 || "";
-              mpPaymentId = json.data.paymentId || "";
-            }
-          }
-        }
-      } catch (apiErr) {
-        console.warn("Falha de conexão com a API central, prosseguindo com contingência local:", apiErr);
-      }
-
-      // Se o Mercado Pago gerou o Pix dinâmico, usa ele; senão usa contingência padrão BR Code
-      const fallbackPixCode =
-        workshop.preco > 0
-          ? generatePixPayload({
-              amount: workshop.preco,
-              txid: inscriptionId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 25),
-            })
-          : "";
-
-      const record: HandsOnInscription = {
-        id: inscriptionId,
-        handsOnId: workshop.id,
-        handsOnTitulo: workshop.titulo,
-        ministrante: workshop.ministrante,
-        diaSemana: workshop.diaSemana,
-        horario: workshop.horario,
-        preco: workshop.preco,
-        local: workshop.local,
-        patrocinio: workshop.patrocinio,
-        nome: nomeTrim,
-        email: emailTrim,
-        documento: documento,
-        telefone: telefone,
-        categoria: categoria,
-        instituicao: instituicao.trim() || undefined,
-        status: workshop.preco === 0 ? "CONFIRMADO" : "PENDENTE",
-        pixKey: PIX_CONFIG.chave,
-        pixReceiverName: PIX_CONFIG.titular,
-        pixCode: mpPixCode || fallbackPixCode,
-        pixQrCodeBase64: mpPixBase64 || undefined,
-        mercadoPagoPaymentId: mpPaymentId || undefined,
-        createdAt: new Date().toISOString(),
-      };
-
-      saveHandsOnInscription(record);
-
-      // Redireciona para a tela de pagamento e confirmação
-      router.push(`/hands-on/pagamento/?id=${encodeURIComponent(inscriptionId)}`);
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro ao gerar inscrição.");
-      setEnviando(false);
-    }
+    setErro("As inscrições para os Workshops Hands On estão temporariamente pausadas pela organização do COPOL.");
   }
 
   const inputStyle: React.CSSProperties = {
@@ -306,9 +174,26 @@ function HandsOnInscricaoContent() {
           <h1 style={{ fontSize: "clamp(24px, 3.5vw, 32px)", fontWeight: 800, margin: "0 0 8px" }}>
             Inscrição no Hands On
           </h1>
-          <p style={{ color: "var(--muted-foreground)", margin: "0 0 28px", fontSize: 15 }}>
+          <p style={{ color: "var(--muted-foreground)", margin: "0 0 20px", fontSize: 15 }}>
             Preencha seus dados para reservar sua vaga no workshop escolhido. O pagamento é realizado diretamente via Pix.
           </p>
+
+          {/* Alerta de Inscrições Pausadas */}
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: 12,
+              background: "rgba(239, 68, 68, 0.12)",
+              border: "1.5px solid rgba(239, 68, 68, 0.5)",
+              color: "#fca5a5",
+              textAlign: "center",
+              marginBottom: 24,
+              fontSize: 15,
+              fontWeight: 700,
+            }}
+          >
+            🔒 As inscrições para os Workshops Hands On estão temporariamente pausadas pela organização do COPOL 2026.
+          </div>
 
           {/* Card de Resumo do Workshop Selecionado */}
           <div
@@ -596,12 +481,11 @@ function HandsOnInscricaoContent() {
               </label>
             </div>
 
-            {/* Botão de Envio */}
+            {/* Botão de Envio (Bloqueado) */}
             <div style={{ marginTop: 10 }}>
               <button
-                type="submit"
-                disabled={enviando || !aceitou}
-                className="btn-primary"
+                type="button"
+                disabled
                 style={{
                   width: "100%",
                   padding: "16px 24px",
@@ -612,24 +496,14 @@ function HandsOnInscricaoContent() {
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 10,
-                  cursor: enviando || !aceitou ? "not-allowed" : "pointer",
-                  opacity: enviando || !aceitou ? 0.6 : 1,
-                  boxShadow: "0 4px 16px rgba(45, 212, 191, 0.3)",
+                  cursor: "not-allowed",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  color: "var(--muted-foreground)",
+                  border: "1px solid var(--border)",
+                  opacity: 0.8,
                 }}
               >
-                {enviando ? (
-                  "Processando inscrição…"
-                ) : workshop.preco === 0 ? (
-                  <>
-                    <span>Confirmar Inscrição Gratuita</span>
-                    <ArrowRightIcon size={18} />
-                  </>
-                ) : (
-                  <>
-                    <span>Prosseguir para o Pagamento via Pix ({formatarReais(workshop.preco)})</span>
-                    <ArrowRightIcon size={18} />
-                  </>
-                )}
+                <span>🔒 Inscrições Pausadas pela Organização</span>
               </button>
             </div>
           </form>

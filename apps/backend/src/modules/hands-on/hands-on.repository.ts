@@ -152,4 +152,10 @@ export const handsOnRepository = {
       },
     });
   },
+
+  async delete(id: string) {
+    return prisma.handsOnRegistration.delete({
+      where: { id },
+    });
+  },
 };

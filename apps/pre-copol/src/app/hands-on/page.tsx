@@ -166,6 +166,29 @@ function HandsOnContent() {
             </div>
           </div>
 
+          {/* Banner de Inscrições Pausadas */}
+          <div
+            style={{
+              maxWidth: 720,
+              margin: "0 auto 32px",
+              padding: "16px 20px",
+              borderRadius: 12,
+              background: "rgba(239, 68, 68, 0.12)",
+              border: "1.5px solid rgba(239, 68, 68, 0.5)",
+              color: "#fca5a5",
+              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              fontSize: 14,
+              fontWeight: 700,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>🔒</span>
+            <span>Inscrições temporariamente pausadas pela organização do COPOL 2026.</span>
+          </div>
+
           {/* Abas de Navegação dos Dias */}
           <div
             style={{
@@ -528,9 +551,9 @@ function HandsOnCard({ item }: { item: HandsOnItem }) {
           </strong>
         </div>
 
-        <Link
-          href={`/hands-on/inscricao/?id=${item.id}`}
-          className="btn-primary"
+        <button
+          type="button"
+          disabled
           style={{
             padding: "10px 18px",
             fontSize: 13,
@@ -538,16 +561,17 @@ function HandsOnCard({ item }: { item: HandsOnItem }) {
             borderRadius: 10,
             display: "inline-flex",
             alignItems: "center",
-            gap: 8,
-            textDecoration: "none",
-            color: "var(--primary-foreground)",
-            boxShadow: "0 4px 12px rgba(45, 212, 191, 0.25)",
+            gap: 6,
+            background: "rgba(255, 255, 255, 0.08)",
+            color: "var(--muted-foreground)",
+            border: "1px solid var(--border)",
+            cursor: "not-allowed",
             whiteSpace: "nowrap",
+            opacity: 0.8,
           }}
         >
-          <span>Inscrever-se</span>
-          <ArrowRightIcon size={14} />
-        </Link>
+          <span>🔒 Inscrições Pausadas</span>
+        </button>
       </div>
     </div>
   );

@@ -201,4 +201,10 @@ export const handsOnService = {
     const updated = await handsOnRepository.recordCheckin(reg.id, checkedInBy);
     return { registration: updated, alreadyCheckedIn: false };
   },
+
+  async deleteRegistration(id: string) {
+    const reg = await handsOnRepository.findById(id);
+    if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
+    return handsOnRepository.delete(id);
+  },
 };

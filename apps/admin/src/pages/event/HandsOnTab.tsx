@@ -299,6 +299,25 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     }
   }
 
+  async function handleDeleteRegistration(reg: api.HandsOnRegistrationRecord) {
+    if (
+      !confirm(
+        `Tem certeza que deseja EXCLUIR a inscrição de "${reg.name}" no Hands On "${selectedWorkshop?.titulo || reg.title}"?\n\nEsta ação removerá definitivamente o registro e liberará a vaga. Deseja prosseguir?`
+      )
+    ) {
+      return;
+    }
+    try {
+      setProcessingId(reg.id);
+      await api.deleteHandsOnRegistration(eventId, reg.id);
+      await loadData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao excluir inscrição");
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
   function exportWorkshopCsv(workshop: WorkshopDef, list: api.HandsOnRegistrationRecord[]) {
     const headers = [
       "Nome",
@@ -813,6 +832,23 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                 Fazer Check-in
                               </button>
                             )}
+
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              disabled={isProcessing}
+                              onClick={() => handleDeleteRegistration(r)}
+                              style={{
+                                background: "rgba(239, 68, 68, 0.15)",
+                                color: "#ef4444",
+                                border: "1px solid rgba(239, 68, 68, 0.4)",
+                                fontSize: 11,
+                                padding: "4px 8px",
+                              }}
+                              title="Excluir este inscrito definitivamente do Hands On"
+                            >
+                              Excluir
+                            </button>
                           </div>
                         </td>
                       </tr>

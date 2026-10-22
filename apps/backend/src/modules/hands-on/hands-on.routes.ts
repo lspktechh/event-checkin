@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { handsOnService } from "./hands-on.service.js";
 import {
-  createHandsOnInscriptionSchema,
   updateHandsOnStatusSchema,
   handsOnCheckinSchema,
 } from "./hands-on.schema.js";
@@ -22,24 +21,15 @@ const inscriptionIdParams = z.object({
 export async function handsOnRoutes(app: FastifyInstance) {
   /**
    * POST /events/:eventId/hands-on/inscriptions
-   * Public — Cria a inscrição em um workshop Hands On
+   * Public — Cria a inscrição em um workshop Hands On (BLOQUEADO TEMPORARIAMENTE)
    */
-  app.post("/events/:eventId/hands-on/inscriptions", async (request, reply) => {
-    const { eventId } = eventIdParams.parse(request.params);
-    const body = createHandsOnInscriptionSchema.parse(request.body);
-
-    const registration = await handsOnService.register(eventId, {
-      ...body,
-      amount: body.amount,
-      phone: body.phone ?? null,
-      location: body.location ?? null,
-      sponsor: body.sponsor ?? null,
-      category: body.category ?? null,
-      institution: body.institution ?? null,
-      notes: body.notes ?? null,
-    });
-
-    return reply.status(201).send(ok(registration));
+  app.post("/events/:eventId/hands-on/inscriptions", async (_request, reply) => {
+    return reply.status(403).send(
+      fail(
+        "INSCRIPTIONS_PAUSED",
+        "As inscrições para os Workshops Hands On estão temporariamente pausadas pela organização do COPOL."
+      )
+    );
   });
 
   /**
@@ -94,6 +84,20 @@ export async function handsOnRoutes(app: FastifyInstance) {
       const body = updateHandsOnStatusSchema.partial().parse(request.body || {});
       const updated = await handsOnService.cancelRegistration(id, body.notes);
       return ok(updated);
+    }
+  );
+
+  /**
+   * DELETE /events/:eventId/hands-on/inscriptions/:id
+   * Admin — Exclui definitivamente um inscrito do Hands On
+   */
+  app.delete(
+    "/events/:eventId/hands-on/inscriptions/:id",
+    { preHandler: requirePermission("participants.edit") },
+    async (request, reply) => {
+      const { id } = inscriptionIdParams.parse(request.params);
+      await handsOnService.deleteRegistration(id);
+      return reply.send(ok({ deleted: true }));
     }
   );
 
