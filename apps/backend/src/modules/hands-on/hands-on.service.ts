@@ -129,7 +129,6 @@ export const handsOnService = {
           paymentQrCodeContent: pixPayment.qrCodeContent,
           paymentQrCodeBase64: pixPayment.qrCodeBase64,
           paymentExpiresAt: expiresAt,
-          paymentUrl: pixPayment.paymentUrl,
         });
 
         return {
@@ -181,21 +180,36 @@ export const handsOnService = {
     let reg = await handsOnRepository.findById(id);
     if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
 
-    // Se estiver pendente e possuir paymentId do Mercado Pago, consulta status ativo no gateway
-    if (reg.status === "PENDING" && reg.paymentId) {
+    // Se estiver pendente, consulta status ativo no gateway Mercado Pago
+    if (reg.status === "PENDING") {
       try {
         const event = await prisma.event.findUnique({
           where: { id: reg.eventId },
           select: { mpAccessToken: true },
         });
         const mpToken = event?.mpAccessToken || env.MP_ACCESS_TOKEN;
-        const conferencia = await mercadoPagoClient.conferirPagamento(
-          reg.paymentId,
-          mpToken || undefined
-        );
-        if (conferencia.ok && conferencia.dados.aprovado) {
+
+        let conferencia = reg.paymentId
+          ? await mercadoPagoClient.conferirPagamento(reg.paymentId, mpToken || undefined)
+          : null;
+
+        // Se não tinha paymentId salvo, tenta localizar pela referência externa ho:<id>
+        if (!conferencia || !conferencia.ok) {
+          conferencia = await mercadoPagoClient.buscarPagamentoPorReferencia(
+            `ho:${reg.id}`,
+            mpToken || undefined
+          );
+          if (conferencia?.ok && conferencia.dados.paymentId && !reg.paymentId) {
+            await handsOnRepository.updatePaymentInfo(reg.id, {
+              paymentId: conferencia.dados.paymentId,
+            });
+            reg.paymentId = conferencia.dados.paymentId;
+          }
+        }
+
+        if (conferencia?.ok && conferencia.dados.aprovado) {
           await handsOnService.confirmMercadoPagoPayment(reg.id, {
-            paymentId: reg.paymentId,
+            paymentId: conferencia.dados.paymentId,
             centavos: conferencia.dados.centavos,
           });
           const reloaded = await handsOnRepository.findById(id);

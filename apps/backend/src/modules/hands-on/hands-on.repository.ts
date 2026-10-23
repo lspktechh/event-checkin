@@ -123,12 +123,16 @@ export const handsOnRepository = {
       paymentQrCodeContent?: string | null;
       paymentQrCodeBase64?: string | null;
       paymentExpiresAt?: Date | null;
-      paymentUrl?: string | null;
     }
   ) {
     return prisma.handsOnRegistration.update({
       where: { id },
-      data,
+      data: {
+        paymentId: data.paymentId,
+        paymentQrCodeContent: data.paymentQrCodeContent,
+        paymentQrCodeBase64: data.paymentQrCodeBase64,
+        paymentExpiresAt: data.paymentExpiresAt,
+      },
     });
   },
 

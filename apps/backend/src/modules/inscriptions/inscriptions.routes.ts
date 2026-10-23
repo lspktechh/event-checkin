@@ -65,11 +65,18 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
       return (valor as string | undefined) ?? null;
     };
 
-    const query = (request.query ?? {}) as { "data.id"?: string; type?: string };
+    const query = (request.query ?? {}) as {
+      "data.id"?: string;
+      id?: string;
+      type?: string;
+      topic?: string;
+    };
+    const dataId = query["data.id"] || query.id || null;
+    const type = query.type || query.topic || null;
 
     const resultado = await inscriptionsService.handleMercadoPagoWebhook(
       { xSignature: header("x-signature"), xRequestId: header("x-request-id") },
-      { dataId: query["data.id"] ?? null, type: query.type ?? null },
+      { dataId, type },
       (request.body ?? {}) as { type?: string; action?: string; data?: { id?: string | number } }
     );
 

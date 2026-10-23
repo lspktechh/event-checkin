@@ -352,6 +352,54 @@ export class MercadoPagoClient {
   }
 
   /**
+   * Busca pagamento ativo pela referência externa (ex: ho:<id> ou sub:<id>).
+   */
+  async buscarPagamentoPorReferencia(
+    referenceId: string,
+    customToken?: string
+  ): Promise<ResultadoConferencia | null> {
+    const token = customToken || env.MP_ACCESS_TOKEN;
+    if (!token) return null;
+
+    try {
+      const resp = await fetch(
+        `${API}/v1/payments/search?external_reference=${encodeURIComponent(
+          referenceId
+        )}&sort=date_created&criteria=desc&limit=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!resp.ok) return null;
+
+      const json = (await resp.json()) as {
+        results?: Array<{
+          id: number | string;
+          status: string;
+          payment_type_id?: string;
+          transaction_amount?: number;
+          external_reference?: string;
+        }>;
+      };
+
+      const p = json.results?.[0];
+      if (!p || !p.id) return null;
+
+      return {
+        ok: true,
+        dados: {
+          aprovado: p.status === "approved",
+          status: p.status,
+          tipo: p.payment_type_id ?? "bank_transfer",
+          paymentId: String(p.id),
+          centavos: Math.round((p.transaction_amount ?? 0) * 100),
+          referenceId: String(p.external_reference ?? referenceId),
+        },
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Confere a assinatura da notificação.
    *
    * O cabeçalho vem como `ts=1704908010,v1=<hmac_hex>`, e o texto assinado
