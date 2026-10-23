@@ -84,7 +84,12 @@ function PagamentoContent() {
               email: d.email,
               documento: d.document,
               telefone: prev?.telefone || "",
-              status: d.status === "CONFIRMED" ? "CONFIRMADO" : "PENDENTE",
+              status:
+                d.status === "CONFIRMED"
+                  ? "CONFIRMADO"
+                  : d.status === "CANCELLED"
+                  ? "CANCELADO"
+                  : "PENDENTE",
               pixKey: "",
               pixReceiverName: "COPOL 2026",
               pixCode: d.pixCode || prev?.pixCode || "",
@@ -114,18 +119,33 @@ function PagamentoContent() {
         const res = await fetch(`${apiUrl}/public/hands-on/inscriptions/${encodeURIComponent(id)}`);
         if (!res.ok) return;
         const json = await res.json();
-        if (json?.data && (json.data.status === "CONFIRMED" || json.data.status === "CONFIRMADO")) {
-          if (!cancelado) {
-            setInscricao((prev) => {
-              if (!prev) return prev;
-              const atualizado: HandsOnInscription = {
-                ...prev,
-                status: "CONFIRMADO",
-                qrToken: json.data.qrToken || prev.qrToken,
-              };
-              saveHandsOnInscription(atualizado);
-              return atualizado;
-            });
+        if (json?.data) {
+          if (json.data.status === "CONFIRMED" || json.data.status === "CONFIRMADO") {
+            if (!cancelado) {
+              setInscricao((prev) => {
+                if (!prev) return prev;
+                const atualizado: HandsOnInscription = {
+                  ...prev,
+                  status: "CONFIRMADO",
+                  qrToken: json.data.qrToken || prev.qrToken,
+                };
+                saveHandsOnInscription(atualizado);
+                return atualizado;
+              });
+            }
+          } else if (json.data.status === "CANCELLED" || json.data.status === "CANCELADO") {
+            if (!cancelado) {
+              setInscricao((prev) => {
+                if (!prev) return prev;
+                const atualizado: HandsOnInscription = {
+                  ...prev,
+                  status: "CANCELADO",
+                  pixCode: "",
+                };
+                saveHandsOnInscription(atualizado);
+                return atualizado;
+              });
+            }
           }
         }
       } catch {
@@ -175,6 +195,7 @@ function PagamentoContent() {
   }
 
   const isGratuito = inscricao.preco === 0 || inscricao.status === "CONFIRMADO";
+  const isCancelado = inscricao.status === "CANCELADO" || inscricao.status === "ESGOTADO";
 
   // Monta texto de envio para o e-mail / WhatsApp da organização
   const mensagemComprovante = encodeURIComponent(
@@ -207,7 +228,95 @@ function PagamentoContent() {
             textAlign: "center",
           }}
         >
-          {isGratuito ? (
+          {isCancelado ? (
+            /* ---------- VAGAS ESGOTADAS / PIX CANCELADO ---------- */
+            <>
+              <div
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: "50%",
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "2px solid #ef4444",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#ef4444",
+                }}
+              >
+                <AlertTriangleIcon size={40} color="#ef4444" />
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 14px",
+                    borderRadius: 999,
+                    background: "rgba(239, 68, 68, 0.12)",
+                    color: "#ef4444",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: 1,
+                  }}
+                >
+                  Vagas Esgotadas · Cobrança Cancelada
+                </div>
+                <h1 style={{ fontSize: "clamp(24px, 4vw, 32px)", fontWeight: 800, margin: "14px 0 8px" }}>
+                  As vagas para este Hands On se esgotaram
+                </h1>
+                <p style={{ color: "var(--muted-foreground)", fontSize: 15, margin: 0, lineHeight: 1.6 }}>
+                  Infelizmente o limite oficial de vagas para <strong>{inscricao.handsOnTitulo}</strong> foi preenchido antes da confirmação do seu pagamento.
+                </p>
+              </div>
+
+              <div
+                style={{
+                  width: "100%",
+                  padding: "16px 20px",
+                  borderRadius: 12,
+                  background: "rgba(239, 68, 68, 0.08)",
+                  border: "1.5px solid rgba(239, 68, 68, 0.3)",
+                  textAlign: "left",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: "var(--foreground)",
+                }}
+              >
+                <strong style={{ color: "#ef4444", display: "block", marginBottom: 4 }}>
+                  Importante sobre o código Pix:
+                </strong>
+                Por motivos de segurança e para evitar pagamentos indevidos, a cobrança Pix vinculada a esta pré-reserva foi <strong>cancelada automaticamente</strong> e não pode mais ser paga no aplicativo do seu banco.
+              </div>
+
+              {/* Resumo do Workshop */}
+              <div className="card" style={{ padding: 22, width: "100%", textAlign: "left" }}>
+                <div style={{ fontSize: 12, color: "var(--muted-foreground)", textTransform: "uppercase", marginBottom: 4 }}>
+                  Workshop Solicitado
+                </div>
+                <strong style={{ fontSize: 16, color: "var(--foreground)", display: "block", marginBottom: 8 }}>
+                  {inscricao.handsOnTitulo}
+                </strong>
+                <div style={{ fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
+                  <div>👨‍⚕️ <strong>Ministrante:</strong> {inscricao.ministrante}</div>
+                  <div>📅 <strong>Data e Horário:</strong> {inscricao.diaSemana} · {inscricao.horario}</div>
+                  <div>👤 <strong>Inscrito:</strong> {inscricao.nome} (CPF: {inscricao.documento})</div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 12, width: "100%", flexWrap: "wrap", justifyContent: "center" }}>
+                <Link href="/hands-on/" className="btn-primary" style={{ flex: 1, textAlign: "center" }}>
+                  Ver Outros Hands On Disponíveis
+                </Link>
+                <Link href="/" className="btn-secondary" style={{ flex: 1, textAlign: "center" }}>
+                  Página Inicial
+                </Link>
+              </div>
+            </>
+          ) : isGratuito ? (
             /* ---------- CONFIRMAÇÃO GRATUITA (RADIOTECH) ---------- */
             <>
               <div

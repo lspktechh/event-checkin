@@ -144,7 +144,7 @@ export class MercadoPagoClient {
         items: [
           {
             id: params.referenceId,
-            title: `${params.payer.firstName} ${params.payer.lastName}`.slice(0, 100),
+            title: `${params.payer.firstName} ${params.payer.lastName}${params.payer.document ? ` (CPF: ${params.payer.document.replace(/\D/g, "")})` : ""}`.slice(0, 100),
             description: params.description.slice(0, 100),
             quantity: 1,
             unit_price: Number(params.amount.toFixed(2)),
@@ -417,6 +417,43 @@ export class MercadoPagoClient {
       };
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Cancela uma cobrança ativa (Pix pendente) no Mercado Pago.
+   * Quando cancelada, qualquer tentativa de pagamento via app bancário é
+   * imediatamente rejeitada pelo Banco Central / Mercado Pago como cobrança
+   * cancelada/expirada.
+   */
+  async cancelPayment(
+    paymentId: string,
+    customToken?: string
+  ): Promise<{ ok: boolean; status?: string; error?: string }> {
+    const token = customToken || env.MP_ACCESS_TOKEN;
+    if (!token) {
+      return { ok: true, status: "cancelled" }; // Mock mode
+    }
+
+    try {
+      const resposta = await fetch(`${API}/v1/payments/${encodeURIComponent(paymentId)}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+
+      if (!resposta.ok) {
+        const errText = await resposta.text().catch(() => "");
+        return { ok: false, error: `MP API ${resposta.status}: ${errText}` };
+      }
+
+      const d = (await resposta.json()) as { status?: string };
+      return { ok: true, status: d.status };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 

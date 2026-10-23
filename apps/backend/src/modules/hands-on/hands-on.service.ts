@@ -22,6 +22,19 @@ export const HANDS_ON_CAPACITY: Record<string, number> = {
   "lprf-poder-regenerativo": 12,
 };
 
+function getRelatedHandsOnIds(handsOnId: string): string[] {
+  if (
+    handsOnId === "integrale-cirurgia-implante-protetico" ||
+    handsOnId === "reabilitacao-resina-composta"
+  ) {
+    return [
+      "integrale-cirurgia-implante-protetico",
+      "reabilitacao-resina-composta",
+    ];
+  }
+  return [handsOnId];
+}
+
 export const handsOnService = {
   async getSettings(eventId: string): Promise<{ open: boolean }> {
     const event = await prisma.event.findUnique({
@@ -88,6 +101,49 @@ export const handsOnService = {
       );
     }
 
+    // 3. Verifica se a pessoa já possui inscrição neste workshop
+    const cleanDoc = input.document.replace(/\D/g, "");
+    const relatedIds = getRelatedHandsOnIds(input.handsOnId);
+
+    const existingForSamePerson = await prisma.handsOnRegistration.findMany({
+      where: {
+        eventId,
+        handsOnId: { in: relatedIds },
+        OR: [
+          { document: cleanDoc },
+          { document: input.document },
+        ],
+      },
+    });
+
+    const alreadyConfirmed = existingForSamePerson.find((r) => r.status === "CONFIRMED");
+    if (alreadyConfirmed) {
+      throw new ConflictError(
+        "ALREADY_REGISTERED",
+        `Este CPF já possui inscrição confirmada para o workshop "${input.title}".`
+      );
+    }
+
+    // Se já havia inscrição PENDING anterior dessa mesma pessoa, cancela Pix antigo no MP e remove duplicata
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { mpAccessToken: true },
+    });
+    const mpToken = event?.mpAccessToken || env.MP_ACCESS_TOKEN;
+
+    for (const oldPending of existingForSamePerson) {
+      if (oldPending.status === "PENDING") {
+        if (oldPending.paymentId) {
+          try {
+            await mercadoPagoClient.cancelPayment(oldPending.paymentId, mpToken || undefined);
+          } catch (mpErr) {
+            console.warn(`[HandsOn] Erro ao cancelar Pix antigo ${oldPending.paymentId}:`, mpErr);
+          }
+        }
+        await prisma.handsOnRegistration.delete({ where: { id: oldPending.id } });
+      }
+    }
+
     const qrToken = `HO-${generateQrToken()}`;
     const registration = await handsOnRepository.create({
       ...input,
@@ -107,13 +163,17 @@ export const handsOnService = {
         const [firstName, ...rest] = input.name.trim().split(" ");
         const lastName = rest.join(" ") || "Participante";
         const cleanDoc = input.document.replace(/\D/g, "");
+        const formattedCpf =
+          cleanDoc.length === 11
+            ? `${cleanDoc.slice(0, 3)}.${cleanDoc.slice(3, 6)}.${cleanDoc.slice(6, 9)}-${cleanDoc.slice(9)}`
+            : cleanDoc;
 
         const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutos de validade do Pix
 
         const pixPayment = await mercadoPagoClient.createPixPayment({
           referenceId: `ho:${registration.id}`,
           amount: Number(input.amount),
-          description: `${input.name} - ${input.title}`.slice(0, 120),
+          description: `${input.name} - CPF: ${formattedCpf} - ${input.title}`.slice(0, 120),
           expiresAt,
           accessToken: mpToken || undefined,
           payer: {
@@ -146,6 +206,138 @@ export const handsOnService = {
     return registration;
   },
 
+  async cancelPendingWhenFull(
+    eventId: string,
+    handsOnId: string
+  ): Promise<{ cancelledCount: number }> {
+    const relatedIds = getRelatedHandsOnIds(handsOnId);
+    const targetId = relatedIds[0];
+    const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+
+    const confirmedCount = await prisma.handsOnRegistration.count({
+      where: {
+        eventId,
+        handsOnId: { in: relatedIds },
+        status: "CONFIRMED",
+      },
+    });
+
+    if (confirmedCount < maxVagas) {
+      return { cancelledCount: 0 };
+    }
+
+    const pendentes = await prisma.handsOnRegistration.findMany({
+      where: {
+        eventId,
+        handsOnId: { in: relatedIds },
+        status: "PENDING",
+      },
+    });
+
+    if (pendentes.length === 0) {
+      return { cancelledCount: 0 };
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { mpAccessToken: true },
+    });
+    const mpToken = event?.mpAccessToken || env.MP_ACCESS_TOKEN;
+
+    let cancelledCount = 0;
+    for (const p of pendentes) {
+      if (p.paymentId) {
+        try {
+          await mercadoPagoClient.cancelPayment(p.paymentId, mpToken || undefined);
+        } catch (err) {
+          console.warn(`[HandsOn] Erro ao cancelar cobrança ${p.paymentId} no Mercado Pago:`, err);
+        }
+      }
+
+      await prisma.handsOnRegistration.update({
+        where: { id: p.id },
+        data: {
+          status: "CANCELLED",
+          notes: `Cancelado automaticamente: vagas esgotadas para este workshop (${confirmedCount}/${maxVagas} confirmadas).`,
+        },
+      });
+      cancelledCount++;
+    }
+
+    console.log(
+      `[HandsOn] ${cancelledCount} inscrições pendentes do workshop "${targetId}" foram canceladas no Mercado Pago e marcadas como CANCELLED.`
+    );
+    return { cancelledCount };
+  },
+
+  async syncAllSoldOutWorkshops(
+    eventId: string
+  ): Promise<{ cancelledTotal: number; details: Record<string, number> }> {
+    let cancelledTotal = 0;
+    const details: Record<string, number> = {};
+
+    for (const [id] of Object.entries(HANDS_ON_CAPACITY)) {
+      const res = await handsOnService.cancelPendingWhenFull(eventId, id);
+      if (res.cancelledCount > 0) {
+        details[id] = res.cancelledCount;
+        cancelledTotal += res.cancelledCount;
+      }
+    }
+
+    return { cancelledTotal, details };
+  },
+
+  async cleanupDuplicatesForParticipant(
+    eventId: string,
+    handsOnId: string,
+    document: string,
+    keepRegistrationId: string
+  ): Promise<number> {
+    const cleanDoc = document.replace(/\D/g, "");
+    const relatedIds = getRelatedHandsOnIds(handsOnId);
+
+    const duplicates = await prisma.handsOnRegistration.findMany({
+      where: {
+        eventId,
+        handsOnId: { in: relatedIds },
+        id: { not: keepRegistrationId },
+        status: "PENDING",
+        OR: [
+          { document: cleanDoc },
+          { document: document },
+        ],
+      },
+    });
+
+    if (duplicates.length === 0) return 0;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { mpAccessToken: true },
+    });
+    const mpToken = event?.mpAccessToken || env.MP_ACCESS_TOKEN;
+
+    let deletedCount = 0;
+    for (const d of duplicates) {
+      if (d.paymentId) {
+        try {
+          await mercadoPagoClient.cancelPayment(d.paymentId, mpToken || undefined);
+        } catch (err) {
+          console.warn(`[HandsOn] Erro ao cancelar Pix duplicado ${d.paymentId}:`, err);
+        }
+      }
+      await prisma.handsOnRegistration.delete({ where: { id: d.id } });
+      deletedCount++;
+    }
+
+    if (deletedCount > 0) {
+      console.log(
+        `[HandsOn] ${deletedCount} inscrição(ões) duplicada(s) pendente(s) do participante ${cleanDoc} no workshop "${handsOnId}" foram excluídas após confirmação.`
+      );
+    }
+    return deletedCount;
+  },
+
   async confirmMercadoPagoPayment(
     registrationId: string,
     pagamento: { paymentId: string; centavos: number }
@@ -167,20 +359,86 @@ export const handsOnService = {
       return { ok: false, motivo: "valor_insuficiente" };
     }
 
-    await handsOnRepository.confirmPaid(
-      reg.id,
-      pagamento.paymentId,
-      `Confirmado automaticamente via Mercado Pago Pix (ID: ${pagamento.paymentId})`
+    const relatedIds = getRelatedHandsOnIds(reg.handsOnId);
+    const targetId = relatedIds[0];
+    const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+
+    const confirmedCount = await prisma.handsOnRegistration.count({
+      where: {
+        eventId: reg.eventId,
+        handsOnId: { in: relatedIds },
+        status: "CONFIRMED",
+      },
+    });
+
+    const isExceeded = confirmedCount >= maxVagas;
+    const note = isExceeded
+      ? `Confirmado via Mercado Pago Pix (ID: ${pagamento.paymentId}) [ALÉM DO LIMITE: vaga excedente ${confirmedCount + 1}/${maxVagas}]`
+      : `Confirmado automaticamente via Mercado Pago Pix (ID: ${pagamento.paymentId})`;
+
+    await handsOnRepository.confirmPaid(reg.id, pagamento.paymentId, note);
+
+    // Remove automaticamente qualquer inscrição duplicada pendente da mesma pessoa neste workshop
+    await handsOnService.cleanupDuplicatesForParticipant(
+      reg.eventId,
+      reg.handsOnId,
+      reg.document,
+      reg.id
     );
 
-    return { ok: true, motivo: "confirmado_com_sucesso" };
+    // Se o workshop acabou de atingir ou ultrapassar o limite de vagas,
+    // cancela imediatamente todas as outras cobranças Pix pendentes no Mercado Pago
+    await handsOnService.cancelPendingWhenFull(reg.eventId, reg.handsOnId);
+
+    return { ok: true, motivo: isExceeded ? "confirmado_excedente" : "confirmado_com_sucesso" };
   },
 
   async getPublicRegistration(id: string) {
     let reg = await handsOnRepository.findById(id);
     if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
 
-    // Se estiver pendente, consulta status ativo no gateway Mercado Pago
+    // Se estiver pendente, primeiro checa se as vagas do workshop se esgotaram
+    if (reg.status === "PENDING") {
+      const relatedIds = getRelatedHandsOnIds(reg.handsOnId);
+      const targetId = relatedIds[0];
+      const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+
+      const confirmedCount = await prisma.handsOnRegistration.count({
+        where: {
+          eventId: reg.eventId,
+          handsOnId: { in: relatedIds },
+          status: "CONFIRMED",
+        },
+      });
+
+      if (confirmedCount >= maxVagas) {
+        // Workshop esgotou: cancela cobrança no MP e marca como CANCELLED
+        try {
+          const event = await prisma.event.findUnique({
+            where: { id: reg.eventId },
+            select: { mpAccessToken: true },
+          });
+          const mpToken = event?.mpAccessToken || env.MP_ACCESS_TOKEN;
+          if (reg.paymentId) {
+            await mercadoPagoClient.cancelPayment(reg.paymentId, mpToken || undefined);
+          }
+        } catch (mpErr) {
+          console.warn("[HandsOn] Erro ao cancelar Pix esgotado no MP:", mpErr);
+        }
+
+        await prisma.handsOnRegistration.update({
+          where: { id: reg.id },
+          data: {
+            status: "CANCELLED",
+            notes: `Cancelado automaticamente: vagas esgotadas para este workshop (${confirmedCount}/${maxVagas} confirmadas).`,
+          },
+        });
+
+        reg = (await handsOnRepository.findById(id)) || reg;
+      }
+    }
+
+    // Se continuar pendente (workshop ainda com vagas), consulta status ativo no gateway Mercado Pago
     if (reg.status === "PENDING") {
       try {
         const event = await prisma.event.findUnique({
@@ -240,6 +498,7 @@ export const handsOnService = {
       pixQrCodeBase64: reg.paymentQrCodeBase64,
       pixExpiresAt: reg.paymentExpiresAt,
       checkedInAt: reg.checkedInAt,
+      notes: reg.notes,
     };
   },
 
@@ -273,7 +532,15 @@ export const handsOnService = {
   async confirmPayment(id: string, notes?: string | null) {
     const reg = await handsOnRepository.findById(id);
     if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
-    return handsOnRepository.updateStatus(id, "CONFIRMED", notes);
+    const updated = await handsOnRepository.updateStatus(id, "CONFIRMED", notes);
+    await handsOnService.cleanupDuplicatesForParticipant(
+      reg.eventId,
+      reg.handsOnId,
+      reg.document,
+      reg.id
+    );
+    await handsOnService.cancelPendingWhenFull(reg.eventId, reg.handsOnId);
+    return updated;
   },
 
   async cancelRegistration(id: string, notes?: string | null) {
@@ -313,12 +580,22 @@ export const handsOnService = {
   ) {
     const qrToken = `HO-${generateQrToken()}`;
     const status = input.status || "CONFIRMED";
-    return handsOnRepository.create({
+    const created = await handsOnRepository.create({
       ...input,
       eventId,
       qrToken,
       status,
       paidAt: status === "CONFIRMED" ? new Date() : undefined,
     });
+    if (status === "CONFIRMED") {
+      await handsOnService.cleanupDuplicatesForParticipant(
+        eventId,
+        input.handsOnId,
+        input.document,
+        created.id
+      );
+      await handsOnService.cancelPendingWhenFull(eventId, input.handsOnId);
+    }
+    return created;
   },
 };

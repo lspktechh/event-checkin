@@ -171,6 +171,32 @@ const WORKSHOPS_CATALOG: WorkshopDef[] = [
   },
 ];
 
+export type ClassificationFilter = "ALL" | "CONFIRMED_OFFICIAL" | "PENDING" | "EXCEEDED";
+
+export function getRegClassification(
+  r: api.HandsOnRegistrationRecord,
+  selloutMap: Record<string, any>
+): "CONFIRMED_OFFICIAL" | "PENDING" | "EXCEEDED" {
+  const targetId =
+    r.handsOnId === "reabilitacao-resina-composta"
+      ? "integrale-cirurgia-implante-protetico"
+      : r.handsOnId;
+  const sellout = selloutMap[targetId];
+  const orderInfo = sellout?.confirmedOrderMap?.get(r.id);
+
+  if (r.status === "CONFIRMED") {
+    if (orderInfo?.isOver) return "EXCEEDED";
+    return "CONFIRMED_OFFICIAL";
+  }
+
+  if (r.status === "PENDING") {
+    if (sellout?.isFull) return "EXCEEDED";
+    return "PENDING";
+  }
+
+  return "EXCEEDED";
+}
+
 export function HandsOnTab({ eventId }: { eventId: string }) {
   const [registrations, setRegistrations] = useState<api.HandsOnRegistrationRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,7 +205,10 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   const [diaFilter, setDiaFilter] = useState<"todos" | "quinta" | "sexta">("todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [participantSearch, setParticipantSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "CONFIRMED" | "PENDING">("ALL");
+  const [classificationFilter, setClassificationFilter] = useState<ClassificationFilter>("ALL");
+  const [viewMode, setViewMode] = useState<"WORKSHOPS" | "ALL_PARTICIPANTS">("WORKSHOPS");
+  const [allParticipantsWorkshopFilter, setAllParticipantsWorkshopFilter] = useState<string>("ALL");
+  const [syncingSoldOut, setSyncingSoldOut] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   // Controle de liberação das inscrições no site
@@ -312,8 +341,6 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   }, [registrations]);
 
   const totalInscritosGlobal = registrations.length;
-  const totalConfirmadosGlobal = registrations.filter((r) => r.status === "CONFIRMED").length;
-  const totalPendentesGlobal = registrations.filter((r) => r.status === "PENDING").length;
   const totalPresentesGlobal = registrations.filter((r) => !!r.checkedInAt).length;
 
   const filteredWorkshops = useMemo(() => {
@@ -348,7 +375,10 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
         return targetId === selectedWorkshopId;
       })
       .filter((r) => {
-        if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+        if (classificationFilter !== "ALL") {
+          const cat = getRegClassification(r, workshopSelloutData);
+          if (cat !== classificationFilter) return false;
+        }
         if (participantSearch.trim()) {
           const q = participantSearch.toLowerCase();
           const docClean = r.document.replace(/\D/g, "");
@@ -364,7 +394,153 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
         }
         return true;
       });
-  }, [registrations, selectedWorkshopId, statusFilter, participantSearch]);
+  }, [registrations, selectedWorkshopId, classificationFilter, participantSearch, workshopSelloutData]);
+
+  const selectedWorkshopCounts = useMemo(() => {
+    if (!selectedWorkshopId) return { official: 0, pending: 0, exceeded: 0, total: 0 };
+    const list = registrations.filter((r) => {
+      const targetId =
+        r.handsOnId === "reabilitacao-resina-composta"
+          ? "integrale-cirurgia-implante-protetico"
+          : r.handsOnId;
+      return targetId === selectedWorkshopId;
+    });
+
+    let official = 0;
+    let pending = 0;
+    let exceeded = 0;
+
+    for (const r of list) {
+      const cat = getRegClassification(r, workshopSelloutData);
+      if (cat === "CONFIRMED_OFFICIAL") official++;
+      else if (cat === "PENDING") pending++;
+      else if (cat === "EXCEEDED") exceeded++;
+    }
+
+    return { official, pending, exceeded, total: list.length };
+  }, [registrations, selectedWorkshopId, workshopSelloutData]);
+
+  const allFilteredParticipants = useMemo(() => {
+    return registrations
+      .filter((r) => {
+        if (allParticipantsWorkshopFilter !== "ALL") {
+          const targetId =
+            r.handsOnId === "reabilitacao-resina-composta"
+              ? "integrale-cirurgia-implante-protetico"
+              : r.handsOnId;
+          if (targetId !== allParticipantsWorkshopFilter) return false;
+        }
+        if (classificationFilter !== "ALL") {
+          const cat = getRegClassification(r, workshopSelloutData);
+          if (cat !== classificationFilter) return false;
+        }
+        if (participantSearch.trim()) {
+          const q = participantSearch.toLowerCase();
+          const docClean = r.document.replace(/\D/g, "");
+          const phoneClean = (r.phone || "").replace(/\D/g, "");
+          return (
+            r.name.toLowerCase().includes(q) ||
+            r.title.toLowerCase().includes(q) ||
+            r.email.toLowerCase().includes(q) ||
+            r.document.includes(q) ||
+            docClean.includes(q) ||
+            (r.phone && r.phone.includes(q)) ||
+            phoneClean.includes(q)
+          );
+        }
+        return true;
+      });
+  }, [registrations, allParticipantsWorkshopFilter, classificationFilter, participantSearch, workshopSelloutData]);
+
+  const searchedParticipants = useMemo(() => {
+    const q = participantSearch.trim().toLowerCase();
+    if (q.length < 2) return [];
+
+    const docClean = q.replace(/\D/g, "");
+    const matchingRegs = registrations.filter((r) => {
+      const rDocClean = r.document.replace(/\D/g, "");
+      const rPhoneClean = (r.phone || "").replace(/\D/g, "");
+      return (
+        r.name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        r.document.includes(q) ||
+        (docClean && rDocClean.includes(docClean)) ||
+        (r.phone && r.phone.includes(q)) ||
+        (docClean && rPhoneClean.includes(docClean))
+      );
+    });
+
+    if (matchingRegs.length === 0) return [];
+
+    const grouped = new Map<
+      string,
+      {
+        name: string;
+        document: string;
+        email: string;
+        phone?: string;
+        items: api.HandsOnRegistrationRecord[];
+      }
+    >();
+
+    for (const r of matchingRegs) {
+      const key = r.document.replace(/\D/g, "") || r.email.toLowerCase();
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          name: r.name,
+          document: r.document,
+          email: r.email,
+          phone: r.phone || undefined,
+          items: [],
+        });
+      }
+      grouped.get(key)!.items.push(r);
+    }
+
+    return Array.from(grouped.values());
+  }, [registrations, participantSearch]);
+
+  const globalCounts = useMemo(() => {
+    let official = 0;
+    let pending = 0;
+    let exceeded = 0;
+
+    for (const r of registrations) {
+      const cat = getRegClassification(r, workshopSelloutData);
+      if (cat === "CONFIRMED_OFFICIAL") official++;
+      else if (cat === "PENDING") pending++;
+      else if (cat === "EXCEEDED") exceeded++;
+    }
+
+    return { official, pending, exceeded, total: registrations.length };
+  }, [registrations, workshopSelloutData]);
+
+  async function handleSyncSoldOut() {
+    if (
+      !confirm(
+        "Deseja verificar todos os workshops com vagas esgotadas e cancelar imediatamente todas as cobranças Pix pendentes no Mercado Pago?\n\nIsso impedirá que novos participantes consigam pagar Pix de vagas que já acabaram."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSyncingSoldOut(true);
+      const res = await api.syncHandsOnSoldOut(eventId);
+      await loadData();
+      if (res.cancelledTotal > 0) {
+        alert(
+          `Sincronização concluída com sucesso!\n\n${res.cancelledTotal} cobranças Pix pendentes de workshops esgotados foram canceladas no Mercado Pago.`
+        );
+      } else {
+        alert("Nenhuma cobrança pendente precisava ser cancelada. Todos os workshops estão sincronizados!");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao sincronizar workshops esgotados");
+    } finally {
+      setSyncingSoldOut(false);
+    }
+  }
 
   async function handleConfirmPayment(id: string) {
     if (!confirm("Deseja confirmar o pagamento Pix desta inscrição?")) return;
@@ -592,6 +768,243 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     URL.revokeObjectURL(url);
   }
 
+  function renderSearchedParticipantsPanel() {
+    if (searchedParticipants.length === 0) return null;
+
+    return (
+      <div
+        className="card"
+        style={{
+          padding: 18,
+          borderRadius: 12,
+          background: "rgba(59, 91, 255, 0.05)",
+          border: "1.5px solid var(--primary)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 18 }}>🔍</span>
+            <strong style={{ fontSize: 15, color: "var(--text)" }}>
+              Inscrições Localizadas para a Busca: &ldquo;{participantSearch}&rdquo;
+            </strong>
+          </div>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+            {searchedParticipants.length} participante(s) encontrado(s)
+          </span>
+        </div>
+
+        {searchedParticipants.map((p) => {
+          const confirmedCount = p.items.filter((i) => i.status === "CONFIRMED").length;
+          const pendingCount = p.items.filter((i) => i.status === "PENDING").length;
+
+          return (
+            <div
+              key={p.document || p.email}
+              style={{
+                background: "var(--surface)",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                padding: 16,
+              }}
+            >
+              {/* Cabeçalho do Participante */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  marginBottom: 12,
+                  paddingBottom: 10,
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 16, color: "var(--text)" }}>{p.name}</strong>
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        background: "rgba(255, 255, 255, 0.08)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text)",
+                      }}
+                    >
+                      CPF: {p.document}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
+                    <span>✉️ {p.email}</span>
+                    {p.phone && <span style={{ marginLeft: 10 }}>📱 {p.phone}</span>}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span
+                    style={{
+                      background: "rgba(34, 197, 94, 0.15)",
+                      color: "var(--success)",
+                      padding: "3px 10px",
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    ✓ {confirmedCount} Confirmado(s)
+                  </span>
+                  {pendingCount > 0 && (
+                    <span
+                      style={{
+                        background: "rgba(245, 158, 11, 0.15)",
+                        color: "var(--warning)",
+                        padding: "3px 10px",
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}
+                    >
+                      ⏳ {pendingCount} Pendente(s)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Lista de Hands On deste participante */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {p.items.map((item) => {
+                  const isConfirmed = item.status === "CONFIRMED";
+                  const isPending = item.status === "PENDING";
+                  const isProcessing = processingId === item.id;
+
+                  const targetId =
+                    item.handsOnId === "reabilitacao-resina-composta"
+                      ? "integrale-cirurgia-implante-protetico"
+                      : item.handsOnId;
+                  const wsDef = WORKSHOPS_CATALOG.find((w) => w.id === targetId);
+                  const sellout = wsDef ? workshopSelloutData[wsDef.id] : null;
+                  const orderInfo = sellout?.confirmedOrderMap.get(item.id);
+                  const isOverCapacity = orderInfo ? orderInfo.isOver : false;
+                  const maxV = wsDef ? wsDef.vagas : 12;
+
+                  const pixTime = item.paidAt ? new Date(item.paidAt) : (isConfirmed ? new Date(item.createdAt) : null);
+                  const pixTimeStr = pixTime
+                    ? pixTime.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                    : null;
+                  const pixDateStr = pixTime
+                    ? pixTime.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+                    : null;
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 12,
+                        padding: "12px 14px",
+                        borderRadius: 8,
+                        background: isConfirmed ? "rgba(34, 197, 94, 0.05)" : "rgba(245, 158, 11, 0.05)",
+                        border: isConfirmed ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)",
+                      }}
+                    >
+                      <div style={{ flex: "1 1 280px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+                          <strong style={{ fontSize: 14, color: "var(--text)" }}>{item.title}</strong>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              fontWeight: 700,
+                              background: isConfirmed
+                                ? isOverCapacity
+                                  ? "rgba(239, 68, 68, 0.15)"
+                                  : "rgba(34, 197, 94, 0.15)"
+                                : "rgba(245, 158, 11, 0.15)",
+                              color: isConfirmed
+                                ? isOverCapacity
+                                  ? "#ef4444"
+                                  : "var(--success)"
+                                : "var(--warning)",
+                            }}
+                          >
+                            {isConfirmed
+                              ? isOverCapacity
+                                ? "⚠️ Confirmado (Excedente)"
+                                : "✓ Pix Confirmado"
+                              : "⏳ Pendente Pix"}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                          <span>👨‍⚕️ {item.speaker}</span>
+                          <span style={{ marginLeft: 8 }}>📅 {item.date} ({item.time})</span>
+                          <span style={{ marginLeft: 8 }}>💰 R$ {Number(item.amount).toFixed(2).replace(".", ",")}</span>
+                        </div>
+
+                        {isConfirmed && pixTimeStr && (
+                          <div style={{ fontSize: 11, color: isOverCapacity ? "#ef4444" : "var(--success)", fontWeight: 700, marginTop: 4 }}>
+                            ⚡ Confirmado em {pixDateStr} às {pixTimeStr} {orderInfo ? `(Vaga ${orderInfo.rank}/${maxV})` : ""}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        {isPending && (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={isProcessing}
+                            onClick={() => handleConfirmPayment(item.id)}
+                            style={{
+                              background: "var(--success)",
+                              color: "#fff",
+                              fontWeight: 700,
+                              fontSize: 12,
+                              padding: "6px 14px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                            title="Confirmar pagamento Pix manualmente (remove automaticamente duplicatas pendentes)"
+                          >
+                            ✓ Confirmar Pix Manualmente
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setSelectedWorkshopId(targetId);
+                          }}
+                          style={{ fontSize: 11, padding: "5px 10px" }}
+                        >
+                          Ver Workshop &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   function exportAllWorkshopsCsv() {
     const headers = [
       "Workshop ID",
@@ -706,7 +1119,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               onClick={() => {
                 setSelectedWorkshopId(null);
                 setParticipantSearch("");
-                setStatusFilter("ALL");
+                setClassificationFilter("ALL");
               }}
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
@@ -908,66 +1321,147 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
             )}
           </div>
 
-          {/* Filtros e Busca de Participantes */}
+          {/* Filtros e Segmentação dos Inscritos no Workshop */}
           <div
             style={{
               display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
+              flexDirection: "column",
               gap: 12,
+              width: "100%",
             }}
           >
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flex: "1 1 300px" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              {/* Segmented Filter Buttons */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("CONFIRMED_OFFICIAL")}
+                  className={`btn btn-sm ${classificationFilter === "CONFIRMED_OFFICIAL" ? "btn-primary" : "btn-secondary"}`}
+                  style={{
+                    background: classificationFilter === "CONFIRMED_OFFICIAL" ? "var(--success)" : undefined,
+                    borderColor: classificationFilter === "CONFIRMED_OFFICIAL" ? "var(--success)" : undefined,
+                    color: classificationFilter === "CONFIRMED_OFFICIAL" ? "#fff" : undefined,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>🟢</span> Confirmados Oficiais ({selectedWorkshopCounts.official}/{selectedWorkshop.vagas})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("PENDING")}
+                  className={`btn btn-sm ${classificationFilter === "PENDING" ? "btn-primary" : "btn-secondary"}`}
+                  style={{
+                    background: classificationFilter === "PENDING" ? "var(--warning)" : undefined,
+                    borderColor: classificationFilter === "PENDING" ? "var(--warning)" : undefined,
+                    color: classificationFilter === "PENDING" ? "#000" : undefined,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>🟡</span> Pendentes Pix ({selectedWorkshopCounts.pending})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("EXCEEDED")}
+                  className={`btn btn-sm ${classificationFilter === "EXCEEDED" ? "btn-primary" : "btn-secondary"}`}
+                  style={{
+                    background: classificationFilter === "EXCEEDED" ? "#ef4444" : undefined,
+                    borderColor: classificationFilter === "EXCEEDED" ? "#ef4444" : undefined,
+                    color: classificationFilter === "EXCEEDED" ? "#fff" : undefined,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>🔴</span> Além do Limite ({selectedWorkshopCounts.exceeded})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("ALL")}
+                  className={`btn btn-sm ${classificationFilter === "ALL" ? "btn-primary" : "btn-secondary"}`}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+                >
+                  <span>📋</span> Todos ({selectedWorkshopCounts.total})
+                </button>
+              </div>
+
               <input
                 type="text"
-                placeholder="Buscar por Nome, E-mail, CPF ou Telefone..."
+                placeholder="Buscar por Nome, CPF, E-mail..."
                 value={participantSearch}
                 onChange={(e) => setParticipantSearch(e.target.value)}
-                style={{ width: "100%", maxWidth: 380, padding: "8px 12px", borderRadius: 6, fontSize: 13 }}
+                style={{ width: "100%", maxWidth: 300, padding: "7px 12px", borderRadius: 6, fontSize: 13 }}
               />
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                style={{ padding: "8px 12px", borderRadius: 6, fontSize: 13 }}
-              >
-                <option value="ALL">Todos os status</option>
-                <option value="CONFIRMED">Apenas Confirmados</option>
-                <option value="PENDING">Apenas Pendentes Pix</option>
-              </select>
             </div>
 
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-              Exibindo <strong>{workshopRegistrations.length}</strong> pessoas inscritas
-            </span>
+            {classificationFilter === "EXCEEDED" && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  background: "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  color: "#ef4444",
+                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span>⚠️</span>
+                <span>
+                  <strong>Além do Limite Permitido:</strong> Exibindo participantes que foram confirmados após o esgotamento das {selectedWorkshop.vagas} vagas oficiais ou cadastros cancelados por esgotamento.
+                </span>
+              </div>
+            )}
           </div>
+
+          {/* Painel de Busca de Participantes */}
+          {renderSearchedParticipantsPanel()}
 
           {/* Tabela de Inscritos no Workshop */}
           <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "var(--surface-alt)", borderBottom: "1px solid var(--border)", textAlign: "left" }}>
-                  <th style={{ padding: "12px 16px", width: 45 }}>#</th>
-                  <th style={{ padding: "12px 16px" }}>Nome do Participante</th>
-                  <th style={{ padding: "12px 16px" }}>E-mail</th>
-                  <th style={{ padding: "12px 16px" }}>CPF</th>
-                  <th style={{ padding: "12px 16px" }}>Telefone</th>
-                  <th style={{ padding: "12px 16px" }}>Status Pagamento</th>
-                  <th style={{ padding: "12px 16px" }}>Check-in</th>
-                  <th style={{ padding: "12px 16px", textAlign: "right" }}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workshopRegistrations.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>
-                      Nenhuma pessoa inscrita encontrada para os critérios selecionados.
-                    </td>
+            <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: 960, borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "var(--surface-alt)", borderBottom: "1px solid var(--border)", textAlign: "left" }}>
+                    <th style={{ padding: "12px 16px", width: 45 }}>#</th>
+                    <th style={{ padding: "12px 16px" }}>Nome do Participante</th>
+                    <th style={{ padding: "12px 16px" }}>E-mail</th>
+                    <th style={{ padding: "12px 16px" }}>CPF</th>
+                    <th style={{ padding: "12px 16px" }}>Telefone</th>
+                    <th style={{ padding: "12px 16px" }}>Status Pagamento</th>
+                    <th style={{ padding: "12px 16px" }}>Check-in</th>
+                    <th style={{ padding: "12px 16px", textAlign: "right", minWidth: 190 }}>Ações</th>
                   </tr>
-                ) : (
-                  workshopRegistrations.map((r, index) => {
-                    const isCheckedIn = !!r.checkedInAt;
+                </thead>
+                <tbody>
+                  {workshopRegistrations.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>
+                        Nenhuma pessoa inscrita encontrada para os critérios selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    workshopRegistrations.map((r, index) => {
+                      const isCheckedIn = !!r.checkedInAt;
                     const isConfirmed = r.status === "CONFIRMED";
                     const isPending = r.status === "PENDING";
                     const isProcessing = processingId === r.id;
@@ -1014,6 +1508,45 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                         <td style={{ padding: "12px 16px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
                             <strong style={{ color: "var(--text)", fontSize: 14 }}>{r.name}</strong>
+
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                fontSize: 11,
+                                fontFamily: "monospace",
+                                fontWeight: 600,
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                background: "rgba(255, 255, 255, 0.06)",
+                                color: "var(--text-muted)",
+                                border: "1px solid var(--border)",
+                              }}
+                              title="CPF do participante"
+                            >
+                              CPF: {r.document}
+                            </span>
+
+                            {r.status === "CANCELLED" && (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  background: "rgba(239, 68, 68, 0.15)",
+                                  color: "#ef4444",
+                                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                                }}
+                                title={r.notes || "Inscrição cancelada (vagas esgotadas)"}
+                              >
+                                🚫 Cancelado (Vagas Esgotadas)
+                              </span>
+                            )}
 
                             {isConfirmed && pixTimeStr && (
                               <span
@@ -1233,8 +1766,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                         </td>
 
                         {/* Ações */}
-                        <td style={{ padding: "12px 16px", textAlign: "right", whiteSpace: "nowrap" }}>
-                          <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                        <td style={{ padding: "12px 16px", textAlign: "right", whiteSpace: "nowrap", minWidth: 190 }}>
+                          <div style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
                             {isPending && (
                               <button
                                 type="button"
@@ -1290,6 +1823,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       ) : (
@@ -1398,6 +1932,25 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 📥 Exportar CSV
               </button>
 
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={syncingSoldOut}
+                onClick={handleSyncSoldOut}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "rgba(245, 158, 11, 0.15)",
+                  color: "var(--warning)",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  fontWeight: 600,
+                }}
+                title="Cancela cobranças Pix pendentes no Mercado Pago para workshops que já atingiram o limite oficial de vagas"
+              >
+                ⚡ {syncingSoldOut ? "Cancelando Pix…" : "Cancelar Pix Esgotados"}
+              </button>
+
               {registrations.length > 0 && (
                 <button
                   type="button"
@@ -1423,7 +1976,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
               gap: 14,
             }}
           >
@@ -1431,7 +1984,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               <span style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", display: "block" }}>
                 Total de Inscrições
               </span>
-              <strong style={{ fontSize: 28, color: "var(--text)" }}>{totalInscritosGlobal}</strong>
+              <strong style={{ fontSize: 26, color: "var(--text)" }}>{totalInscritosGlobal}</strong>
               <span style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginTop: 2 }}>
                 em todos os 12 workshops
               </span>
@@ -1439,11 +1992,11 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
             <div className="card" style={{ padding: "16px 20px" }}>
               <span style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", display: "block" }}>
-                Vagas Confirmadas
+                Vagas Oficiais
               </span>
-              <strong style={{ fontSize: 28, color: "var(--success)" }}>{totalConfirmadosGlobal}</strong>
+              <strong style={{ fontSize: 26, color: "var(--success)" }}>{globalCounts.official}</strong>
               <span style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginTop: 2 }}>
-                pagamentos confirmados
+                dentro do limite oficial
               </span>
             </div>
 
@@ -1451,9 +2004,21 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               <span style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", display: "block" }}>
                 Pendentes via Pix
               </span>
-              <strong style={{ fontSize: 28, color: "var(--warning)" }}>{totalPendentesGlobal}</strong>
+              <strong style={{ fontSize: 26, color: "var(--warning)" }}>{globalCounts.pending}</strong>
               <span style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginTop: 2 }}>
-                aguardando comprovante
+                aguardando pagamento
+              </span>
+            </div>
+
+            <div className="card" style={{ padding: "16px 20px", borderLeft: globalCounts.exceeded > 0 ? "4px solid #ef4444" : undefined }}>
+              <span style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", display: "block" }}>
+                Além do Limite
+              </span>
+              <strong style={{ fontSize: 26, color: globalCounts.exceeded > 0 ? "#ef4444" : "var(--text-muted)" }}>
+                {globalCounts.exceeded}
+              </strong>
+              <span style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginTop: 2 }}>
+                excedentes / esgotados
               </span>
             </div>
 
@@ -1461,14 +2026,14 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               <span style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", display: "block" }}>
                 Presenças na Sala
               </span>
-              <strong style={{ fontSize: 28, color: "var(--primary)" }}>{totalPresentesGlobal}</strong>
+              <strong style={{ fontSize: 26, color: "var(--primary)" }}>{totalPresentesGlobal}</strong>
               <span style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginTop: 2 }}>
                 check-ins efetuados
               </span>
             </div>
           </div>
 
-          {/* Filtros por Dia e Busca */}
+          {/* Alternador de Visualização: Catálogo vs Lista Geral de Inscritos */}
           <div
             style={{
               display: "flex",
@@ -1476,40 +2041,83 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               alignItems: "center",
               flexWrap: "wrap",
               gap: 12,
+              background: "var(--surface)",
+              padding: "10px 16px",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
             }}
           >
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 type="button"
-                className={`btn btn-sm ${diaFilter === "todos" ? "" : "btn-secondary"}`}
-                onClick={() => setDiaFilter("todos")}
+                className={`btn btn-sm ${viewMode === "WORKSHOPS" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setViewMode("WORKSHOPS")}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
               >
-                Todos os Dias (12)
+                <span>🧪</span> Catálogo por Workshops (12)
               </button>
+
               <button
                 type="button"
-                className={`btn btn-sm ${diaFilter === "quinta" ? "" : "btn-secondary"}`}
-                onClick={() => setDiaFilter("quinta")}
+                className={`btn btn-sm ${viewMode === "ALL_PARTICIPANTS" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setViewMode("ALL_PARTICIPANTS")}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
               >
-                Quinta-feira · 05/11 (6)
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${diaFilter === "sexta" ? "" : "btn-secondary"}`}
-                onClick={() => setDiaFilter("sexta")}
-              >
-                Sexta-feira · 06/11 (6)
+                <span>👥</span> Auditoria de Todos os Inscritos ({totalInscritosGlobal})
               </button>
             </div>
 
-            <input
-              type="text"
-              placeholder="Filtrar por título ou ministrante..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ width: "100%", maxWidth: 320, padding: "8px 12px", borderRadius: 6, fontSize: 13 }}
-            />
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              {viewMode === "WORKSHOPS"
+                ? "Clique em um workshop para gerenciar suas vagas individualmente"
+                : "Visão consolidada para filtrar por Confirmados Oficiais, Pendentes e Excedentes"}
+            </span>
           </div>
+
+          {viewMode === "WORKSHOPS" ? (
+            <>
+              {/* Filtros por Dia e Busca */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${diaFilter === "todos" ? "" : "btn-secondary"}`}
+                    onClick={() => setDiaFilter("todos")}
+                  >
+                    Todos os Dias (12)
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${diaFilter === "quinta" ? "" : "btn-secondary"}`}
+                    onClick={() => setDiaFilter("quinta")}
+                  >
+                    Quinta-feira · 05/11 (6)
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${diaFilter === "sexta" ? "" : "btn-secondary"}`}
+                    onClick={() => setDiaFilter("sexta")}
+                  >
+                    Sexta-feira · 06/11 (6)
+                  </button>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Filtrar por título ou ministrante..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ width: "100%", maxWidth: 320, padding: "8px 12px", borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
 
           {/* Grid dos Cards de Workshops */}
           <div
@@ -1688,8 +2296,449 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               );
             })}
           </div>
+        </>
+      ) : (
+        /* ============================================================== */
+        /* AUDITORIA GERAL DE TODOS OS INSCRITOS                           */
+        /* ============================================================== */
+        <div className="stack" style={{ gap: 16 }}>
+          {/* Barra de Filtros e Segmentação */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              {/* Segmented Filter Buttons */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("CONFIRMED_OFFICIAL")}
+                  className={`btn btn-sm ${classificationFilter === "CONFIRMED_OFFICIAL" ? "btn-primary" : "btn-secondary"}`}
+                  style={{
+                    background: classificationFilter === "CONFIRMED_OFFICIAL" ? "var(--success)" : undefined,
+                    borderColor: classificationFilter === "CONFIRMED_OFFICIAL" ? "var(--success)" : undefined,
+                    color: classificationFilter === "CONFIRMED_OFFICIAL" ? "#fff" : undefined,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>🟢</span> Confirmados Oficiais ({globalCounts.official})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("PENDING")}
+                  className={`btn btn-sm ${classificationFilter === "PENDING" ? "btn-primary" : "btn-secondary"}`}
+                  style={{
+                    background: classificationFilter === "PENDING" ? "var(--warning)" : undefined,
+                    borderColor: classificationFilter === "PENDING" ? "var(--warning)" : undefined,
+                    color: classificationFilter === "PENDING" ? "#000" : undefined,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>🟡</span> Pendentes Pix ({globalCounts.pending})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("EXCEEDED")}
+                  className={`btn btn-sm ${classificationFilter === "EXCEEDED" ? "btn-primary" : "btn-secondary"}`}
+                  style={{
+                    background: classificationFilter === "EXCEEDED" ? "#ef4444" : undefined,
+                    borderColor: classificationFilter === "EXCEEDED" ? "#ef4444" : undefined,
+                    color: classificationFilter === "EXCEEDED" ? "#fff" : undefined,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>🔴</span> Além do Limite ({globalCounts.exceeded})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClassificationFilter("ALL")}
+                  className={`btn btn-sm ${classificationFilter === "ALL" ? "btn-primary" : "btn-secondary"}`}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+                >
+                  <span>📋</span> Todos ({globalCounts.total})
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <select
+                  value={allParticipantsWorkshopFilter}
+                  onChange={(e) => setAllParticipantsWorkshopFilter(e.target.value)}
+                  style={{ padding: "7px 10px", borderRadius: 6, fontSize: 13 }}
+                >
+                  <option value="ALL">Todos os 12 Workshops</option>
+                  {WORKSHOPS_CATALOG.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.titulo.slice(0, 32)}… ({w.vagas} vagas)
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  placeholder="Buscar por Nome, CPF, Título..."
+                  value={participantSearch}
+                  onChange={(e) => setParticipantSearch(e.target.value)}
+                  style={{ width: 230, padding: "7px 12px", borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+            </div>
+
+            {classificationFilter === "EXCEEDED" && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  background: "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  color: "#ef4444",
+                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span>⚠️</span>
+                <span>
+                  <strong>Além do Limite Permitido:</strong> Exibindo participantes que foram confirmados após o esgotamento oficial do workshop ou cadastros com Pix cancelado por falta de vagas. Total: <strong>{allFilteredParticipants.length}</strong> registro(s).
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Painel de Busca de Participantes */}
+          {renderSearchedParticipantsPanel()}
+
+          {/* Tabela de Todos os Inscritos */}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: 1050, borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "var(--surface-alt)", borderBottom: "1px solid var(--border)", textAlign: "left" }}>
+                    <th style={{ padding: "12px 16px", width: 45 }}>#</th>
+                    <th style={{ padding: "12px 16px" }}>Participante & CPF</th>
+                    <th style={{ padding: "12px 16px" }}>Workshop Hands On</th>
+                    <th style={{ padding: "12px 16px" }}>Status Pagamento</th>
+                    <th style={{ padding: "12px 16px" }}>Horário Pix / Inscrição</th>
+                    <th style={{ padding: "12px 16px" }}>Situação da Vaga</th>
+                    <th style={{ padding: "12px 16px" }}>Check-in</th>
+                    <th style={{ padding: "12px 16px", textAlign: "right", minWidth: 190 }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allFilteredParticipants.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>
+                        Nenhum inscrito encontrado para os filtros selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    allFilteredParticipants.map((r, index) => {
+                      const isCheckedIn = !!r.checkedInAt;
+                    const isConfirmed = r.status === "CONFIRMED";
+                    const isPending = r.status === "PENDING";
+                    const isProcessing = processingId === r.id;
+
+                    const targetId =
+                      r.handsOnId === "reabilitacao-resina-composta"
+                        ? "integrale-cirurgia-implante-protetico"
+                        : r.handsOnId;
+                    const wsDef = WORKSHOPS_CATALOG.find((w) => w.id === targetId);
+                    const sellout = wsDef ? workshopSelloutData[wsDef.id] : null;
+                    const orderInfo = sellout?.confirmedOrderMap.get(r.id);
+                    const isOverCapacity = orderInfo ? orderInfo.isOver : false;
+                    const confirmedRank = orderInfo ? orderInfo.rank : null;
+                    const maxV = wsDef ? wsDef.vagas : 12;
+
+                    const pixTime = r.paidAt ? new Date(r.paidAt) : (isConfirmed ? new Date(r.createdAt) : null);
+                    const pixTimeStr = pixTime
+                      ? pixTime.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                      : null;
+                    const pixDateStr = pixTime
+                      ? pixTime.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+                      : null;
+                    const pixDateTimeFull = pixTime ? `${pixDateStr} às ${pixTimeStr}` : null;
+
+                    const createdTimeStr = new Date(r.createdAt).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    });
+
+                    return (
+                      <tr
+                        key={r.id}
+                        style={{
+                          borderBottom: "1px solid var(--border)",
+                          background: isOverCapacity ? "rgba(239, 68, 68, 0.03)" : index % 2 === 0 ? "transparent" : "rgba(255, 255, 255, 0.015)",
+                        }}
+                      >
+                        <td style={{ padding: "12px 16px", color: "var(--text-muted)" }}>{index + 1}</td>
+
+                        {/* Participante & CPF */}
+                        <td style={{ padding: "12px 16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+                            <strong style={{ color: "var(--text)", fontSize: 14 }}>{r.name}</strong>
+
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                fontSize: 11,
+                                fontFamily: "monospace",
+                                fontWeight: 600,
+                                padding: "1px 6px",
+                                borderRadius: 4,
+                                background: "rgba(255, 255, 255, 0.06)",
+                                color: "var(--text-muted)",
+                                border: "1px solid var(--border)",
+                              }}
+                              title="CPF do participante"
+                            >
+                              CPF: {r.document}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                            <a href={`mailto:${r.email}`} style={{ color: "inherit", textDecoration: "none" }}>{r.email}</a>
+                            {r.phone && <span> · {r.phone}</span>}
+                          </div>
+                        </td>
+
+                        {/* Workshop Hands On */}
+                        <td style={{ padding: "12px 16px" }}>
+                          <strong style={{ display: "block", color: "var(--text)", fontSize: 13, marginBottom: 2 }}>
+                            {r.title}
+                          </strong>
+                          <span style={{ fontSize: 11, color: "var(--primary)" }}>
+                            {r.speaker} · {r.date} ({r.time})
+                          </span>
+                        </td>
+
+                        {/* Status Pagamento */}
+                        <td style={{ padding: "12px 16px" }}>
+                          {isConfirmed ? (
+                            <span
+                              style={{
+                                background: isOverCapacity ? "rgba(239, 68, 68, 0.15)" : "rgba(34, 197, 94, 0.15)",
+                                color: isOverCapacity ? "#ef4444" : "var(--success)",
+                                padding: "3px 8px",
+                                borderRadius: 999,
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {isOverCapacity ? "⚠️ Confirmado (Excedente)" : "✓ Confirmado"}
+                            </span>
+                          ) : isPending ? (
+                            <span
+                              style={{
+                                background: "rgba(245, 158, 11, 0.15)",
+                                color: "var(--warning)",
+                                padding: "3px 8px",
+                                borderRadius: 999,
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              ⏳ Pendente Pix
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                background: "rgba(239, 68, 68, 0.15)",
+                                color: "var(--danger)",
+                                padding: "3px 8px",
+                                borderRadius: 999,
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {r.status === "CANCELLED" ? "🚫 Cancelado (Esgotado)" : r.status}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Horário Pix / Inscrição */}
+                        <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: 12 }}>
+                          {isConfirmed && pixTimeStr ? (
+                            <span style={{ color: isOverCapacity ? "#ef4444" : "var(--success)", fontWeight: 700 }}>
+                              ⚡ {pixDateTimeFull}
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--text-muted)" }}>
+                              🕒 {createdTimeStr}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Situação da Vaga */}
+                        <td style={{ padding: "12px 16px" }}>
+                          {isConfirmed && confirmedRank ? (
+                            isOverCapacity ? (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: "2px 8px",
+                                  borderRadius: 4,
+                                  background: "rgba(245, 158, 11, 0.18)",
+                                  color: "var(--warning)",
+                                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                                }}
+                              >
+                                ⚠️ Excedente ({confirmedRank}º/{maxV})
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: "2px 8px",
+                                  borderRadius: 4,
+                                  background: "rgba(34, 197, 94, 0.1)",
+                                  color: "var(--success)",
+                                }}
+                              >
+                                ✓ Vaga {confirmedRank}/{maxV}
+                              </span>
+                            )
+                          ) : isPending ? (
+                            sellout?.isFull ? (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: "2px 8px",
+                                  borderRadius: 4,
+                                  background: "rgba(239, 68, 68, 0.15)",
+                                  color: "#ef4444",
+                                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                                }}
+                              >
+                                🚫 Vagas Esgotadas
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 11, color: "var(--warning)" }}>
+                                Aguardando Pix
+                              </span>
+                            )
+                          ) : (
+                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                              {r.notes || "—"}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Check-in */}
+                        <td style={{ padding: "12px 16px" }}>
+                          {isCheckedIn ? (
+                            <span
+                              style={{
+                                background: "rgba(59, 91, 255, 0.15)",
+                                color: "var(--primary)",
+                                padding: "3px 8px",
+                                borderRadius: 999,
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              ✓ Presente
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
+                          )}
+                        </td>
+
+                        {/* Ações */}
+                        <td style={{ padding: "12px 16px", textAlign: "right", whiteSpace: "nowrap", minWidth: 190 }}>
+                          <div style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                            {isPending && (
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                disabled={isProcessing}
+                                onClick={() => handleConfirmPayment(r.id)}
+                                style={{ background: "var(--success)", color: "#ffffff", fontSize: 11, padding: "4px 8px" }}
+                                title="Confirmar pagamento Pix desta inscrição"
+                              >
+                                Confirmar
+                              </button>
+                            )}
+                            {!isCheckedIn && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                disabled={isProcessing}
+                                onClick={() => handleCheckIn(r.id)}
+                                style={{ fontSize: 11, padding: "4px 8px" }}
+                                title="Registrar presença"
+                              >
+                                Check-in
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              disabled={isProcessing}
+                              onClick={() => handleDeleteRegistration(r)}
+                              style={{
+                                background: "rgba(239, 68, 68, 0.15)",
+                                color: "#ef4444",
+                                border: "1px solid rgba(239, 68, 68, 0.4)",
+                                fontSize: 11,
+                                padding: "4px 8px",
+                              }}
+                              title="Excluir inscrição"
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            </div>
+          </div>
         </div>
       )}
+    </div>
+  )}
 
       {/* Modal de Inscrição Manual */}
       {isManualModalOpen && (

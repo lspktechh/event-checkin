@@ -1276,6 +1276,13 @@ export function deleteAllHandsOnRegistrations(eventId: string) {
   });
 }
 
+export function syncHandsOnSoldOut(eventId: string) {
+  return request<{ cancelledTotal: number; details: Record<string, number> }>(
+    `/events/${eventId}/hands-on/sync-sold-out`,
+    { method: "POST" }
+  );
+}
+
 export function getHandsOnSettings(eventId: string) {
   return request<{ open: boolean }>(`/events/${eventId}/hands-on/settings`);
 }

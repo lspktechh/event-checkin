@@ -153,6 +153,20 @@ export async function handsOnRoutes(app: FastifyInstance) {
   );
 
   /**
+   * POST /events/:eventId/hands-on/sync-sold-out
+   * Admin — Verifica todos os workshops esgotados e cancela as cobranças Pix pendentes no Mercado Pago
+   */
+  app.post(
+    "/events/:eventId/hands-on/sync-sold-out",
+    { preHandler: requirePermission("participants.edit") },
+    async (request) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const res = await handsOnService.syncAllSoldOutWorkshops(eventId);
+      return ok(res);
+    }
+  );
+
+  /**
    * DELETE /events/:eventId/hands-on/inscriptions
    * Admin — Remove todas as inscrições de Hands On deste evento
    */

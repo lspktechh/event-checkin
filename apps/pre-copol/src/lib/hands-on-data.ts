@@ -349,7 +349,7 @@ export interface HandsOnInscription {
   telefone: string;
   instituicao?: string;
   categoria?: string;
-  status: "PENDENTE" | "CONFIRMADO";
+  status: "PENDENTE" | "CONFIRMADO" | "CANCELADO" | "ESGOTADO";
 
   pixKey: string;
   pixReceiverName: string;
