@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { MarcaPatrocinador } from "./MarcaPatrocinador";
-import { PATROCINADORES } from "@/lib/patrocinadores";
+import { APOIADORES, PATROCINADORES } from "@/lib/patrocinadores";
 
 /**
  * Créditos de desenvolvimento e apoio, para o rodapé dos dois sistemas.
@@ -107,6 +107,32 @@ export function CreditosParceiros() {
                 style={{ height: 20, width: "auto" }}
               />
             </span>
+          ))}
+          {APOIADORES.map((a) => (
+            <a
+              key={a.nome}
+              href={a.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`${a.nome} no Instagram`}
+              style={{
+                background: "#ffffff",
+                borderRadius: 8,
+                padding: "6px 10px",
+                display: "inline-flex",
+                alignItems: "center",
+                height: 32,
+                textDecoration: "none",
+              }}
+            >
+              <Image
+                src={a.logo.src}
+                alt={a.nome}
+                width={a.logo.largura}
+                height={a.logo.altura}
+                style={{ height: a.logo.largura / a.logo.altura > 3 ? 16 : 20, width: "auto" }}
+              />
+            </a>
           ))}
         </div>
       </Credito>
