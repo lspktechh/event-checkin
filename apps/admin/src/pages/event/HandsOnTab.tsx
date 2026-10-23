@@ -243,6 +243,74 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     return map;
   }, [registrations]);
 
+  // Mapa de informações de esgotamento e ordem de confirmação por workshop
+  const workshopSelloutData = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        isFull: boolean;
+        confirmedCount: number;
+        maxVagas: number;
+        overCapacityCount: number;
+        soldOutAt: Date | null;
+        soldOutTimeStr: string | null;
+        soldOutDateStr: string | null;
+        nthParticipant: api.HandsOnRegistrationRecord | null;
+        confirmedOrderMap: Map<string, { rank: number; isOver: boolean }>;
+      }
+    > = {};
+
+    for (const def of WORKSHOPS_CATALOG) {
+      const confirmed = registrations
+        .filter((r) => {
+          const targetId =
+            r.handsOnId === "reabilitacao-resina-composta"
+              ? "integrale-cirurgia-implante-protetico"
+              : r.handsOnId;
+          return targetId === def.id && r.status === "CONFIRMED";
+        })
+        .sort((a, b) => {
+          const tA = a.paidAt ? new Date(a.paidAt).getTime() : new Date(a.createdAt).getTime();
+          const tB = b.paidAt ? new Date(b.paidAt).getTime() : new Date(b.createdAt).getTime();
+          return tA - tB;
+        });
+
+      const confirmedOrderMap = new Map<string, { rank: number; isOver: boolean }>();
+      confirmed.forEach((r, idx) => {
+        confirmedOrderMap.set(r.id, {
+          rank: idx + 1,
+          isOver: idx >= def.vagas,
+        });
+      });
+
+      const isFull = confirmed.length >= def.vagas;
+      const nth = isFull && def.vagas > 0 ? confirmed[def.vagas - 1] : null;
+      let soldOutAt: Date | null = null;
+      let soldOutTimeStr: string | null = null;
+      let soldOutDateStr: string | null = null;
+
+      if (nth) {
+        soldOutAt = nth.paidAt ? new Date(nth.paidAt) : new Date(nth.createdAt);
+        soldOutTimeStr = soldOutAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        soldOutDateStr = soldOutAt.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      }
+
+      map[def.id] = {
+        isFull,
+        confirmedCount: confirmed.length,
+        maxVagas: def.vagas,
+        overCapacityCount: Math.max(0, confirmed.length - def.vagas),
+        soldOutAt,
+        soldOutTimeStr,
+        soldOutDateStr,
+        nthParticipant: nth,
+        confirmedOrderMap,
+      };
+    }
+
+    return map;
+  }, [registrations]);
+
   const totalInscritosGlobal = registrations.length;
   const totalConfirmadosGlobal = registrations.filter((r) => r.status === "CONFIRMED").length;
   const totalPendentesGlobal = registrations.filter((r) => r.status === "PENDING").length;
@@ -263,6 +331,11 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     if (!selectedWorkshopId) return null;
     return WORKSHOPS_CATALOG.find((w) => w.id === selectedWorkshopId) ?? null;
   }, [selectedWorkshopId]);
+
+  const selectedWorkshopSellout = useMemo(() => {
+    if (!selectedWorkshopId) return null;
+    return workshopSelloutData[selectedWorkshopId] ?? null;
+  }, [selectedWorkshopId, workshopSelloutData]);
 
   const workshopRegistrations = useMemo(() => {
     if (!selectedWorkshopId) return [];
@@ -462,6 +535,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   }
 
   function exportWorkshopCsv(workshop: WorkshopDef, list: api.HandsOnRegistrationRecord[]) {
+    const sellout = workshopSelloutData[workshop.id];
     const headers = [
       "Nome",
       "E-mail",
@@ -470,25 +544,41 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       "Categoria",
       "Instituicao",
       "Status Pagamento",
+      "Horario Pix Confirmado",
+      "Situacao da Vaga",
       "Check-in Presenca",
       "Data Check-in",
       "Data Inscricao",
       "Codigo Inscrição",
     ];
 
-    const rows = list.map((r) => [
-      `"${r.name.replace(/"/g, '""')}"`,
-      `"${r.email.replace(/"/g, '""')}"`,
-      `"${r.document.replace(/"/g, '""')}"`,
-      `"${(r.phone || "").replace(/"/g, '""')}"`,
-      `"${(r.category || "").replace(/"/g, '""')}"`,
-      `"${(r.institution || "").replace(/"/g, '""')}"`,
-      `"${r.status === "CONFIRMED" ? "Confirmado" : r.status === "PENDING" ? "Pendente Pix" : r.status}"`,
-      `"${r.checkedInAt ? "Sim" : "Nao"}"`,
-      `"${r.checkedInAt ? new Date(r.checkedInAt).toLocaleString("pt-BR") : ""}"`,
-      `"${new Date(r.createdAt).toLocaleString("pt-BR")}"`,
-      `"${r.qrToken}"`,
-    ]);
+    const rows = list.map((r) => {
+      const orderInfo = sellout?.confirmedOrderMap.get(r.id);
+      const isConfirmed = r.status === "CONFIRMED";
+      const pixTime = r.paidAt ? new Date(r.paidAt) : (isConfirmed ? new Date(r.createdAt) : null);
+      const pixTimeStr = pixTime ? pixTime.toLocaleString("pt-BR") : "";
+      const situacao = isConfirmed
+        ? orderInfo?.isOver
+          ? `Excedente apos esgotar (${orderInfo.rank}º/${workshop.vagas})`
+          : `Dentro das vagas (${orderInfo?.rank || 1}º/${workshop.vagas})`
+        : "Aguardando Pagamento";
+
+      return [
+        `"${r.name.replace(/"/g, '""')}"`,
+        `"${r.email.replace(/"/g, '""')}"`,
+        `"${r.document.replace(/"/g, '""')}"`,
+        `"${(r.phone || "").replace(/"/g, '""')}"`,
+        `"${(r.category || "").replace(/"/g, '""')}"`,
+        `"${(r.institution || "").replace(/"/g, '""')}"`,
+        `"${isConfirmed ? "Confirmado" : r.status === "PENDING" ? "Pendente Pix" : r.status}"`,
+        `"${pixTimeStr}"`,
+        `"${situacao}"`,
+        `"${r.checkedInAt ? "Sim" : "Nao"}"`,
+        `"${r.checkedInAt ? new Date(r.checkedInAt).toLocaleString("pt-BR") : ""}"`,
+        `"${new Date(r.createdAt).toLocaleString("pt-BR")}"`,
+        `"${r.qrToken}"`,
+      ];
+    });
 
     const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map((row) => row.join(";"))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -517,29 +607,54 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       "Instituicao",
       "Valor (R$)",
       "Status Pagamento",
+      "Horario Pix Confirmado",
+      "Situacao da Vaga",
       "Check-in Presenca",
       "Data Check-in",
+      "Data Inscricao",
       "Codigo Token",
     ];
 
-    const rows = registrations.map((r) => [
-      `"${r.handsOnId}"`,
-      `"${r.title.replace(/"/g, '""')}"`,
-      `"${r.speaker.replace(/"/g, '""')}"`,
-      `"${r.date}"`,
-      `"${r.time}"`,
-      `"${r.name.replace(/"/g, '""')}"`,
-      `"${r.email.replace(/"/g, '""')}"`,
-      `"${r.document.replace(/"/g, '""')}"`,
-      `"${(r.phone || "").replace(/"/g, '""')}"`,
-      `"${(r.category || "").replace(/"/g, '""')}"`,
-      `"${(r.institution || "").replace(/"/g, '""')}"`,
-      `"${r.amount.toFixed(2)}"`,
-      `"${r.status === "CONFIRMED" ? "Confirmado" : r.status === "PENDING" ? "Pendente Pix" : r.status}"`,
-      `"${r.checkedInAt ? "Sim" : "Nao"}"`,
-      `"${r.checkedInAt ? new Date(r.checkedInAt).toLocaleString("pt-BR") : ""}"`,
-      `"${r.qrToken}"`,
-    ]);
+    const rows = registrations.map((r) => {
+      const targetId =
+        r.handsOnId === "reabilitacao-resina-composta"
+          ? "integrale-cirurgia-implante-protetico"
+          : r.handsOnId;
+      const wsDef = WORKSHOPS_CATALOG.find((w) => w.id === targetId);
+      const sellout = wsDef ? workshopSelloutData[wsDef.id] : null;
+      const orderInfo = sellout?.confirmedOrderMap.get(r.id);
+      const isConfirmed = r.status === "CONFIRMED";
+      const pixTime = r.paidAt ? new Date(r.paidAt) : (isConfirmed ? new Date(r.createdAt) : null);
+      const pixTimeStr = pixTime ? pixTime.toLocaleString("pt-BR") : "";
+      const maxV = wsDef ? wsDef.vagas : 12;
+      const situacao = isConfirmed
+        ? orderInfo?.isOver
+          ? `Excedente apos esgotar (${orderInfo.rank}º/${maxV})`
+          : `Dentro das vagas (${orderInfo?.rank || 1}º/${maxV})`
+        : "Aguardando Pagamento";
+
+      return [
+        `"${r.handsOnId}"`,
+        `"${r.title.replace(/"/g, '""')}"`,
+        `"${r.speaker.replace(/"/g, '""')}"`,
+        `"${r.date}"`,
+        `"${r.time}"`,
+        `"${r.name.replace(/"/g, '""')}"`,
+        `"${r.email.replace(/"/g, '""')}"`,
+        `"${r.document.replace(/"/g, '""')}"`,
+        `"${(r.phone || "").replace(/"/g, '""')}"`,
+        `"${(r.category || "").replace(/"/g, '""')}"`,
+        `"${(r.institution || "").replace(/"/g, '""')}"`,
+        `"${r.amount.toFixed(2)}"`,
+        `"${isConfirmed ? "Confirmado" : r.status === "PENDING" ? "Pendente Pix" : r.status}"`,
+        `"${pixTimeStr}"`,
+        `"${situacao}"`,
+        `"${r.checkedInAt ? "Sim" : "Nao"}"`,
+        `"${r.checkedInAt ? new Date(r.checkedInAt).toLocaleString("pt-BR") : ""}"`,
+        `"${new Date(r.createdAt).toLocaleString("pt-BR")}"`,
+        `"${r.qrToken}"`,
+      ];
+    });
 
     const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map((row) => row.join(";"))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -739,6 +854,58 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 </div>
               </div>
             </div>
+
+            {/* Alerta de Esgotamento de Vagas com Horário */}
+            {selectedWorkshopSellout && selectedWorkshopSellout.isFull && (
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: "12px 18px",
+                  borderRadius: 8,
+                  background: "rgba(239, 68, 68, 0.1)",
+                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>🚨</span>
+                  <div>
+                    <strong style={{ color: "var(--danger)", fontSize: 14, display: "block" }}>
+                      Vagas oficiais deste Hands On ESGOTADAS às {selectedWorkshopSellout.soldOutTimeStr} ({selectedWorkshopSellout.soldOutDateStr})
+                    </strong>
+                    <span style={{ color: "var(--text)", fontSize: 12 }}>
+                      A última vaga oficial ({selectedWorkshop.vagas}ª vaga) foi preenchida por{" "}
+                      <strong>{selectedWorkshopSellout.nthParticipant?.name || "Participante"}</strong>.
+                      {selectedWorkshopSellout.overCapacityCount > 0 && (
+                        <span style={{ color: "var(--warning)", fontWeight: 700 }}>
+                          {" "}· Existem {selectedWorkshopSellout.overCapacityCount} inscrições que confirmaram Pix após as vagas terem esgotado.
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedWorkshopSellout.overCapacityCount > 0 && (
+                  <span
+                    style={{
+                      background: "rgba(245, 158, 11, 0.2)",
+                      color: "var(--warning)",
+                      border: "1px solid rgba(245, 158, 11, 0.4)",
+                      padding: "5px 12px",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  >
+                    +{selectedWorkshopSellout.overCapacityCount} Excedente(s) após esgotar
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Filtros e Busca de Participantes */}
@@ -805,6 +972,27 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     const isPending = r.status === "PENDING";
                     const isProcessing = processingId === r.id;
 
+                    const orderInfo = selectedWorkshop
+                      ? workshopSelloutData[selectedWorkshop.id]?.confirmedOrderMap.get(r.id)
+                      : null;
+                    const isOverCapacity = orderInfo ? orderInfo.isOver : false;
+                    const confirmedRank = orderInfo ? orderInfo.rank : null;
+
+                    const pixTime = r.paidAt ? new Date(r.paidAt) : (isConfirmed ? new Date(r.createdAt) : null);
+                    const pixTimeStr = pixTime
+                      ? pixTime.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                      : null;
+                    const pixDateStr = pixTime
+                      ? pixTime.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+                      : null;
+                    const pixDateTimeFull = pixTime ? `${pixDateStr} às ${pixTimeStr}` : null;
+
+                    const createdTimeStr = new Date(r.createdAt).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    });
+
                     const cleanPhone = (r.phone || "").replace(/\D/g, "");
                     const whatsappUrl = cleanPhone
                       ? `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(
@@ -824,9 +1012,90 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
                         {/* Nome */}
                         <td style={{ padding: "12px 16px" }}>
-                          <strong style={{ display: "block", color: "var(--text)", fontSize: 14 }}>{r.name}</strong>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+                            <strong style={{ color: "var(--text)", fontSize: 14 }}>{r.name}</strong>
+
+                            {isConfirmed && pixTimeStr && (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  fontSize: 11,
+                                  fontFamily: "monospace",
+                                  fontWeight: 700,
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  background: isOverCapacity ? "rgba(239, 68, 68, 0.15)" : "rgba(34, 197, 94, 0.15)",
+                                  color: isOverCapacity ? "#ef4444" : "var(--success)",
+                                  border: isOverCapacity ? "1px solid rgba(239, 68, 68, 0.35)" : "1px solid rgba(34, 197, 94, 0.35)",
+                                }}
+                                title={`Pix confirmado em ${pixDateTimeFull}`}
+                              >
+                                ⚡ Pix: {pixTimeStr}
+                              </span>
+                            )}
+
+                            {isConfirmed && confirmedRank && (
+                              isOverCapacity ? (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    padding: "2px 6px",
+                                    borderRadius: 4,
+                                    background: "rgba(245, 158, 11, 0.18)",
+                                    color: "var(--warning)",
+                                    border: "1px solid rgba(245, 158, 11, 0.4)",
+                                  }}
+                                  title={`Confirmado após o esgotamento das ${selectedWorkshop.vagas} vagas oficiais.`}
+                                >
+                                  ⚠️ Excedente ({confirmedRank}º/{selectedWorkshop.vagas})
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    padding: "2px 6px",
+                                    borderRadius: 4,
+                                    background: "rgba(34, 197, 94, 0.1)",
+                                    color: "var(--success)",
+                                  }}
+                                >
+                                  ✓ Vaga {confirmedRank}/{selectedWorkshop.vagas}
+                                </span>
+                              )
+                            )}
+
+                            {isPending && (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  fontSize: 10,
+                                  fontFamily: "monospace",
+                                  color: "var(--text-muted)",
+                                  background: "var(--surface-alt)",
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                }}
+                                title={`Inscrição cadastrada às ${createdTimeStr}`}
+                              >
+                                🕒 Inscrito às {createdTimeStr}
+                              </span>
+                            )}
+                          </div>
+
                           {(r.category || r.institution) && (
-                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                            <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>
                               {[r.category, r.institution].filter(Boolean).join(" · ")}
                             </span>
                           )}
@@ -879,37 +1148,49 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                         {/* Status Pagamento */}
                         <td style={{ padding: "12px 16px" }}>
                           {isConfirmed ? (
-                            <span
-                              style={{
-                                background: "rgba(34, 197, 94, 0.15)",
-                                color: "var(--success)",
-                                padding: "3px 10px",
-                                borderRadius: 999,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4,
-                              }}
-                            >
-                              ✓ Confirmado
-                            </span>
+                            <div>
+                              <span
+                                style={{
+                                  background: isOverCapacity ? "rgba(245, 158, 11, 0.15)" : "rgba(34, 197, 94, 0.15)",
+                                  color: isOverCapacity ? "var(--warning)" : "var(--success)",
+                                  padding: "3px 10px",
+                                  borderRadius: 999,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                              >
+                                {isOverCapacity ? "⚠️ Confirmado (Excedente)" : "✓ Confirmado"}
+                              </span>
+                              {pixDateTimeFull && (
+                                <span style={{ display: "block", fontSize: 10, color: "var(--text-muted)", marginTop: 2, fontFamily: "monospace" }}>
+                                  {pixDateTimeFull}
+                                </span>
+                              )}
+                            </div>
                           ) : isPending ? (
-                            <span
-                              style={{
-                                background: "rgba(245, 158, 11, 0.15)",
-                                color: "var(--warning)",
-                                padding: "3px 10px",
-                                borderRadius: 999,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4,
-                              }}
-                            >
-                              ⏳ Pendente Pix
-                            </span>
+                            <div>
+                              <span
+                                style={{
+                                  background: "rgba(245, 158, 11, 0.15)",
+                                  color: "var(--warning)",
+                                  padding: "3px 10px",
+                                  borderRadius: 999,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                              >
+                                ⏳ Pendente Pix
+                              </span>
+                              <span style={{ display: "block", fontSize: 10, color: "var(--text-muted)", marginTop: 2, fontFamily: "monospace" }}>
+                                Criado às {createdTimeStr}
+                              </span>
+                            </div>
                           ) : (
                             <span
                               style={{
@@ -1241,7 +1522,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
             {filteredWorkshops.map((w) => {
               const wsStats = statsByWorkshop[w.id] ?? { total: 0, confirmed: 0, pending: 0, checkedIn: 0 };
               const percentConfirmed = Math.min(100, Math.round((wsStats.confirmed / w.vagas) * 100));
-              const isFull = wsStats.confirmed >= w.vagas;
+              const sellout = workshopSelloutData[w.id];
+              const isFull = sellout ? sellout.isFull : wsStats.confirmed >= w.vagas;
 
               return (
                 <div
@@ -1347,6 +1629,32 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                           }}
                         />
                       </div>
+
+                      {/* Alerta de Horário de Esgotamento */}
+                      {sellout && sellout.isFull && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: "4px 8px",
+                            borderRadius: 6,
+                            background: "rgba(239, 68, 68, 0.12)",
+                            border: "1px solid rgba(239, 68, 68, 0.3)",
+                            color: "var(--danger)",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span>🚨 Esgotou às {sellout.soldOutTimeStr}</span>
+                          {sellout.overCapacityCount > 0 && (
+                            <span style={{ color: "var(--warning)", fontWeight: 700 }}>
+                              +{sellout.overCapacityCount} excedente(s)
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Badges de Contagem */}

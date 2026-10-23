@@ -1230,6 +1230,8 @@ export interface HandsOnRegistrationRecord {
   checkedInAt: string | null;
   checkedInBy: string | null;
   notes: string | null;
+  paidAt?: string | null;
+  paymentId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
