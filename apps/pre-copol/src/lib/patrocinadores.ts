@@ -8,7 +8,7 @@
 export interface Patrocinador {
   nome: string;
   descricao: string;
-  cota: "Diamante" | "Ouro" | "Prata" | "Bronze";
+  cota: "Diamante" | "Esmeralda" | "Ouro" | "Prata" | "Bronze";
   url: string;
   /** Cor do nome enquanto não há logo. */
   cor: string;
@@ -42,5 +42,68 @@ export const PATROCINADORES: Patrocinador[] = [
     cor: "#b08850",
     // Recortado do post do COPOL, sem o fundo creme.
     logo: { src: "/partners/radiotech.png", largura: 912, altura: 252 },
+  },
+  {
+    nome: "MagDente",
+    descricao: "Prótese Odontológica",
+    cota: "Esmeralda",
+    url: "https://www.instagram.com/laboratorio_magdente",
+    cor: "#3f97b5",
+    // Recortado do post do COPOL; a placa azul faz parte da marca.
+    logo: { src: "/partners/magdente.png", largura: 674, altura: 223 },
+  },
+  {
+    nome: "Ateliê Oral",
+    descricao: "Por Gilberto Filho e Felipe Araújo",
+    cota: "Esmeralda",
+    url: "https://www.instagram.com/atelieoral.gilbertofilho",
+    cor: "#111111",
+    // Recortado do post do COPOL; a placa preta faz parte da marca.
+    logo: { src: "/partners/atelie.png", largura: 596, altura: 237 },
+  },
+];
+
+/**
+ * Apoiadores do COPOL (empresas que apoiam o congresso, sem cota de
+ * patrocínio). Diferentes de Realização e Apoio institucional
+ * (Universidade Positivo, Ecohub, LSPK), que ficam à parte.
+ * Logos recortados dos posts de divulgação do COPOL.
+ */
+export interface Apoiador {
+  nome: string;
+  url: string;
+  logo: { src: string; largura: number; altura: number };
+}
+
+export const APOIADORES: Apoiador[] = [
+  {
+    nome: "By Jaleco",
+    url: "https://www.instagram.com/byjaleco",
+    logo: { src: "/partners/byjaleco.png", largura: 364, altura: 182 },
+  },
+  {
+    nome: "Cleber Livros",
+    url: "https://www.instagram.com/cleberlivros",
+    logo: { src: "/partners/cleber-livros.png", largura: 339, altura: 187 },
+  },
+  {
+    nome: "Dental Press",
+    url: "https://www.instagram.com/dental_press",
+    logo: { src: "/partners/dentalpress.png", largura: 269, altura: 275 },
+  },
+  {
+    nome: "Dentalclean",
+    url: "https://www.instagram.com/dentalclean",
+    logo: { src: "/partners/dentalclean.png", largura: 498, altura: 95 },
+  },
+  {
+    nome: "OdontoFarma",
+    url: "https://www.instagram.com/farmaciaodontofarma",
+    logo: { src: "/partners/odontofarma.png", largura: 299, altura: 295 },
+  },
+  {
+    nome: "Vite",
+    url: "https://www.instagram.com/vitejalecos",
+    logo: { src: "/partners/vite.png", largura: 375, altura: 179 },
   },
 ];
