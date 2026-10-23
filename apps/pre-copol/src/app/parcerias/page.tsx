@@ -3,19 +3,19 @@ import Image from "next/image";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MarcaPatrocinador } from "@/components/MarcaPatrocinador";
-import { PATROCINADORES } from "@/lib/patrocinadores";
+import { APOIADORES, PATROCINADORES } from "@/lib/patrocinadores";
 
 export const metadata: Metadata = {
   title: "Realização e Apoio",
   description:
-    "Patrocinadores e parceiros do COPOL 2026: Integrale, Dental DSL e Radiotech Smart (cota Diamante), Universidade Positivo (Campus Londrina), Ecohub e LSPK Technology.",
+    "Patrocinadores e parceiros do COPOL 2026: Integrale, Dental DSL e Radiotech Smart (cota Diamante), MagDente e Ateliê Oral (cota Esmeralda), apoiadores By Jaleco, Cleber Livros, Dental Press, Dentalclean, OdontoFarma e Vite, Universidade Positivo (Campus Londrina), Ecohub e LSPK Technology.",
   alternates: {
     canonical: "/parcerias/",
   },
   openGraph: {
     title: "Realização e Apoio | COPOL 2026 — Congresso de Odontologia de Londrina",
     description:
-      "Patrocinadores e parceiros do COPOL 2026: Integrale, Dental DSL e Radiotech Smart (cota Diamante), Universidade Positivo, Ecohub e LSPK Technology.",
+      "Patrocinadores e parceiros do COPOL 2026: Integrale, Dental DSL e Radiotech Smart (cota Diamante), MagDente e Ateliê Oral (cota Esmeralda), apoiadores, Universidade Positivo, Ecohub e LSPK Technology.",
     url: "https://copol2026.com.br/parcerias/",
     images: [
       {
@@ -119,6 +119,47 @@ export default function ParceriasPage() {
                 {!p.logo && (
                   <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>{p.descricao}</span>
                 )}
+              </a>
+            ))}
+          </div>
+
+          <h2 style={{ fontSize: 22, margin: "0 0 16px" }}>Apoiadores</h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+              gap: 16,
+              marginBottom: 48,
+            }}
+          >
+            {APOIADORES.map((a) => (
+              <a
+                key={a.nome}
+                href={a.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`${a.nome} no Instagram`}
+                className="hover:scale-[1.02]"
+                style={{
+                  background: "#ffffff",
+                  borderRadius: 16,
+                  padding: 20,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 130,
+                  boxShadow: "var(--shadow-card)",
+                  textDecoration: "none",
+                  transition: "transform 0.2s ease",
+                }}
+              >
+                <Image
+                  src={a.logo.src}
+                  alt={a.nome}
+                  width={a.logo.largura}
+                  height={a.logo.altura}
+                  style={{ width: "auto", height: "auto", maxWidth: "100%", maxHeight: 90 }}
+                />
               </a>
             ))}
           </div>
