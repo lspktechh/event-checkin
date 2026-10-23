@@ -113,7 +113,7 @@ export const handsOnService = {
         const pixPayment = await mercadoPagoClient.createPixPayment({
           referenceId: `ho:${registration.id}`,
           amount: Number(input.amount),
-          description: `COPOL 2026 - Hands On: ${input.title.slice(0, 80)}`,
+          description: `${input.name} - ${input.title}`.slice(0, 120),
           expiresAt,
           accessToken: mpToken || undefined,
           payer: {

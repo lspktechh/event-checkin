@@ -245,9 +245,9 @@ export function getHandsOnById(id: string): HandsOnItem | undefined {
 // ============================================================
 
 export const PIX_CONFIG = {
-  chave: "terceirocopol@gmail.com",
-  tipoChave: "E-mail",
-  titular: "Ana Laura de Matos Xavier",
+  chave: "",
+  tipoChave: "Chave Dinâmica",
+  titular: "3º COPOL 2026",
   cidade: "Londrina",
   instituicao: "3º COPOL — Congresso Odontológico Positivo Londrinense",
   emailContato: "terceirocopol@gmail.com",

@@ -50,7 +50,6 @@ function PagamentoContent() {
 
   const [inscricao, setInscricao] = useState<HandsOnInscription | null>(null);
   const [copiado, setCopiado] = useState(false);
-  const [copiadoChave, setCopiadoChave] = useState(false);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
@@ -86,8 +85,8 @@ function PagamentoContent() {
               documento: d.document,
               telefone: prev?.telefone || "",
               status: d.status === "CONFIRMED" ? "CONFIRMADO" : "PENDENTE",
-              pixKey: prev?.pixKey || PIX_CONFIG.chave,
-              pixReceiverName: prev?.pixReceiverName || PIX_CONFIG.titular,
+              pixKey: "",
+              pixReceiverName: "COPOL 2026",
               pixCode: d.pixCode || prev?.pixCode || "",
               pixQrCodeBase64: d.pixQrCodeBase64 || prev?.pixQrCodeBase64,
               mercadoPagoPaymentId: d.paymentId || prev?.mercadoPagoPaymentId,
@@ -146,13 +145,6 @@ function PagamentoContent() {
     navigator.clipboard.writeText(inscricao.pixCode).then(() => {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 3000);
-    });
-  }
-
-  function handleCopyChave() {
-    navigator.clipboard.writeText(PIX_CONFIG.chave).then(() => {
-      setCopiadoChave(true);
-      setTimeout(() => setCopiadoChave(false), 3000);
     });
   }
 
@@ -521,28 +513,24 @@ function PagamentoContent() {
                     />
                   ) : null}
 
-                  {/* Informação do Titular / Beneficiário */}
+                  {/* Informação de Pagamento Automático */}
                   <div
                     style={{
                       width: "100%",
-                      background: "rgba(212, 168, 83, 0.08)",
-                      border: "1px solid rgba(212, 168, 83, 0.25)",
+                      background: "rgba(34, 197, 94, 0.08)",
+                      border: "1px solid rgba(34, 197, 94, 0.25)",
                       borderRadius: 10,
                       padding: "12px 16px",
                       textAlign: "center",
                       display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
                     }}
                   >
-                    <span style={{ fontSize: 12, color: "var(--muted-foreground)", textTransform: "uppercase" }}>
-                      Nome do favorecido no app do seu banco:
-                    </span>
-                    <strong style={{ fontSize: 16, color: "var(--gold)" }}>
-                      {PIX_CONFIG.titular}
-                    </strong>
-                    <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
-                      Chave Pix: <strong>{PIX_CONFIG.chave}</strong> (E-mail oficial COPOL)
+                    <span style={{ fontSize: 18 }}>⚡</span>
+                    <span style={{ fontSize: 13, color: "var(--foreground)", fontWeight: 600 }}>
+                      Pix com confirmação automática e imediata no sistema
                     </span>
                   </div>
 
@@ -571,16 +559,16 @@ function PagamentoContent() {
                     {inscricao.pixCode}
                   </div>
 
-                  {/* Botões de Cópia */}
-                  <div style={{ display: "flex", gap: 10, width: "100%", flexWrap: "wrap" }}>
+                  {/* Botão de Cópia Pix Copia e Cola */}
+                  <div style={{ width: "100%" }}>
                     <button
                       type="button"
                       onClick={handleCopyPix}
                       className="btn-primary"
                       style={{
-                        flex: 1,
-                        padding: 14,
-                        fontSize: 14,
+                        width: "100%",
+                        padding: 16,
+                        fontSize: 15,
                         fontWeight: 700,
                         background: copiado ? "var(--success)" : "var(--primary)",
                         color: "var(--primary-foreground)",
@@ -595,89 +583,37 @@ function PagamentoContent() {
                     >
                       {copiado ? (
                         <>
-                          <CheckIcon size={18} /> Código Pix Copiado!
+                          <CheckIcon size={20} /> Código Pix Copiado com Sucesso!
                         </>
                       ) : (
                         <>
-                          <CopyIcon size={18} /> Copiar Código Pix Copia e Cola
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCopyChave}
-                      className="btn-secondary"
-                      style={{
-                        padding: "14px 18px",
-                        fontSize: 14,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 8,
-                        cursor: "pointer",
-                        borderRadius: 10,
-                      }}
-                    >
-                      {copiadoChave ? (
-                        <>
-                          <CheckIcon size={16} /> Chave Copiada!
-                        </>
-                      ) : (
-                        <>
-                          <CopyIcon size={16} /> Copiar Chave E-mail
+                          <CopyIcon size={20} /> Copiar Código Pix Copia e Cola
                         </>
                       )}
                     </button>
                   </div>
 
-                  {/* Instruções de Envio do Comprovante */}
+                  {/* Orientações */}
                   <div
                     style={{
                       width: "100%",
-                      marginTop: 10,
-                      padding: "16px 18px",
+                      marginTop: 8,
+                      padding: "14px 18px",
                       borderRadius: 10,
                       background: "rgba(255, 255, 255, 0.03)",
                       border: "1px solid var(--border)",
                       textAlign: "left",
                     }}
                   >
-                    <strong style={{ fontSize: 14, color: "var(--foreground)", display: "block", marginBottom: 6 }}>
-                      Como confirmar sua vaga:
+                    <strong style={{ fontSize: 13, color: "var(--foreground)", display: "block", marginBottom: 6 }}>
+                      Instruções para pagamento:
                     </strong>
-                    <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
-                      <li>Efetue o pagamento Pix no valor de {formatarReais(inscricao.preco)}.</li>
-                      <li>
-                        Envie o comprovante para o e-mail oficial{" "}
-                        <a href={`mailto:${PIX_CONFIG.emailContato}?subject=Comprovante%20Hands%20On%20${inscricao.id}&body=${mensagemComprovante}`} style={{ color: "var(--gold)", fontWeight: 600 }}>
-                          {PIX_CONFIG.emailContato}
-                        </a>{" "}
-                        informando seu código <strong>{inscricao.id}</strong>.
-                      </li>
-                      <li>A comissão organizadora confirmará sua vaga e enviará as orientações de acesso.</li>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
+                      <li>Abra o aplicativo do seu banco e acesse a área <strong>Pix</strong>.</li>
+                      <li>Selecione <strong>Pix Copia e Cola</strong> ou aponte a câmera para o <strong>QR Code</strong> acima.</li>
+                      <li>Confira o valor de <strong>{formatarReais(inscricao.preco)}</strong> e confirme o pagamento.</li>
+                      <li>Assim que você pagar, esta tela será atualizada automaticamente e sua vaga estará confirmada!</li>
                     </ol>
-
-                    <div style={{ marginTop: 14 }}>
-                      <a
-                        href={`mailto:${PIX_CONFIG.emailContato}?subject=Comprovante%20Hands%20On%20${inscricao.id}&body=${mensagemComprovante}`}
-                        className="btn-secondary"
-                        style={{
-                          width: "100%",
-                          padding: 12,
-                          fontSize: 13,
-                          fontWeight: 700,
-                          textAlign: "center",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 8,
-                          textDecoration: "none",
-                        }}
-                      >
-                        <MailIcon size={16} /> Enviar Comprovante por E-mail
-                      </a>
-                    </div>
                   </div>
                 </div>
               </div>

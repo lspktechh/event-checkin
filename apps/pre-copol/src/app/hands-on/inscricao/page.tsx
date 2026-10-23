@@ -233,15 +233,6 @@ function HandsOnInscricaoContent() {
         }
       }
 
-      // Se o Mercado Pago gerou o Pix dinâmico, usa ele; senão usa contingência padrão BR Code
-      const fallbackPixCode =
-        workshop.preco > 0
-          ? generatePixPayload({
-              amount: workshop.preco,
-              txid: inscriptionId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 25),
-            })
-          : "";
-
       const record: HandsOnInscription = {
         id: inscriptionId,
         handsOnId: workshop.id,
@@ -259,9 +250,9 @@ function HandsOnInscricaoContent() {
         categoria: categoria,
         instituicao: instituicao.trim() || undefined,
         status: workshop.preco === 0 ? "CONFIRMADO" : "PENDENTE",
-        pixKey: PIX_CONFIG.chave,
-        pixReceiverName: PIX_CONFIG.titular,
-        pixCode: mpPixCode || fallbackPixCode,
+        pixKey: "",
+        pixReceiverName: "COPOL 2026",
+        pixCode: mpPixCode || "",
         pixQrCodeBase64: mpPixBase64 || undefined,
         mercadoPagoPaymentId: mpPaymentId || undefined,
         qrToken: finalQrToken,

@@ -93,10 +93,16 @@ export type ResultadoConferencia =
   | { ok: false; erro: string; definitivo?: boolean };
 
 function nomeDoPagador(payer: PixPayer) {
+  const cleanDoc = (payer.document || "").replace(/\D/g, "");
   return {
     first_name: payer.firstName,
     last_name: payer.lastName,
     email: payer.email,
+    ...(cleanDoc.length === 11
+      ? { identification: { type: "CPF", number: cleanDoc } }
+      : cleanDoc.length === 14
+      ? { identification: { type: "CNPJ", number: cleanDoc } }
+      : {}),
   };
 }
 
@@ -129,11 +135,26 @@ export class MercadoPagoClient {
 
     const corpo = {
       transaction_amount: Number(params.amount.toFixed(2)),
-      description: params.description,
+      description: params.description.slice(0, 120),
       payment_method_id: "pix",
       // Quem paga o Pix não precisa ter conta no Mercado Pago; estes dados
       // são só para identificar a cobrança na conta de quem recebe.
       payer: nomeDoPagador(params.payer),
+      additional_info: {
+        items: [
+          {
+            id: params.referenceId,
+            title: `${params.payer.firstName} ${params.payer.lastName}`.slice(0, 100),
+            description: params.description.slice(0, 100),
+            quantity: 1,
+            unit_price: Number(params.amount.toFixed(2)),
+          },
+        ],
+        payer: {
+          first_name: params.payer.firstName,
+          last_name: params.payer.lastName,
+        },
+      },
       // Carrega o id da inscrição de ida e volta: é por ele que o webhook
       // sabe qual inscrição confirmar.
       external_reference: params.referenceId,
