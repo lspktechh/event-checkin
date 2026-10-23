@@ -98,7 +98,9 @@ function ToastItem({
               textTransform: "uppercase",
             }}
           >
-            Nova Inscrição
+            {notification.category?.toLowerCase().includes("hands on") || notification.category?.startsWith("🧪")
+              ? "🧪 Nova Inscrição · Hands On"
+              : "Nova Inscrição"}
           </span>
         </div>
 

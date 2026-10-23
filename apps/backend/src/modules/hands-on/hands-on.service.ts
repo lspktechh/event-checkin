@@ -4,6 +4,9 @@ import { NotFoundError, ConflictError } from "../../shared/errors.js";
 import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { prisma } from "../../database/prisma.js";
 import { env } from "../../config/env.js";
+import { adminCheckInBus } from "../admin/adminMonitor.events.js";
+import { emailService } from "../../lib/email/email.service.js";
+import { resolveEmailSettings } from "../../lib/email/email-settings.js";
 import type { Prisma } from "@prisma/client";
 
 export const HANDS_ON_CAPACITY: Record<string, number> = {
@@ -170,37 +173,92 @@ export const handsOnService = {
 
         const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutos de validade do Pix
 
-        const pixPayment = await mercadoPagoClient.createPixPayment({
-          referenceId: `ho:${registration.id}`,
-          amount: Number(input.amount),
-          description: `${input.name} - CPF: ${formattedCpf} - ${input.title}`.slice(0, 120),
-          expiresAt,
-          accessToken: mpToken || undefined,
-          payer: {
-            firstName: firstName || "Participante",
-            lastName,
-            document: cleanDoc,
-            email: input.email.trim(),
-          },
-        });
+        let finalResult: any = registration;
+        if (Number(input.amount) > 0) {
+          try {
+            const pixPayment = await mercadoPagoClient.createPixPayment({
+              referenceId: `ho:${registration.id}`,
+              amount: Number(input.amount),
+              description: `${input.name} - CPF: ${formattedCpf} - ${input.title}`.slice(0, 120),
+              expiresAt,
+              accessToken: mpToken || undefined,
+              payer: {
+                firstName: firstName || "Participante",
+                lastName,
+                document: cleanDoc,
+                email: input.email.trim(),
+              },
+            });
 
-        const updated = await handsOnRepository.updatePaymentInfo(registration.id, {
-          paymentId: pixPayment.paymentId,
-          paymentQrCodeContent: pixPayment.qrCodeContent,
-          paymentQrCodeBase64: pixPayment.qrCodeBase64,
-          paymentExpiresAt: expiresAt,
-        });
+            const updated = await handsOnRepository.updatePaymentInfo(registration.id, {
+              paymentId: pixPayment.paymentId,
+              paymentQrCodeContent: pixPayment.qrCodeContent,
+              paymentQrCodeBase64: pixPayment.qrCodeBase64,
+              paymentExpiresAt: expiresAt,
+            });
 
-        return {
-          ...updated,
-          pixCode: pixPayment.qrCodeContent,
-          pixQrCodeBase64: pixPayment.qrCodeBase64,
-          pixExpiresAt: expiresAt.toISOString(),
-        };
-      } catch (mpErr) {
-        console.error("[HandsOn] Erro ao gerar Pix no Mercado Pago:", mpErr);
+            finalResult = {
+              ...updated,
+              pixCode: pixPayment.qrCodeContent,
+              pixQrCodeBase64: pixPayment.qrCodeBase64,
+              pixExpiresAt: expiresAt.toISOString(),
+            };
+          } catch (mpErr) {
+            console.error("[HandsOn] Erro ao gerar Pix no Mercado Pago:", mpErr);
+          }
+        }
+
+        // Publica evento em tempo real para os administradores (som e notificação verde)
+        try {
+          adminCheckInBus.publish(eventId, {
+            type: "new_inscription",
+            eventId,
+            inscription: {
+              id: registration.id,
+              name: registration.name,
+              email: registration.email,
+              phone: registration.phone,
+              document: registration.document,
+              category: `🧪 Hands On: ${registration.title}`,
+              amount: Number(registration.amount),
+              status: registration.status as "PENDING" | "CONFIRMED",
+              paymentMethod: Number(input.amount) > 0 ? "PIX" : null,
+              createdAt: registration.createdAt.toISOString(),
+              gratuita: Number(input.amount) === 0,
+            },
+          });
+        } catch (notifErr) {
+          console.warn("[HandsOn] Falha ao notificar administradores em tempo real:", notifErr);
+        }
+
+        return finalResult;
+      } catch (err) {
+        console.error("[HandsOn] Erro no fluxo de criação de inscrição:", err);
         return registration;
       }
+    }
+
+    // Se o valor for 0 (gratuito)
+    try {
+      adminCheckInBus.publish(eventId, {
+        type: "new_inscription",
+        eventId,
+        inscription: {
+          id: registration.id,
+          name: registration.name,
+          email: registration.email,
+          phone: registration.phone,
+          document: registration.document,
+          category: `🧪 Hands On: ${registration.title}`,
+          amount: 0,
+          status: registration.status as "PENDING" | "CONFIRMED",
+          paymentMethod: null,
+          createdAt: registration.createdAt.toISOString(),
+          gratuita: true,
+        },
+      });
+    } catch (notifErr) {
+      console.warn("[HandsOn] Falha ao notificar administradores em tempo real:", notifErr);
     }
 
     return registration;
@@ -378,6 +436,49 @@ export const handsOnService = {
 
     await handsOnRepository.confirmPaid(reg.id, pagamento.paymentId, note);
 
+    // Publica confirmação em tempo real para os administradores
+    try {
+      adminCheckInBus.publish(reg.eventId, {
+        type: "inscription_confirmed",
+        eventId: reg.eventId,
+        inscriptionId: reg.id,
+        name: reg.name,
+        email: reg.email,
+        category: `🧪 Hands On: ${reg.title}`,
+        amount: Number(reg.amount),
+        paymentMethod: "PIX",
+        confirmedAt: new Date().toISOString(),
+      });
+    } catch (notifErr) {
+      console.warn("[HandsOn] Erro ao publicar confirmação de inscrição:", notifErr);
+    }
+
+    // Envia comprovante por e-mail com QR Code se configurado no evento
+    try {
+      const event = await prisma.event.findUnique({
+        where: { id: reg.eventId },
+        select: { id: true, name: true, location: true, emailSettings: true },
+      });
+      if (event) {
+        const configEmail = resolveEmailSettings(event.emailSettings);
+        if (configEmail.autoSendReceipt) {
+          emailService
+            .sendRegistrationReceipt(event, {
+              to: reg.email,
+              participantName: reg.name,
+              inscriptionId: reg.id,
+              batchName: `Hands On: ${reg.title}`,
+              amount: Number(reg.amount),
+              qrToken: reg.qrToken,
+              eventLocation: reg.location || event.location,
+            })
+            .catch((err: unknown) => console.error("[HandsOn] Falha ao enviar e-mail de comprovante:", err));
+        }
+      }
+    } catch (emailErr) {
+      console.warn("[HandsOn] Erro ao preparar envio de e-mail:", emailErr);
+    }
+
     // Remove automaticamente qualquer inscrição duplicada pendente da mesma pessoa neste workshop
     await handsOnService.cleanupDuplicatesForParticipant(
       reg.eventId,
@@ -540,6 +641,50 @@ export const handsOnService = {
       reg.id
     );
     await handsOnService.cancelPendingWhenFull(reg.eventId, reg.handsOnId);
+
+    // Publica confirmação em tempo real no admin
+    try {
+      adminCheckInBus.publish(reg.eventId, {
+        type: "inscription_confirmed",
+        eventId: reg.eventId,
+        inscriptionId: reg.id,
+        name: reg.name,
+        email: reg.email,
+        category: `🧪 Hands On: ${reg.title}`,
+        amount: Number(reg.amount),
+        paymentMethod: "MANUAL",
+        confirmedAt: new Date().toISOString(),
+      });
+    } catch (notifErr) {
+      console.warn("[HandsOn] Erro ao publicar confirmação de inscrição manual:", notifErr);
+    }
+
+    // Envia comprovante por e-mail com QR Code se configurado
+    try {
+      const event = await prisma.event.findUnique({
+        where: { id: reg.eventId },
+        select: { id: true, name: true, location: true, emailSettings: true },
+      });
+      if (event) {
+        const configEmail = resolveEmailSettings(event.emailSettings);
+        if (configEmail.autoSendReceipt) {
+          emailService
+            .sendRegistrationReceipt(event, {
+              to: reg.email,
+              participantName: reg.name,
+              inscriptionId: reg.id,
+              batchName: `Hands On: ${reg.title}`,
+              amount: Number(reg.amount),
+              qrToken: reg.qrToken,
+              eventLocation: reg.location || event.location,
+            })
+            .catch((err: unknown) => console.error("[HandsOn] Falha ao enviar e-mail de comprovante:", err));
+        }
+      }
+    } catch (emailErr) {
+      console.warn("[HandsOn] Erro ao preparar envio de e-mail:", emailErr);
+    }
+
     return updated;
   },
 
@@ -561,6 +706,26 @@ export const handsOnService = {
     }
 
     const updated = await handsOnRepository.recordCheckin(reg.id, checkedInBy);
+
+    // Publica check-in em tempo real no monitor
+    try {
+      adminCheckInBus.publish(reg.eventId, {
+        type: "check_in",
+        eventId: reg.eventId,
+        participantId: reg.id,
+        participantName: reg.name,
+        participantEmail: reg.email,
+        participantPhone: reg.phone,
+        participantDocument: reg.document,
+        status: "CONFIRMED",
+        checkedInAt: updated.checkedInAt ? updated.checkedInAt.toISOString() : new Date().toISOString(),
+        terminalName: "Porta Hands On",
+        source: "hands-on",
+      });
+    } catch (checkinNotifErr) {
+      console.warn("[HandsOn] Erro ao publicar evento de check-in:", checkinNotifErr);
+    }
+
     return { registration: updated, alreadyCheckedIn: false };
   },
 
@@ -595,6 +760,22 @@ export const handsOnService = {
         created.id
       );
       await handsOnService.cancelPendingWhenFull(eventId, input.handsOnId);
+
+      try {
+        adminCheckInBus.publish(eventId, {
+          type: "inscription_confirmed",
+          eventId,
+          inscriptionId: created.id,
+          name: created.name,
+          email: created.email,
+          category: `🧪 Hands On: ${created.title}`,
+          amount: Number(created.amount),
+          paymentMethod: "MANUAL",
+          confirmedAt: new Date().toISOString(),
+        });
+      } catch (notifErr) {
+        console.warn("[HandsOn] Erro ao publicar confirmação de inscrição manual:", notifErr);
+      }
     }
     return created;
   },

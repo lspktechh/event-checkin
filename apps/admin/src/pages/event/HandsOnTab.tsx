@@ -250,6 +250,17 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     loadData();
   }, [loadData]);
 
+  // Atualização em tempo real via eventos do monitor SSE
+  useEffect(() => {
+    const handleRealtimeUpdate = () => {
+      loadData();
+    };
+    window.addEventListener("event-realtime-update", handleRealtimeUpdate);
+    return () => {
+      window.removeEventListener("event-realtime-update", handleRealtimeUpdate);
+    };
+  }, [loadData]);
+
   // Estatísticas agregadas
   const statsByWorkshop = useMemo(() => {
     const map: Record<string, { total: number; confirmed: number; pending: number; checkedIn: number }> = {};
