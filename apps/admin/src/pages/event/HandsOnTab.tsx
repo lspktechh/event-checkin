@@ -211,6 +211,49 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   const [syncingSoldOut, setSyncingSoldOut] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  // Capacidades dinâmicas por workshop
+  const [capacities, setCapacities] = useState<Record<string, number>>({});
+
+  // Modal de Alteração de Vagas
+  const [capacityModalWorkshop, setCapacityModalWorkshop] = useState<WorkshopDef | null>(null);
+  const [capacityInput, setCapacityInput] = useState<number>(12);
+  const [savingCapacity, setSavingCapacity] = useState(false);
+  const [capacityError, setCapacityError] = useState<string | null>(null);
+  const [capacitySuccess, setCapacitySuccess] = useState<string | null>(null);
+
+  const openCapacityModal = (w: WorkshopDef) => {
+    const current = capacities[w.id] ?? w.vagas;
+    setCapacityModalWorkshop(w);
+    setCapacityInput(current);
+    setCapacityError(null);
+    setCapacitySuccess(null);
+  };
+
+  const handleSaveCapacity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!capacityModalWorkshop) return;
+    if (!capacityInput || capacityInput < 1) {
+      setCapacityError("A capacidade de vagas deve ser um número maior que zero.");
+      return;
+    }
+    try {
+      setSavingCapacity(true);
+      setCapacityError(null);
+      const res = await api.updateHandsOnCapacity(eventId, capacityModalWorkshop.id, capacityInput);
+      setCapacities(res.allCapacities);
+      setCapacitySuccess(`Vagas do workshop atualizadas para ${capacityInput} com sucesso!`);
+      setTimeout(() => {
+        setCapacityModalWorkshop(null);
+        setCapacitySuccess(null);
+        loadData();
+      }, 900);
+    } catch (err) {
+      setCapacityError(err instanceof Error ? err.message : "Erro ao atualizar capacidade de vagas");
+    } finally {
+      setSavingCapacity(false);
+    }
+  };
+
   // Controle de liberação das inscrições no site
   const [handsOnOpen, setHandsOnOpen] = useState(false);
   const [togglingOpen, setTogglingOpen] = useState(false);
@@ -235,10 +278,13 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       setError(null);
       const [data, settings] = await Promise.all([
         api.listHandsOnRegistrations(eventId),
-        api.getHandsOnSettings(eventId).catch(() => ({ open: false })),
+        api.getHandsOnSettings(eventId).catch(() => ({ open: false, capacities: {} })),
       ]);
       setRegistrations(data);
       setHandsOnOpen(settings.open);
+      if (settings.capacities) {
+        setCapacities(settings.capacities);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar inscrições de Hands On");
     } finally {
@@ -301,6 +347,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     > = {};
 
     for (const def of WORKSHOPS_CATALOG) {
+      const maxVagas = capacities[def.id] ?? def.vagas;
+
       const confirmed = registrations
         .filter((r) => {
           const targetId =
@@ -319,12 +367,12 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       confirmed.forEach((r, idx) => {
         confirmedOrderMap.set(r.id, {
           rank: idx + 1,
-          isOver: idx >= def.vagas,
+          isOver: idx >= maxVagas,
         });
       });
 
-      const isFull = confirmed.length >= def.vagas;
-      const nth = isFull && def.vagas > 0 ? confirmed[def.vagas - 1] : null;
+      const isFull = confirmed.length >= maxVagas;
+      const nth = isFull && maxVagas > 0 ? confirmed[maxVagas - 1] : null;
       let soldOutAt: Date | null = null;
       let soldOutTimeStr: string | null = null;
       let soldOutDateStr: string | null = null;
@@ -338,8 +386,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       map[def.id] = {
         isFull,
         confirmedCount: confirmed.length,
-        maxVagas: def.vagas,
-        overCapacityCount: Math.max(0, confirmed.length - def.vagas),
+        maxVagas,
+        overCapacityCount: Math.max(0, confirmed.length - maxVagas),
         soldOutAt,
         soldOutTimeStr,
         soldOutDateStr,
@@ -349,7 +397,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     }
 
     return map;
-  }, [registrations]);
+  }, [registrations, capacities]);
 
   const totalInscritosGlobal = registrations.length;
   const totalPresentesGlobal = registrations.filter((r) => !!r.checkedInAt).length;
@@ -369,6 +417,11 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     if (!selectedWorkshopId) return null;
     return WORKSHOPS_CATALOG.find((w) => w.id === selectedWorkshopId) ?? null;
   }, [selectedWorkshopId]);
+
+  const selectedWorkshopVagas = useMemo(() => {
+    if (!selectedWorkshop) return 0;
+    return capacities[selectedWorkshop.id] ?? selectedWorkshop.vagas;
+  }, [selectedWorkshop, capacities]);
 
   const selectedWorkshopSellout = useMemo(() => {
     if (!selectedWorkshopId) return null;
@@ -723,6 +776,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
   function exportWorkshopCsv(workshop: WorkshopDef, list: api.HandsOnRegistrationRecord[]) {
     const sellout = workshopSelloutData[workshop.id];
+    const effectiveVagas = capacities[workshop.id] ?? workshop.vagas;
     const headers = [
       "Nome",
       "E-mail",
@@ -746,8 +800,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       const pixTimeStr = pixTime ? pixTime.toLocaleString("pt-BR") : "";
       const situacao = isConfirmed
         ? orderInfo?.isOver
-          ? `Excedente apos esgotar (${orderInfo.rank}º/${workshop.vagas})`
-          : `Dentro das vagas (${orderInfo?.rank || 1}º/${workshop.vagas})`
+          ? `Excedente apos esgotar (${orderInfo.rank}º/${effectiveVagas})`
+          : `Dentro das vagas (${orderInfo?.rank || 1}º/${effectiveVagas})`
         : "Aguardando Pagamento";
 
       return [
@@ -904,7 +958,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   const sellout = wsDef ? workshopSelloutData[wsDef.id] : null;
                   const orderInfo = sellout?.confirmedOrderMap.get(item.id);
                   const isOverCapacity = orderInfo ? orderInfo.isOver : false;
-                  const maxV = wsDef ? wsDef.vagas : 12;
+                  const maxV = wsDef ? (capacities[wsDef.id] ?? wsDef.vagas) : 12;
 
                   const pixTime = item.paidAt ? new Date(item.paidAt) : (isConfirmed ? new Date(item.createdAt) : null);
                   const pixTimeStr = pixTime
@@ -1050,7 +1104,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       const isConfirmed = r.status === "CONFIRMED";
       const pixTime = r.paidAt ? new Date(r.paidAt) : (isConfirmed ? new Date(r.createdAt) : null);
       const pixTimeStr = pixTime ? pixTime.toLocaleString("pt-BR") : "";
-      const maxV = wsDef ? wsDef.vagas : 12;
+      const maxV = wsDef ? (capacities[wsDef.id] ?? wsDef.vagas) : 12;
       const situacao = isConfirmed
         ? orderInfo?.isOver
           ? `Excedente apos esgotar (${orderInfo.rank}º/${maxV})`
@@ -1144,6 +1198,25 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               📥 Exportar Lista deste Workshop (CSV)
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => openCapacityModal(selectedWorkshop)}
+              style={{
+                background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                color: "#fff",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)",
+                border: "none",
+              }}
+              title="Aumentar ou alterar número de vagas disponíveis deste workshop"
+            >
+              <span>⚡</span> Aumentar / Alterar Vagas ({selectedWorkshopVagas})
             </button>
 
             <button
@@ -1243,8 +1316,29 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     {statsByWorkshop[selectedWorkshop.id]?.total ?? 0}
                   </strong>
                   <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>
-                    de {selectedWorkshop.vagas} vagas
+                    de {selectedWorkshopVagas} vagas
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => openCapacityModal(selectedWorkshop)}
+                    style={{
+                      marginTop: 4,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      background: "rgba(16, 185, 129, 0.15)",
+                      color: "var(--success)",
+                      border: "1px solid rgba(16, 185, 129, 0.35)",
+                      borderRadius: 4,
+                      padding: "2px 6px",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 3,
+                    }}
+                    title="Aumentar ou ajustar vagas deste workshop"
+                  >
+                    <span>⚡</span> Alterar Vagas
+                  </button>
                 </div>
 
                 <div style={{ textAlign: "center" }}>
@@ -1299,7 +1393,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                       Vagas oficiais deste Hands On ESGOTADAS às {selectedWorkshopSellout.soldOutTimeStr} ({selectedWorkshopSellout.soldOutDateStr})
                     </strong>
                     <span style={{ color: "var(--text)", fontSize: 12 }}>
-                      A última vaga oficial ({selectedWorkshop.vagas}ª vaga) foi preenchida por{" "}
+                      A última vaga oficial ({selectedWorkshopVagas}ª vaga) foi preenchida por{" "}
                       <strong>{selectedWorkshopSellout.nthParticipant?.name || "Participante"}</strong>.
                       {selectedWorkshopSellout.overCapacityCount > 0 && (
                         <span style={{ color: "var(--warning)", fontWeight: 700 }}>
@@ -1363,7 +1457,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     fontWeight: 600,
                   }}
                 >
-                  <span>🟢</span> Confirmados Oficiais ({selectedWorkshopCounts.official}/{selectedWorkshop.vagas})
+                  <span>🟢</span> Confirmados Oficiais ({selectedWorkshopCounts.official}/{selectedWorkshopVagas})
                 </button>
 
                 <button
@@ -1435,7 +1529,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               >
                 <span>⚠️</span>
                 <span>
-                  <strong>Além do Limite Permitido:</strong> Exibindo participantes que foram confirmados após o esgotamento das {selectedWorkshop.vagas} vagas oficiais ou cadastros cancelados por esgotamento.
+                  <strong>Além do Limite Permitido:</strong> Exibindo participantes que foram confirmados após o esgotamento das {selectedWorkshopVagas} vagas oficiais ou cadastros cancelados por esgotamento.
                 </span>
               </div>
             )}
@@ -1626,7 +1720,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                         border: isOverCapacity ? "1px solid rgba(245, 158, 11, 0.4)" : "none",
                                       }}
                                     >
-                                      {isOverCapacity ? `Excedente ${confirmedRank}º/${selectedWorkshop.vagas}` : `Vaga ${confirmedRank}/${selectedWorkshop.vagas}`}
+                                      {isOverCapacity ? `Excedente ${confirmedRank}º/${selectedWorkshopVagas}` : `Vaga ${confirmedRank}/${selectedWorkshopVagas}`}
                                     </span>
                                   )}
                                 </div>
@@ -1885,7 +1979,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             color: isOverCapacity ? "var(--warning)" : "var(--success)",
                           }}
                         >
-                          {isOverCapacity ? `Excedente ${confirmedRank}º/${selectedWorkshop.vagas}` : `Vaga ${confirmedRank}/${selectedWorkshop.vagas}`}
+                          {isOverCapacity ? `Excedente ${confirmedRank}º/${selectedWorkshopVagas}` : `Vaga ${confirmedRank}/${selectedWorkshopVagas}`}
                         </span>
                       )}
 
@@ -2298,10 +2392,11 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
             }}
           >
             {filteredWorkshops.map((w) => {
+              const effectiveVagas = capacities[w.id] ?? w.vagas;
               const wsStats = statsByWorkshop[w.id] ?? { total: 0, confirmed: 0, pending: 0, checkedIn: 0 };
-              const percentConfirmed = Math.min(100, Math.round((wsStats.confirmed / w.vagas) * 100));
+              const percentConfirmed = Math.min(100, Math.round((wsStats.confirmed / effectiveVagas) * 100));
               const sellout = workshopSelloutData[w.id];
-              const isFull = sellout ? sellout.isFull : wsStats.confirmed >= w.vagas;
+              const isFull = sellout ? sellout.isFull : wsStats.confirmed >= effectiveVagas;
 
               return (
                 <div
@@ -2380,12 +2475,37 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   <div>
                     {/* Barra de Ocupação de Vagas */}
                     <div style={{ marginBottom: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                        <span style={{ color: "var(--text-muted)" }}>
-                          Ocupação ({wsStats.confirmed} de {w.vagas} vagas)
-                        </span>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, marginBottom: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ color: "var(--text-muted)" }}>
+                            Ocupação ({wsStats.confirmed} de {effectiveVagas} vagas)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCapacityModal(w);
+                            }}
+                            style={{
+                              background: "rgba(16, 185, 129, 0.15)",
+                              border: "1px solid rgba(16, 185, 129, 0.35)",
+                              color: "var(--success)",
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: "1px 6px",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 3,
+                            }}
+                            title="Aumentar ou ajustar vagas deste workshop"
+                          >
+                            <span>⚡</span> Vagas ({effectiveVagas})
+                          </button>
+                        </div>
                         <strong style={{ color: isFull ? "var(--danger)" : "var(--text)" }}>
-                          {isFull ? "Esgotado" : `${w.vagas - wsStats.confirmed} restantes`}
+                          {isFull ? "Esgotado" : `${effectiveVagas - wsStats.confirmed} restantes`}
                         </strong>
                       </div>
 
@@ -2562,7 +2682,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   <option value="ALL">Todos os 12 Workshops</option>
                   {WORKSHOPS_CATALOG.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.titulo.slice(0, 32)}… ({w.vagas} vagas)
+                      {w.titulo.slice(0, 32)}… ({capacities[w.id] ?? w.vagas} vagas)
                     </option>
                   ))}
                 </select>
@@ -2639,7 +2759,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                       const orderInfo = sellout?.confirmedOrderMap.get(r.id);
                       const isOverCapacity = orderInfo ? orderInfo.isOver : false;
                       const confirmedRank = orderInfo ? orderInfo.rank : null;
-                      const maxV = wsDef ? wsDef.vagas : 12;
+                      const maxV = wsDef ? (capacities[wsDef.id] ?? wsDef.vagas) : 12;
 
                       const pixTime = r.paidAt ? new Date(r.paidAt) : (isConfirmed ? new Date(r.createdAt) : null);
                       const pixTimeStr = pixTime
@@ -2932,7 +3052,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 const orderInfo = sellout?.confirmedOrderMap.get(r.id);
                 const isOverCapacity = orderInfo ? orderInfo.isOver : false;
                 const confirmedRank = orderInfo ? orderInfo.rank : null;
-                const maxV = wsDef ? wsDef.vagas : 12;
+                const maxV = wsDef ? (capacities[wsDef.id] ?? wsDef.vagas) : 12;
 
                 const pixTime = r.paidAt ? new Date(r.paidAt) : (isConfirmed ? new Date(r.createdAt) : null);
                 const pixTimeStr = pixTime
@@ -3378,6 +3498,324 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gerenciamento de Vagas do Workshop */}
+      {capacityModalWorkshop && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.7)",
+            zIndex: 1050,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !savingCapacity) {
+              setCapacityModalWorkshop(null);
+            }
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: 520,
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: 24,
+              border: "1px solid var(--border)",
+              boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
+              background: "var(--surface)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: 16,
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    background: "rgba(16, 185, 129, 0.15)",
+                    color: "var(--success)",
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  ⚡ Capacidade de Vagas
+                </span>
+                <h3 style={{ margin: "6px 0 2px", fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+                  {capacityModalWorkshop.titulo}
+                </h3>
+                <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                  Ministrante: {capacityModalWorkshop.ministrante} · {capacityModalWorkshop.diaSemana}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => !savingCapacity && setCapacityModalWorkshop(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: 22,
+                  cursor: "pointer",
+                  color: "var(--text-muted)",
+                  padding: 0,
+                  lineHeight: 1,
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {capacityError && (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid var(--danger)",
+                  color: "var(--danger)",
+                  fontSize: 13,
+                }}
+              >
+                {capacityError}
+              </div>
+            )}
+
+            {capacitySuccess && (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  background: "rgba(34, 197, 94, 0.15)",
+                  border: "1px solid var(--success)",
+                  color: "var(--success)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                ✓ {capacitySuccess}
+              </div>
+            )}
+
+            {/* Quadro de Status Atual */}
+            {(() => {
+              const currentVagas = capacities[capacityModalWorkshop.id] ?? capacityModalWorkshop.vagas;
+              const wsStats = statsByWorkshop[capacityModalWorkshop.id] ?? { confirmed: 0, pending: 0, total: 0, checkedIn: 0 };
+              const diff = capacityInput - currentVagas;
+
+              return (
+                <form onSubmit={handleSaveCapacity}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: 10,
+                      marginBottom: 18,
+                      background: "var(--surface-alt)",
+                      padding: 12,
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>
+                        Vagas Atuais
+                      </span>
+                      <strong style={{ fontSize: 18, color: "var(--text)" }}>{currentVagas}</strong>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>
+                        Confirmados
+                      </span>
+                      <strong style={{ fontSize: 18, color: "var(--success)" }}>{wsStats.confirmed}</strong>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>
+                        Pendentes Pix
+                      </span>
+                      <strong style={{ fontSize: 18, color: "var(--warning)" }}>{wsStats.pending}</strong>
+                    </div>
+                  </div>
+
+                  {/* Controle de Alteração da Capacidade */}
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text)" }}>
+                      Definir Nova Capacidade de Vagas:
+                    </label>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => setCapacityInput((prev) => Math.max(1, prev - 1))}
+                        disabled={savingCapacity || capacityInput <= 1}
+                        className="btn btn-secondary"
+                        style={{ fontSize: 18, fontWeight: 700, width: 44, height: 44, padding: 0 }}
+                      >
+                        -
+                      </button>
+
+                      <input
+                        type="number"
+                        min="1"
+                        max="200"
+                        value={capacityInput}
+                        onChange={(e) => setCapacityInput(parseInt(e.target.value) || 1)}
+                        disabled={savingCapacity}
+                        style={{
+                          flex: 1,
+                          fontSize: 20,
+                          fontWeight: 700,
+                          textAlign: "center",
+                          padding: "8px 12px",
+                          borderRadius: 6,
+                          border: "1px solid var(--border)",
+                          background: "var(--surface)",
+                          color: "var(--text)",
+                        }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setCapacityInput((prev) => prev + 1)}
+                        disabled={savingCapacity}
+                        className="btn btn-secondary"
+                        style={{ fontSize: 18, fontWeight: 700, width: 44, height: 44, padding: 0 }}
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Botões Rápidos de Incremento */}
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                      <span style={{ fontSize: 12, color: "var(--text-muted)", alignSelf: "center", marginRight: 4 }}>
+                        Adicionar rápido:
+                      </span>
+                      {[1, 2, 5, 10].map((inc) => (
+                        <button
+                          key={inc}
+                          type="button"
+                          onClick={() => setCapacityInput(currentVagas + inc)}
+                          disabled={savingCapacity}
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            fontSize: 11,
+                            padding: "3px 8px",
+                            background: capacityInput === currentVagas + inc ? "var(--primary)" : undefined,
+                            color: capacityInput === currentVagas + inc ? "#fff" : undefined,
+                          }}
+                        >
+                          +{inc} vaga{inc > 1 ? "s" : ""} ({currentVagas + inc})
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setCapacityInput(capacityModalWorkshop.vagas)}
+                        disabled={savingCapacity}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: 11, padding: "3px 8px", color: "var(--text-muted)" }}
+                        title="Restaurar padrão inicial do catálogo"
+                      >
+                        Padrão ({capacityModalWorkshop.vagas})
+                      </button>
+                    </div>
+
+                    {/* Feedback contextual */}
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        background:
+                          diff > 0
+                            ? "rgba(16, 185, 129, 0.1)"
+                            : diff < 0
+                            ? "rgba(245, 158, 11, 0.1)"
+                            : "var(--surface-alt)",
+                        border:
+                          diff > 0
+                            ? "1px solid rgba(16, 185, 129, 0.3)"
+                            : diff < 0
+                            ? "1px solid rgba(245, 158, 11, 0.3)"
+                            : "1px solid var(--border)",
+                        color: diff > 0 ? "var(--success)" : diff < 0 ? "var(--warning)" : "var(--text-muted)",
+                      }}
+                    >
+                      {diff > 0 ? (
+                        <span>
+                          🟢 <strong>Aumentando em +{diff} vaga(s):</strong> O limite passará de {currentVagas} para {capacityInput}.{" "}
+                          Novas inscrições serão liberadas no site oficial e pagamentos Pix pendentes que estavam bloqueados poderão ser confirmados.
+                        </span>
+                      ) : diff < 0 ? (
+                        <span>
+                          ⚠️ <strong>Reduzindo capacidade:</strong> O limite passará de {currentVagas} para {capacityInput}.{" "}
+                          {capacityInput < wsStats.confirmed ? (
+                            <span style={{ color: "#ef4444", fontWeight: 700 }}>
+                              Atenção: Já existem {wsStats.confirmed} inscritos confirmados. {wsStats.confirmed - capacityInput} participantes ficarão como excedentes da nova capacidade.
+                            </span>
+                          ) : (
+                            "Nenhum participante confirmado será afetado."
+                          )}
+                        </span>
+                      ) : (
+                        <span>Nenhuma alteração de capacidade selecionada ({capacityInput} vagas).</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setCapacityModalWorkshop(null)}
+                      disabled={savingCapacity}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={savingCapacity || capacityInput === currentVagas}
+                      style={{
+                        background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                        border: "none",
+                        fontWeight: 700,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      {savingCapacity ? "Salvando..." : "Salvar Novas Vagas"}
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
           </div>
         </div>
       )}

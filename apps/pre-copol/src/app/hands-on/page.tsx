@@ -449,12 +449,13 @@ function HandsOnCard({
 }: {
   item: HandsOnItem;
   isOpen: boolean;
-  stats?: { total: number; confirmed: number; pending: number };
+  stats?: { total: number; confirmed: number; pending: number; maxVagas?: number };
 }) {
   const isGratuito = item.preco === 0;
   const confirmedCount = stats?.confirmed ?? 0;
-  const vagasRestantes = Math.max(0, item.vagas - confirmedCount);
-  const isFull = confirmedCount >= item.vagas;
+  const maxVagas = stats?.maxVagas ?? item.vagas;
+  const vagasRestantes = Math.max(0, maxVagas - confirmedCount);
+  const isFull = confirmedCount >= maxVagas;
 
   return (
     <div
@@ -526,7 +527,7 @@ function HandsOnCard({
               ? "Vagas Esgotadas"
               : confirmedCount > 0
               ? `${vagasRestantes} vagas restantes`
-              : `${item.vagas} vagas`}
+              : `${maxVagas} vagas`}
           </span>
         </div>
 

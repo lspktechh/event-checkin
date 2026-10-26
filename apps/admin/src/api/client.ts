@@ -1238,8 +1238,13 @@ export interface HandsOnRegistrationRecord {
 
 export type HandsOnWorkshopStats = Record<
   string,
-  { total: number; confirmed: number; pending: number }
+  { total: number; confirmed: number; pending: number; maxVagas?: number }
 >;
+
+export interface HandsOnSettings {
+  open: boolean;
+  capacities?: Record<string, number>;
+}
 
 export function getHandsOnStats(eventId: string) {
   return request<HandsOnWorkshopStats>(`/events/${eventId}/hands-on/stats`);
@@ -1284,14 +1289,24 @@ export function syncHandsOnSoldOut(eventId: string) {
 }
 
 export function getHandsOnSettings(eventId: string) {
-  return request<{ open: boolean }>(`/events/${eventId}/hands-on/settings`);
+  return request<HandsOnSettings>(`/events/${eventId}/hands-on/settings`);
 }
 
-export function updateHandsOnSettings(eventId: string, open: boolean) {
-  return request<{ open: boolean }>(`/events/${eventId}/hands-on/settings`, {
+export function updateHandsOnSettings(eventId: string, open: boolean, capacities?: Record<string, number>) {
+  return request<HandsOnSettings>(`/events/${eventId}/hands-on/settings`, {
     method: "PATCH",
-    body: { open },
+    body: { open, capacities },
   });
+}
+
+export function updateHandsOnCapacity(eventId: string, handsOnId: string, capacity: number) {
+  return request<{ handsOnId: string; capacity: number; allCapacities: Record<string, number> }>(
+    `/events/${eventId}/hands-on/capacity`,
+    {
+      method: "PATCH",
+      body: { handsOnId, capacity },
+    }
+  );
 }
 
 export interface CreateManualHandsOnData {

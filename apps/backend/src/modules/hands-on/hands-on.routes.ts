@@ -32,15 +32,42 @@ export async function handsOnRoutes(app: FastifyInstance) {
 
   /**
    * PATCH /events/:eventId/hands-on/settings
-   * Admin — Altera se as inscrições de Hands On estão abertas ou fechadas
+   * Admin — Altera se as inscrições de Hands On estão abertas ou fechadas e/ou capacidades
    */
   app.patch(
     "/events/:eventId/hands-on/settings",
     { preHandler: requirePermission("participants.edit") },
     async (request) => {
       const { eventId } = eventIdParams.parse(request.params);
-      const { open } = z.object({ open: z.boolean() }).parse(request.body);
-      const result = await handsOnService.updateSettings(eventId, open);
+      const schema = z.object({
+        open: z.boolean().optional(),
+        capacities: z.record(z.string(), z.number().int().min(1)).optional(),
+      });
+      const body = schema.parse(request.body);
+      const current = await handsOnService.getSettings(eventId);
+      const openVal = body.open !== undefined ? body.open : current.open;
+      const result = await handsOnService.updateSettings(eventId, openVal, body.capacities);
+      return ok(result);
+    }
+  );
+
+  /**
+   * PATCH /events/:eventId/hands-on/capacity
+   * Admin — Altera a capacidade de vagas de um workshop específico
+   */
+  app.patch(
+    "/events/:eventId/hands-on/capacity",
+    { preHandler: requirePermission("participants.edit") },
+    async (request) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const { handsOnId, capacity } = z
+        .object({
+          handsOnId: z.string().min(1, "handsOnId é obrigatório"),
+          capacity: z.number().int().min(1, "capacity deve ser maior que 0"),
+        })
+        .parse(request.body);
+
+      const result = await handsOnService.updateCapacity(eventId, handsOnId, capacity);
       return ok(result);
     }
   );

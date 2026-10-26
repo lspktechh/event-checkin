@@ -1,6 +1,6 @@
 import { handsOnRepository, type CreateHandsOnData } from "./hands-on.repository.js";
 import { generateQrToken } from "../../shared/tokens.js";
-import { NotFoundError, ConflictError } from "../../shared/errors.js";
+import { NotFoundError, ConflictError, BadRequestError } from "../../shared/errors.js";
 import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { prisma } from "../../database/prisma.js";
 import { env } from "../../config/env.js";
@@ -39,16 +39,112 @@ function getRelatedHandsOnIds(handsOnId: string): string[] {
 }
 
 export const handsOnService = {
-  async getSettings(eventId: string): Promise<{ open: boolean }> {
+  async getCapacities(eventId: string): Promise<Record<string, number>> {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { siteContent: true },
+    });
+    const siteContent = (event?.siteContent as Record<string, any>) ?? {};
+    const customCapacities: Record<string, number> =
+      siteContent.handsOnCapacities && typeof siteContent.handsOnCapacities === "object"
+        ? (siteContent.handsOnCapacities as Record<string, number>)
+        : {};
+
+    return {
+      ...HANDS_ON_CAPACITY,
+      ...customCapacities,
+    };
+  },
+
+  async getWorkshopCapacity(eventId: string, handsOnId: string): Promise<number> {
+    const targetId =
+      handsOnId === "reabilitacao-resina-composta"
+        ? "integrale-cirurgia-implante-protetico"
+        : handsOnId;
+    const capacities = await this.getCapacities(eventId);
+    return capacities[targetId] ?? HANDS_ON_CAPACITY[targetId] ?? 12;
+  },
+
+  async updateCapacity(
+    eventId: string,
+    handsOnId: string,
+    capacity: number
+  ): Promise<{ handsOnId: string; capacity: number; allCapacities: Record<string, number> }> {
+    if (!capacity || capacity < 1 || !Number.isInteger(capacity)) {
+      throw new BadRequestError("A capacidade de vagas deve ser um número inteiro positivo maior que zero.");
+    }
+    const targetId =
+      handsOnId === "reabilitacao-resina-composta"
+        ? "integrale-cirurgia-implante-protetico"
+        : handsOnId;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { siteContent: true },
+    });
+    const siteContent =
+      typeof event?.siteContent === "object" && event?.siteContent !== null
+        ? { ...(event.siteContent as Record<string, unknown>) }
+        : {};
+    const currentCustom: Record<string, number> =
+      siteContent.handsOnCapacities && typeof siteContent.handsOnCapacities === "object"
+        ? { ...(siteContent.handsOnCapacities as Record<string, number>) }
+        : {};
+
+    currentCustom[targetId] = capacity;
+    if (targetId === "integrale-cirurgia-implante-protetico") {
+      currentCustom["reabilitacao-resina-composta"] = capacity;
+    }
+    siteContent.handsOnCapacities = currentCustom;
+
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { siteContent: siteContent as Prisma.InputJsonValue },
+    });
+
+    const allCapacities = {
+      ...HANDS_ON_CAPACITY,
+      ...currentCustom,
+    };
+
+    try {
+      adminCheckInBus.publish(eventId, {
+        type: "hands_on_capacity_updated",
+        eventId,
+        handsOnId: targetId,
+        capacity,
+      });
+    } catch (err) {
+      console.warn("[HandsOn] Erro ao publicar atualização de capacidade:", err);
+    }
+
+    return { handsOnId: targetId, capacity, allCapacities };
+  },
+
+  async getSettings(eventId: string): Promise<{ open: boolean; capacities: Record<string, number> }> {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       select: { siteContent: true },
     });
     const siteContent = (event?.siteContent as Record<string, unknown>) ?? {};
-    return { open: Boolean(siteContent.handsOnOpen ?? false) };
+    const customCapacities: Record<string, number> =
+      siteContent.handsOnCapacities && typeof siteContent.handsOnCapacities === "object"
+        ? (siteContent.handsOnCapacities as Record<string, number>)
+        : {};
+    return {
+      open: Boolean(siteContent.handsOnOpen ?? false),
+      capacities: {
+        ...HANDS_ON_CAPACITY,
+        ...customCapacities,
+      },
+    };
   },
 
-  async updateSettings(eventId: string, open: boolean): Promise<{ open: boolean }> {
+  async updateSettings(
+    eventId: string,
+    open: boolean,
+    capacities?: Record<string, number>
+  ): Promise<{ open: boolean; capacities: Record<string, number> }> {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       select: { siteContent: true },
@@ -58,11 +154,23 @@ export const handsOnService = {
         ? { ...(event.siteContent as Record<string, unknown>) }
         : {};
     siteContent.handsOnOpen = open;
+    if (capacities && typeof capacities === "object") {
+      const currentCustom: Record<string, number> =
+        siteContent.handsOnCapacities && typeof siteContent.handsOnCapacities === "object"
+          ? { ...(siteContent.handsOnCapacities as Record<string, number>) }
+          : {};
+      Object.assign(currentCustom, capacities);
+      siteContent.handsOnCapacities = currentCustom;
+    }
     await prisma.event.update({
       where: { id: eventId },
       data: { siteContent: siteContent as Prisma.InputJsonValue },
     });
-    return { open };
+    const allCapacities = {
+      ...HANDS_ON_CAPACITY,
+      ...((siteContent.handsOnCapacities as Record<string, number>) || {}),
+    };
+    return { open, capacities: allCapacities };
   },
 
   async register(eventId: string, input: Omit<CreateHandsOnData, "eventId" | "qrToken">) {
@@ -80,7 +188,7 @@ export const handsOnService = {
       input.handsOnId === "reabilitacao-resina-composta"
         ? "integrale-cirurgia-implante-protetico"
         : input.handsOnId;
-    const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+    const maxVagas = await handsOnService.getWorkshopCapacity(eventId, targetId);
 
     const confirmedCount = await prisma.handsOnRegistration.count({
       where: {
@@ -270,7 +378,7 @@ export const handsOnService = {
   ): Promise<{ cancelledCount: number }> {
     const relatedIds = getRelatedHandsOnIds(handsOnId);
     const targetId = relatedIds[0];
-    const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+    const maxVagas = await handsOnService.getWorkshopCapacity(eventId, targetId);
 
     const confirmedCount = await prisma.handsOnRegistration.count({
       where: {
@@ -333,8 +441,9 @@ export const handsOnService = {
   ): Promise<{ cancelledTotal: number; details: Record<string, number> }> {
     let cancelledTotal = 0;
     const details: Record<string, number> = {};
+    const capacities = await handsOnService.getCapacities(eventId);
 
-    for (const [id] of Object.entries(HANDS_ON_CAPACITY)) {
+    for (const [id] of Object.entries(capacities)) {
       const res = await handsOnService.cancelPendingWhenFull(eventId, id);
       if (res.cancelledCount > 0) {
         details[id] = res.cancelledCount;
@@ -419,7 +528,7 @@ export const handsOnService = {
 
     const relatedIds = getRelatedHandsOnIds(reg.handsOnId);
     const targetId = relatedIds[0];
-    const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+    const maxVagas = await handsOnService.getWorkshopCapacity(reg.eventId, targetId);
 
     const confirmedCount = await prisma.handsOnRegistration.count({
       where: {
@@ -502,7 +611,7 @@ export const handsOnService = {
     if (reg.status === "PENDING") {
       const relatedIds = getRelatedHandsOnIds(reg.handsOnId);
       const targetId = relatedIds[0];
-      const maxVagas = HANDS_ON_CAPACITY[targetId] ?? 12;
+      const maxVagas = await handsOnService.getWorkshopCapacity(reg.eventId, targetId);
 
       const confirmedCount = await prisma.handsOnRegistration.count({
         where: {
@@ -608,12 +717,24 @@ export const handsOnService = {
   },
 
   async getWorkshopStats(eventId: string) {
-    const grouped = await handsOnRepository.countByWorkshop(eventId);
-    const stats: Record<string, { total: number; confirmed: number; pending: number }> = {};
+    const [grouped, capacities] = await Promise.all([
+      handsOnRepository.countByWorkshop(eventId),
+      this.getCapacities(eventId),
+    ]);
+    const stats: Record<string, { total: number; confirmed: number; pending: number; maxVagas: number }> = {};
+
+    for (const [id, cap] of Object.entries(capacities)) {
+      stats[id] = { total: 0, confirmed: 0, pending: 0, maxVagas: cap };
+    }
 
     for (const item of grouped) {
       if (!stats[item.handsOnId]) {
-        stats[item.handsOnId] = { total: 0, confirmed: 0, pending: 0 };
+        stats[item.handsOnId] = {
+          total: 0,
+          confirmed: 0,
+          pending: 0,
+          maxVagas: capacities[item.handsOnId] ?? 12,
+        };
       }
       stats[item.handsOnId].total += item._count.id;
       if (item.status === "CONFIRMED") {

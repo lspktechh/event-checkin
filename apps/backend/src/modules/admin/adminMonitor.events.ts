@@ -51,11 +51,19 @@ export interface AdminInscriptionStatusEvent {
   status: "PENDING" | "CONFIRMED" | "CANCELLED";
 }
 
+export interface AdminHandsOnCapacityEvent {
+  type: "hands_on_capacity_updated";
+  eventId: string;
+  handsOnId: string;
+  capacity: number;
+}
+
 export type AdminRealtimeEvent =
   | AdminCheckInEvent
   | AdminNewInscriptionEvent
   | AdminInscriptionConfirmedEvent
-  | AdminInscriptionStatusEvent;
+  | AdminInscriptionStatusEvent
+  | AdminHandsOnCapacityEvent;
 
 type Listener = (event: AdminRealtimeEvent) => void;
 
