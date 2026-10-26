@@ -180,7 +180,9 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
       (cleanDigits.length > 0 && docDigits.includes(cleanDigits)) ||
       (item.phone && item.phone.toLowerCase().includes(term)) ||
       maskedPhone.includes(term) ||
-      (cleanDigits.length > 0 && phoneDigits.includes(cleanDigits))
+      (cleanDigits.length > 0 && phoneDigits.includes(cleanDigits)) ||
+      (item.teamName && item.teamName.toLowerCase().includes(term)) ||
+      (item.teamMembers && item.teamMembers.some((m) => m.toLowerCase().includes(term)))
     );
   });
 
@@ -217,6 +219,8 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
       "E-mail",
       "Telefone",
       "CPF",
+      "Equipe",
+      "Integrantes",
       "Lote",
       "Valor Bruto",
       "Taxa (0,99%)",
@@ -241,6 +245,8 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
         `"${i.email}"`,
         `"${i.phone ? formatPhone(i.phone) : ""}"`,
         `"${i.document ? formatDocument(i.document) : ""}"`,
+        `"${(i.teamName || "").replace(/"/g, '""')}"`,
+        `"${(i.teamMembers || []).join(", ").replace(/"/g, '""')}"`,
         `"${i.category}"`,
         `"R$ ${i.amount.toFixed(2).replace(".", ",")}"`,
         `"- R$ ${fee.toFixed(2).replace(".", ",")}"`,
@@ -765,6 +771,33 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         </span>
                       )}
                     </div>
+
+                    {item.teamName && (
+                      <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                        <div>
+                          <span
+                            className="badge"
+                            style={{
+                              background: "rgba(16, 185, 129, 0.15)",
+                              color: "#059669",
+                              borderColor: "rgba(16, 185, 129, 0.35)",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            👥 Equipe: {item.teamName}
+                          </span>
+                        </div>
+                        {item.teamMembers && item.teamMembers.length > 0 && (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                            <strong style={{ color: "var(--text)" }}>Membros:</strong> {item.teamMembers.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
                     <div style={{ fontWeight: 500 }}>{item.category}</div>
@@ -1076,6 +1109,18 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   <span className="muted">Data da Inscrição:</span>
                   <span>{new Date(item.createdAt).toLocaleDateString("pt-BR")}</span>
                 </div>
+                {item.teamName && (
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
+                    <div style={{ fontWeight: 700, color: "#059669", fontSize: 12 }}>
+                      👥 Equipe: {item.teamName}
+                    </div>
+                    {item.teamMembers && item.teamMembers.length > 0 && (
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                        <strong>Membros:</strong> {item.teamMembers.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {canEdit && (

@@ -119,8 +119,8 @@ export async function createInscription(
       // versao dele que o registro precisa valer.
       consentAcceptedAt: new Date(),
       consentIp: consentIp ?? null,
-      teamName: equipeConfig ? input.teamName ?? null : null,
-      teamMembers: equipeConfig ? input.teamMembers ?? [] : undefined,
+      teamName: input.teamName?.trim() ? input.teamName.trim() : (equipeConfig ? input.teamName ?? null : null),
+      teamMembers: input.teamMembers && input.teamMembers.length > 0 ? input.teamMembers : (equipeConfig ? input.teamMembers ?? [] : undefined),
     });
   });
 
@@ -762,26 +762,60 @@ export async function getInscriptionsReport(eventId: string) {
     where: { eventId },
     include: {
       batch: true,
+      teamMembers: {
+        orderBy: { order: "asc" },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return inscriptions.map((ins) => ({
-    id: ins.id,
-    name: ins.name,
-    email: ins.email,
-    phone: ins.phone,
-    document: ins.document,
-    institution: ins.institution,
-    category: ins.batch?.name ?? ins.category,
-    amount: Number(ins.amount),
-    status: ins.status,
-    paymentMethod: ins.paymentMethod,
-    paymentProvider: ins.paymentProvider,
-    paymentId: ins.paymentId,
-    participantId: ins.participantId,
-    createdAt: ins.createdAt.toISOString(),
-  }));
+  return inscriptions.map((ins) => {
+    let resolvedTeamName = ins.teamName || null;
+    let resolvedMembers = (ins.teamMembers || []).map((m) => m.name);
+
+    if (!resolvedTeamName && ins.notes) {
+      try {
+        const parsed = JSON.parse(ins.notes);
+        resolvedTeamName =
+          parsed.payload_completo?.equipeNome ||
+          parsed.equipe_nome ||
+          parsed.teamName ||
+          null;
+        if (resolvedMembers.length === 0 && parsed.payload_completo?.membros) {
+          resolvedMembers = parsed.payload_completo.membros
+            .map((m: any) => m.nome || m)
+            .filter(Boolean);
+        } else if (resolvedMembers.length === 0 && parsed.membros_detalhes) {
+          resolvedMembers = parsed.membros_detalhes
+            .filter((m: any) => !m.isLeader)
+            .map((m: any) => m.nome)
+            .filter(Boolean);
+        }
+      } catch {
+        // Fallback silencioso
+      }
+    }
+
+    return {
+      id: ins.id,
+      name: ins.name,
+      email: ins.email,
+      phone: ins.phone,
+      document: ins.document,
+      institution: ins.institution,
+      category: ins.batch?.name ?? ins.category,
+      amount: Number(ins.amount),
+      status: ins.status,
+      teamName: resolvedTeamName,
+      teamMembers: resolvedMembers,
+      notes: ins.notes,
+      paymentMethod: ins.paymentMethod,
+      paymentProvider: ins.paymentProvider,
+      paymentId: ins.paymentId,
+      participantId: ins.participantId,
+      createdAt: ins.createdAt.toISOString(),
+    };
+  });
 }
 
 /**

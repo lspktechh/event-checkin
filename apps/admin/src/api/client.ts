@@ -149,6 +149,9 @@ export interface UserRecord {
   role: AdminRoleRef;
   /** Vazio = todos os eventos. */
   allowedEventIds: string[];
+  customPermissions?: string[];
+  useCustomPermissions?: boolean;
+  effectivePermissions?: "ALL" | string[];
 }
 export function listUsers() {
   return request<UserRecord[]>("/users");
@@ -159,12 +162,22 @@ export function createUser(input: {
   password: string;
   roleId: string;
   allowedEventIds?: string[];
+  customPermissions?: string[];
+  useCustomPermissions?: boolean;
 }) {
   return request<UserRecord>("/users", { method: "POST", body: input });
 }
 export function updateUser(
   userId: string,
-  input: Partial<{ name: string; email: string; roleId: string; password: string; allowedEventIds: string[] }>
+  input: Partial<{
+    name: string;
+    email: string;
+    roleId: string;
+    password: string;
+    allowedEventIds: string[];
+    customPermissions: string[];
+    useCustomPermissions: boolean;
+  }>
 ) {
   return request<UserRecord>(`/users/${userId}`, { method: "PATCH", body: input });
 }
@@ -1145,6 +1158,9 @@ export interface InscriptionReportItem {
   category: string;
   amount: number;
   status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  teamName?: string | null;
+  teamMembers?: string[];
+  notes?: string | null;
   paymentMethod?: "PIX" | "CARD" | null;
   paymentProvider?: string | null;
   paymentId: string | null;
