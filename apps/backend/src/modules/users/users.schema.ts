@@ -7,6 +7,8 @@ export const createUserSchema = z.object({
   roleId: z.string().uuid("Selecione um perfil"),
   /** Vazio/ausente = todos os eventos. Ver User.allowedEventIds. */
   allowedEventIds: z.array(z.string().uuid()).max(200).optional(),
+  customPermissions: z.array(z.string()).max(200).optional(),
+  useCustomPermissions: z.boolean().optional(),
 });
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
@@ -16,6 +18,8 @@ export const updateUserSchema = z.object({
   roleId: z.string().uuid().optional(),
   password: z.string().min(8, "A senha precisa ter no mínimo 8 caracteres").max(200).optional(),
   allowedEventIds: z.array(z.string().uuid()).max(200).optional(),
+  customPermissions: z.array(z.string()).max(200).optional(),
+  useCustomPermissions: z.boolean().optional(),
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 

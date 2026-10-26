@@ -356,6 +356,54 @@ describe("GET /audit-logs", () => {
     });
     expect(response.statusCode).toBe(200);
     const logs = response.json().data;
-    expect(logs.some((l: { action: string }) => l.action === "role.create")).toBe(true);
+    // Auditoria de ações por pessoa foi desativada conforme solicitado
+    expect(logs).toEqual([]);
+  });
+
+  it("cria usuário com permissões customizadas e eventos específicos, e edita usuário existente", async () => {
+    const { user: admin, password: adminPassword } = await createTestAdmin();
+    const token = (await login(admin.email, adminPassword)).json().data.token;
+
+    const role = await ensureAdminRole();
+
+    // Cria usuário com permissões customizadas e eventos específicos
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/users",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        name: "Operador Personalizado",
+        email: "operador.personalizado@teste.com",
+        password: "senha-segura-123",
+        roleId: role.id,
+        customPermissions: ["events.view", "participants.view"],
+        useCustomPermissions: true,
+        allowedEventIds: [],
+      },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const createdUser = createRes.json().data;
+    expect(createdUser.useCustomPermissions).toBe(true);
+    expect(createdUser.customPermissions).toEqual(["events.view", "participants.view"]);
+
+    // Login com o usuário criado reflete as permissões personalizadas
+    const userLoginRes = await login("operador.personalizado@teste.com", "senha-segura-123");
+    expect(userLoginRes.statusCode).toBe(200);
+    const loginData = userLoginRes.json().data;
+    expect(loginData.user.permissions).toEqual(["events.view", "participants.view"]);
+
+    // Edita o usuário existente com novas permissões e restrição de eventos
+    const updateRes = await app.inject({
+      method: "PATCH",
+      url: `/users/${createdUser.id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        customPermissions: ["events.view", "participants.view", "participants.create"],
+        useCustomPermissions: true,
+      },
+    });
+    expect(updateRes.statusCode).toBe(200);
+    const updatedUser = updateRes.json().data;
+    expect(updatedUser.customPermissions).toEqual(["events.view", "participants.view", "participants.create"]);
   });
 });

@@ -34,9 +34,6 @@ export const PERMISSIONS: PermissionDef[] = [
   { key: "roles.delete", description: "Excluir perfil", category: "Perfis" },
   { key: "roles.manage_permissions", description: "Definir quais permissões cada perfil tem", category: "Perfis" },
 
-  // Auditoria
-  { key: "audit.view", description: "Consultar o histórico de ações administrativas", category: "Auditoria" },
-
   // Eventos
   { key: "events.view", description: "Ver eventos", category: "Eventos" },
   { key: "events.create", description: "Criar evento", category: "Eventos" },

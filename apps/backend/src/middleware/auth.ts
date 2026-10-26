@@ -76,13 +76,16 @@ export async function loadAdminSession(request: FastifyRequest) {
     throw new UnauthorizedError("Sessão inválida ou usuário desativado");
   }
 
-  const permissions = new Set(user.role.permissions.map((rp) => rp.permission.key));
+  const permissions = user.useCustomPermissions
+    ? new Set(user.customPermissions)
+    : new Set(user.role.permissions.map((rp) => rp.permission.key));
+
   request.admin = {
     userId: user.id,
     email: user.email,
     roleKey: user.role.key,
     roleId: user.role.id,
-    isSystem: user.role.isSystem,
+    isSystem: user.useCustomPermissions ? false : user.role.isSystem,
     permissions,
     allowedEventIds: user.allowedEventIds,
   };
@@ -132,6 +135,9 @@ export async function userHasPermission(userId: string, permissionKey: string): 
     include: { role: { include: { permissions: { include: { permission: true } } } } },
   });
   if (!user || !user.isActive) return false;
+  if (user.useCustomPermissions) {
+    return user.customPermissions.includes(permissionKey);
+  }
   if (user.role.isSystem) return true;
   return user.role.permissions.some((rp) => rp.permission.key === permissionKey);
 }

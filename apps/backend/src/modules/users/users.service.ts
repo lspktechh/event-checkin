@@ -1,10 +1,15 @@
-import { ConflictError, ForbiddenError, NotFoundError } from "../../shared/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../shared/errors.js";
+import { PERMISSION_KEYS } from "../../shared/permissions.js";
 import { hashPassword } from "../../shared/passwords.js";
 import * as rolesRepository from "../roles/roles.repository.js";
 import * as usersRepository from "./users.repository.js";
 import type { CreateUserInput, UpdateUserInput } from "./users.schema.js";
 
 function serializeUser(user: NonNullable<Awaited<ReturnType<typeof usersRepository.findUserById>>>) {
+  const rolePermissions = user.role.isSystem
+    ? "ALL"
+    : user.role.permissions.map((rp) => rp.permission.key);
+
   return {
     id: user.id,
     name: user.name,
@@ -15,6 +20,9 @@ function serializeUser(user: NonNullable<Awaited<ReturnType<typeof usersReposito
     updatedAt: user.updatedAt,
     role: { id: user.role.id, key: user.role.key, name: user.role.name, isSystem: user.role.isSystem },
     allowedEventIds: user.allowedEventIds,
+    customPermissions: user.customPermissions,
+    useCustomPermissions: user.useCustomPermissions,
+    effectivePermissions: user.useCustomPermissions ? user.customPermissions : rolePermissions,
   };
 }
 
@@ -58,6 +66,13 @@ export async function createUser(input: CreateUserInput) {
   await assertRoleExists(input.roleId);
   await assertEmailAvailable(input.email);
 
+  if (input.customPermissions) {
+    const invalid = input.customPermissions.filter((k) => !PERMISSION_KEYS.has(k));
+    if (invalid.length > 0) {
+      throw new ValidationError(`Permissão(ões) desconhecida(s): ${invalid.join(", ")}`);
+    }
+  }
+
   const passwordHash = await hashPassword(input.password);
   const user = await usersRepository.createUser({
     name: input.name,
@@ -65,6 +80,9 @@ export async function createUser(input: CreateUserInput) {
     passwordHash,
     roleId: input.roleId,
     allowedEventIds: input.allowedEventIds ?? [],
+    customPermissions: input.customPermissions ?? [],
+    useCustomPermissions:
+      input.useCustomPermissions ?? (input.customPermissions !== undefined && input.customPermissions.length > 0),
   });
   return serializeUser(user);
 }
@@ -78,6 +96,13 @@ export async function updateUser(userId: string, input: UpdateUserInput) {
     await assertNotLastSystemUser(current);
   }
 
+  if (input.customPermissions) {
+    const invalid = input.customPermissions.filter((k) => !PERMISSION_KEYS.has(k));
+    if (invalid.length > 0) {
+      throw new ValidationError(`Permissão(ões) desconhecida(s): ${invalid.join(", ")}`);
+    }
+  }
+
   const passwordHash = input.password ? await hashPassword(input.password) : undefined;
   const updated = await usersRepository.updateUser(userId, {
     name: input.name,
@@ -85,6 +110,8 @@ export async function updateUser(userId: string, input: UpdateUserInput) {
     roleId: input.roleId,
     passwordHash,
     allowedEventIds: input.allowedEventIds,
+    customPermissions: input.customPermissions,
+    useCustomPermissions: input.useCustomPermissions,
   });
   return serializeUser(updated);
 }

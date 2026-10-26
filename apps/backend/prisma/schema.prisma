@@ -166,6 +166,11 @@ model User {
   /// continua decidindo O QUE ele faz; isto decide EM QUAL evento.
   allowedEventIds String[] @default([])
 
+  /// Permissões personalizadas do usuário. Quando useCustomPermissions é true,
+  /// estas permissões substituem as permissões do perfil (Role).
+  customPermissions    String[] @default([])
+  useCustomPermissions Boolean  @default(false)
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

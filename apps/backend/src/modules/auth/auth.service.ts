@@ -27,9 +27,11 @@ export async function authenticateAdmin(email: string, password: string) {
 
   await usersRepository.touchLastLogin(user.id);
 
-  const permissionKeys = user.role.isSystem
-    ? "ALL"
-    : user.role.permissions.map((rp) => rp.permission.key);
+  const permissionKeys = user.useCustomPermissions
+    ? user.customPermissions
+    : user.role.isSystem
+      ? "ALL"
+      : user.role.permissions.map((rp) => rp.permission.key);
 
   return {
     id: user.id,
@@ -39,5 +41,7 @@ export async function authenticateAdmin(email: string, password: string) {
     permissions: permissionKeys,
     // A UI usa para abrir direto no único evento de uma conta restrita.
     allowedEventIds: user.allowedEventIds,
+    customPermissions: user.customPermissions,
+    useCustomPermissions: user.useCustomPermissions,
   };
 }

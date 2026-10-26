@@ -1,6 +1,16 @@
 import { prisma } from "../../database/prisma.js";
 
-const withRole = { role: true } as const;
+const withRole = {
+  role: {
+    include: {
+      permissions: {
+        include: {
+          permission: true,
+        },
+      },
+    },
+  },
+} as const;
 
 export function listUsers() {
   return prisma.user.findMany({ include: withRole, orderBy: { createdAt: "asc" } });
@@ -20,13 +30,23 @@ export function createUser(data: {
   passwordHash: string;
   roleId: string;
   allowedEventIds?: string[];
+  customPermissions?: string[];
+  useCustomPermissions?: boolean;
 }) {
   return prisma.user.create({ data, include: withRole });
 }
 
 export function updateUser(
   userId: string,
-  data: Partial<{ name: string; email: string; roleId: string; passwordHash: string; allowedEventIds: string[] }>
+  data: Partial<{
+    name: string;
+    email: string;
+    roleId: string;
+    passwordHash: string;
+    allowedEventIds: string[];
+    customPermissions: string[];
+    useCustomPermissions: boolean;
+  }>
 ) {
   return prisma.user.update({ where: { id: userId }, data, include: withRole });
 }
