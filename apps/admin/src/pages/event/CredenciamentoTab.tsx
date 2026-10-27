@@ -4,6 +4,7 @@ import * as api from "../../api/client";
 import { WebQrScanner } from "../../components/scanner/WebQrScanner";
 import { FeedbackOverlay, type FeedbackData } from "../../components/scanner/FeedbackOverlay";
 import { initAudio, playCheckInFeedback } from "../../utils/audioFeedback";
+import { SmartphoneIcon } from "../../components/Icons";
 
 const FEEDBACK_DURATION_MS = 1800;
 
@@ -125,7 +126,7 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
               fontSize: 14,
             }}
           >
-            📱 Abrir em Tela Cheia (Modo Celular)
+            <SmartphoneIcon size="1.1em" /> Abrir em Tela Cheia (Modo Celular)
           </Link>
         </div>
       </div>

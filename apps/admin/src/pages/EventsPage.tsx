@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
 import * as api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { SmartphoneIcon } from "../components/Icons";
 
 const STATUS_LABEL: Record<api.EventRecord["status"], string> = {
   ACTIVE: "Ativo",
@@ -36,7 +37,7 @@ export function EventsPage() {
   return (
     <div className="stack">
       <div className="spread">
-        <h1 style={{ fontSize: 22, margin: 0 }}>Eventos</h1>
+        <h1 style={{ margin: 0 }}>Eventos</h1>
         {canCreate ? (
           <button className="btn" onClick={() => setShowForm((v) => !v)}>
             {showForm ? "Cancelar" : "+ Novo evento"}
@@ -100,7 +101,7 @@ export function EventsPage() {
                       }}
                       title="Abrir leitor de QR Code para este evento"
                     >
-                      📱 Credenciamento
+                      <SmartphoneIcon size="1.1em" /> Credenciamento
                     </Link>
                   </td>
                 </tr>

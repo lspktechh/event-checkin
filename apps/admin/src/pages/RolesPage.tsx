@@ -41,7 +41,7 @@ export function RolesPage() {
     <div className="stack">
       <div className="spread">
         <div>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Perfis de acesso</h1>
+          <h1 style={{ margin: 0 }}>Perfis de acesso</h1>
           <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
             Crie os tipos de usuário do sistema e defina exatamente o que cada um pode fazer.
           </p>

@@ -38,7 +38,7 @@ export function AuditPage() {
   return (
     <div className="stack">
       <div>
-        <h1 style={{ fontSize: 22, margin: 0 }}>Auditoria</h1>
+        <h1 style={{ margin: 0 }}>Auditoria</h1>
         <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
           Histórico de ações administrativas sensíveis (usuários, perfis, eventos).
         </p>

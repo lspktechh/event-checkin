@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginAttendee, selectEvent, type ParticipantData } from "@/lib/api";
 import { CreditosParceiros } from "@/components/CreditosParceiros";
+import { CalendarIcon, MapPinIcon } from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
 
@@ -266,7 +267,7 @@ export default function LoginPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <span className="inline-block rounded-md border border-[var(--primary)]/30 bg-[var(--primary)]/15 px-2 py-0.5 text-[0.7rem] font-semibold text-blue-300 mb-1.5">
-                          {p.checkedIn ? "✓ Check-in Realizado" : "Inscrição Confirmada"}
+                          {p.checkedIn ? "Check-in Realizado" : "Inscrição Confirmada"}
                         </span>
                         <h3 className="text-base font-bold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">
                           {p.event.name}
@@ -276,11 +277,11 @@ export default function LoginPage() {
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--muted-foreground)]">
                       <span className="flex items-center gap-1.5">
-                        📅 {dateFormatted}
+                        <CalendarIcon size={13} /> {dateFormatted}
                       </span>
                       {p.event.location && (
                         <span className="flex items-center gap-1.5">
-                          📍 {p.event.location}
+                          <MapPinIcon size={13} /> {p.event.location}
                         </span>
                       )}
                     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import * as api from "../../api/client";
+import { AlertIcon, ClockIcon, BanIcon, BoltIcon, CalendarIcon, CheckIcon, DotIcon, DownloadIcon, FlaskIcon, GradCapIcon, ListIcon, MailIcon, MapPinIcon, MessageIcon, PhoneIcon, PlusIcon, RefreshIcon, SearchIcon, TrashIcon, UserIcon, UsersIcon, WalletIcon } from "../../components/Icons";
 
 interface WorkshopDef {
   id: string;
@@ -268,6 +269,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   const [manualCategory, setManualCategory] = useState("Estudante");
   const [manualInstitution, setManualInstitution] = useState("");
   const [manualStatus, setManualStatus] = useState<"CONFIRMED" | "PENDING">("CONFIRMED");
+  // Cortesia: vaga garantida, valor zero — não entra na receita.
+  const [manualExempt, setManualExempt] = useState(false);
   const [manualNotes, setManualNotes] = useState("");
   const [savingManual, setSavingManual] = useState(false);
   const [manualError, setManualError] = useState<string | null>(null);
@@ -709,6 +712,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     setManualCategory("Estudante");
     setManualInstitution("");
     setManualStatus("CONFIRMED");
+    setManualExempt(false);
     setManualNotes("Inscrição manual via painel");
     setManualError(null);
     setIsManualModalOpen(true);
@@ -751,15 +755,19 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
         time: workshop.horario,
         location: workshop.local,
         sponsor: workshop.patrocinio || null,
-        amount: workshop.preco,
+        // Isento: valor zero, para não somar na receita do evento.
+        amount: manualExempt ? 0 : workshop.preco,
         name: nomeTrim,
         email: emailTrim,
         document: docClean,
         phone: manualPhone.trim() || null,
         category: manualCategory || null,
         institution: manualInstitution.trim() || null,
-        status: manualStatus,
-        notes: manualNotes.trim() || null,
+        // Isento nunca fica pendente: não há pagamento a aguardar.
+        status: manualExempt ? "CONFIRMED" : manualStatus,
+        notes: manualExempt
+          ? ["Isento (cortesia)", manualNotes.trim()].filter(Boolean).join(" · ")
+          : manualNotes.trim() || null,
       });
 
       await loadData();
@@ -852,7 +860,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 18 }}>🔍</span>
+            <span style={{ fontSize: 18 }}><SearchIcon size="1.1em" /></span>
             <strong style={{ fontSize: 15, color: "var(--text)" }}>
               Inscrições Localizadas para a Busca: &ldquo;{participantSearch}&rdquo;
             </strong>
@@ -908,8 +916,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     </span>
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
-                    <span>✉️ {p.email}</span>
-                    {p.phone && <span style={{ marginLeft: 10 }}>📱 {p.phone}</span>}
+                    <span><MailIcon size="1.1em" /> {p.email}</span>
+                    {p.phone && <span style={{ marginLeft: 10 }}><PhoneIcon size="1.1em" /> {p.phone}</span>}
                   </div>
                 </div>
 
@@ -924,7 +932,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                       fontWeight: 700,
                     }}
                   >
-                    ✓ {confirmedCount} Confirmado(s)
+                    <CheckIcon size="1.1em" /> {confirmedCount} Confirmado(s)
                   </span>
                   {pendingCount > 0 && (
                     <span
@@ -937,7 +945,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                         fontWeight: 700,
                       }}
                     >
-                      ⏳ {pendingCount} Pendente(s)
+                      <ClockIcon size="1.1em" /> {pendingCount} Pendente(s)
                     </span>
                   )}
                 </div>
@@ -1006,21 +1014,21 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                           >
                             {isConfirmed
                               ? isOverCapacity
-                                ? "⚠️ Confirmado (Excedente)"
-                                : "✓ Pix Confirmado"
-                              : "⏳ Pendente Pix"}
+                                ? "Confirmado (Excedente)"
+                                : "Pix Confirmado"
+                              : "Pendente Pix"}
                           </span>
                         </div>
 
                         <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
-                          <span>👨‍⚕️ {item.speaker}</span>
-                          <span style={{ marginLeft: 8 }}>📅 {item.date} ({item.time})</span>
-                          <span style={{ marginLeft: 8 }}>💰 R$ {Number(item.amount).toFixed(2).replace(".", ",")}</span>
+                          <span><UserIcon size="1.1em" /> {item.speaker}</span>
+                          <span style={{ marginLeft: 8 }}><CalendarIcon size="1.1em" /> {item.date} ({item.time})</span>
+                          <span style={{ marginLeft: 8 }}><WalletIcon size="1.1em" /> {Number(item.amount) === 0 ? "Isento" : `R$ ${Number(item.amount).toFixed(2).replace(".", ",")}`}</span>
                         </div>
 
                         {isConfirmed && pixTimeStr && (
                           <div style={{ fontSize: 11, color: isOverCapacity ? "#ef4444" : "var(--success)", fontWeight: 700, marginTop: 4 }}>
-                            ⚡ Confirmado em {pixDateStr} às {pixTimeStr} {orderInfo ? `(Vaga ${orderInfo.rank}/${maxV})` : ""}
+                            <BoltIcon size="1.1em" /> Confirmado em {pixDateStr} às {pixTimeStr} {orderInfo ? `(Vaga ${orderInfo.rank}/${maxV})` : ""}
                           </div>
                         )}
                       </div>
@@ -1044,7 +1052,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             }}
                             title="Confirmar pagamento Pix manualmente (remove automaticamente duplicatas pendentes)"
                           >
-                            ✓ Confirmar Pix Manualmente
+                            <CheckIcon size="1.1em" /> Confirmar Pix Manualmente
                           </button>
                         )}
 
@@ -1197,7 +1205,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               onClick={() => exportWorkshopCsv(selectedWorkshop, workshopRegistrations)}
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              📥 Exportar Lista deste Workshop (CSV)
+              <DownloadIcon size="1.1em" /> Exportar Lista deste Workshop (CSV)
             </button>
 
             <button
@@ -1216,7 +1224,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               }}
               title="Aumentar ou alterar número de vagas disponíveis deste workshop"
             >
-              <span>⚡</span> Aumentar / Alterar Vagas ({selectedWorkshopVagas})
+              <span><BoltIcon size="1.1em" /></span> Aumentar / Alterar Vagas ({selectedWorkshopVagas})
             </button>
 
             <button
@@ -1225,7 +1233,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               onClick={() => openManualModal(selectedWorkshop.id)}
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              ➕ Adicionar Inscrito Neste Workshop
+              <PlusIcon size="1.1em" /> Adicionar Inscrito Neste Workshop
             </button>
           </div>
 
@@ -1289,7 +1297,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 </p>
 
                 <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)" }}>
-                  📍 <strong>Local:</strong> {selectedWorkshop.local}
+                  <MapPinIcon size="1.1em" /> <strong>Local:</strong> {selectedWorkshop.local}
                 </p>
               </div>
 
@@ -1337,7 +1345,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     }}
                     title="Aumentar ou ajustar vagas deste workshop"
                   >
-                    <span>⚡</span> Alterar Vagas
+                    <span><BoltIcon size="1.1em" /></span> Alterar Vagas
                   </button>
                 </div>
 
@@ -1387,7 +1395,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>🚨</span>
+                  <span style={{ fontSize: 24 }}><AlertIcon size="1.1em" /></span>
                   <div>
                     <strong style={{ color: "var(--danger)", fontSize: 14, display: "block" }}>
                       Vagas oficiais deste Hands On ESGOTADAS às {selectedWorkshopSellout.soldOutTimeStr} ({selectedWorkshopSellout.soldOutDateStr})
@@ -1457,7 +1465,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     fontWeight: 600,
                   }}
                 >
-                  <span>🟢</span> Confirmados Oficiais ({selectedWorkshopCounts.official}/{selectedWorkshopVagas})
+                  <span><DotIcon size="0.7em" color="var(--success)" /></span> Confirmados Oficiais ({selectedWorkshopCounts.official}/{selectedWorkshopVagas})
                 </button>
 
                 <button
@@ -1474,7 +1482,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     fontWeight: 600,
                   }}
                 >
-                  <span>🟡</span> Pendentes Pix ({selectedWorkshopCounts.pending})
+                  <span><DotIcon size="0.7em" color="var(--warning)" /></span> Pendentes Pix ({selectedWorkshopCounts.pending})
                 </button>
 
                 <button
@@ -1491,7 +1499,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     fontWeight: 600,
                   }}
                 >
-                  <span>🔴</span> Além do Limite ({selectedWorkshopCounts.exceeded})
+                  <span><DotIcon size="0.7em" color="var(--danger)" /></span> Além do Limite ({selectedWorkshopCounts.exceeded})
                 </button>
 
                 <button
@@ -1500,7 +1508,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   className={`btn btn-sm ${classificationFilter === "ALL" ? "btn-primary" : "btn-secondary"}`}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
                 >
-                  <span>📋</span> Todos ({selectedWorkshopCounts.total})
+                  <span><ListIcon size="1.1em" /></span> Todos ({selectedWorkshopCounts.total})
                 </button>
               </div>
 
@@ -1527,7 +1535,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   gap: 8,
                 }}
               >
-                <span>⚠️</span>
+                <span><AlertIcon size="1.1em" /></span>
                 <span>
                   <strong>Além do Limite Permitido:</strong> Exibindo participantes que foram confirmados após o esgotamento das {selectedWorkshopVagas} vagas oficiais ou cadastros cancelados por esgotamento.
                 </span>
@@ -1645,7 +1653,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                   }}
                                   title={r.notes || "Inscrição cancelada (vagas esgotadas)"}
                                 >
-                                  🚫 Cancelado (Vagas Esgotadas)
+                                  <BanIcon size="1.1em" /> Cancelado (Vagas Esgotadas)
                                 </span>
                               )}
                             </div>
@@ -1656,7 +1664,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                 style={{ color: "inherit", textDecoration: "none" }}
                                 title={`Enviar e-mail para ${r.email}`}
                               >
-                                ✉️ {r.email}
+                                <MailIcon size="1.1em" /> {r.email}
                               </a>
                               {r.phone && (
                                 <>
@@ -1669,10 +1677,10 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                       style={{ color: "var(--success)", textDecoration: "none", fontWeight: 500 }}
                                       title="Conversar no WhatsApp"
                                     >
-                                      💬 {r.phone}
+                                      <MessageIcon size="1.1em" /> {r.phone}
                                     </a>
                                   ) : (
-                                    <span>📱 {r.phone}</span>
+                                    <span><PhoneIcon size="1.1em" /> {r.phone}</span>
                                   )}
                                 </>
                               )}
@@ -1705,7 +1713,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                       gap: 4,
                                     }}
                                   >
-                                    {isOverCapacity ? "⚠️ Confirmado (Excedente)" : "✓ Confirmado"}
+                                    {isOverCapacity ? "Confirmado (Excedente)" : "Confirmado"}
                                   </span>
 
                                   {confirmedRank && (
@@ -1727,7 +1735,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
                                 {pixDateTimeFull && (
                                   <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
-                                    ⚡ {pixDateTimeFull}
+                                    <BoltIcon size="1.1em" /> {pixDateTimeFull}
                                   </span>
                                 )}
                               </div>
@@ -1747,7 +1755,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                     width: "fit-content",
                                   }}
                                 >
-                                  ⏳ Pendente Pix
+                                  <ClockIcon size="1.1em" /> Pendente Pix
                                 </span>
                                 <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
                                   Criado às {createdTimeStr}
@@ -1783,7 +1791,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                     fontWeight: 700,
                                   }}
                                 >
-                                  ✓ Presente
+                                  <CheckIcon size="1.1em" /> Presente
                                 </span>
                                 <span style={{ display: "block", fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
                                   {new Date(r.checkedInAt!).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
@@ -1943,10 +1951,10 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                       >
                         {isConfirmed
                           ? isOverCapacity
-                            ? "⚠️ Confirmado (Excedente)"
-                            : "✓ Confirmado"
+                            ? "Confirmado (Excedente)"
+                            : "Confirmado"
                           : isPending
-                          ? "⏳ Pendente Pix"
+                          ? "Pendente Pix"
                           : r.status}
                       </span>
                     </div>
@@ -1985,7 +1993,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
                       {pixDateTimeFull && (
                         <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
-                          ⚡ {pixDateTimeFull}
+                          <BoltIcon size="1.1em" /> {pixDateTimeFull}
                         </span>
                       )}
 
@@ -2000,7 +2008,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             color: "var(--primary)",
                           }}
                         >
-                          ✓ Presente
+                          <CheckIcon size="1.1em" /> Presente
                         </span>
                       )}
                     </div>
@@ -2009,7 +2017,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     <div style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         <a href={`mailto:${r.email}`} style={{ color: "var(--text-muted)", textDecoration: "none" }}>
-                          ✉️ {r.email}
+                          <MailIcon size="1.1em" /> {r.email}
                         </a>
                         {whatsappUrl && (
                           <a
@@ -2018,13 +2026,13 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             rel="noopener noreferrer"
                             style={{ color: "var(--success)", textDecoration: "none", fontWeight: 600 }}
                           >
-                            💬 WhatsApp ({r.phone})
+                            <MessageIcon size="1.1em" /> WhatsApp ({r.phone})
                           </a>
                         )}
                       </div>
                       {(r.category || r.institution) && (
                         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                          🎓 {[r.category, r.institution].filter(Boolean).join(" · ")}
+                          <GradCapIcon size="1.1em" /> {[r.category, r.institution].filter(Boolean).join(" · ")}
                         </span>
                       )}
                     </div>
@@ -2046,7 +2054,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             fontSize: 12,
                           }}
                         >
-                          ✓ Confirmar Pix
+                          <CheckIcon size="1.1em" /> Confirmar Pix
                         </button>
                       )}
 
@@ -2123,7 +2131,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   marginBottom: 6,
                 }}
               >
-                <span>🧪</span> COPOL 2026 · Vagas e Credenciamento
+                <span><FlaskIcon size="1.1em" /></span> COPOL 2026 · Vagas e Credenciamento
               </div>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Workshops Hands On</h1>
               <p style={{ margin: "4px 0 0", fontSize: 14, color: "var(--text-muted)" }}>
@@ -2151,7 +2159,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     color: handsOnOpen ? "var(--success)" : "var(--danger)",
                   }}
                 >
-                  {handsOnOpen ? "🟢 Inscrições ABERTAS no Site" : "🔴 Inscrições FECHADAS / PAUSADAS"}
+                  {handsOnOpen ? "Inscrições ABERTAS no Site" : "Inscrições FECHADAS / PAUSADAS"}
                 </span>
 
                 <button
@@ -2164,8 +2172,8 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   {togglingOpen
                     ? "Salvando…"
                     : handsOnOpen
-                    ? "🔒 Fechar / Pausar"
-                    : "🔓 Liberar no Site"}
+                    ? "Fechar / Pausar"
+                    : "Liberar no Site"}
                 </button>
               </div>
 
@@ -2175,7 +2183,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 onClick={() => openManualModal()}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                ➕ Novo Inscrito Manual
+                <PlusIcon size="1.1em" /> Novo Inscrito Manual
               </button>
 
               <button
@@ -2184,7 +2192,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 onClick={loadData}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                🔄 Atualizar
+                <RefreshIcon size="1.1em" /> Atualizar
               </button>
 
               <button
@@ -2193,7 +2201,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 onClick={exportAllWorkshopsCsv}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                📥 Exportar CSV
+                <DownloadIcon size="1.1em" /> Exportar CSV
               </button>
 
               <button
@@ -2212,7 +2220,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 }}
                 title="Cancela cobranças Pix pendentes no Mercado Pago para workshops que já atingiram o limite oficial de vagas"
               >
-                ⚡ {syncingSoldOut ? "Cancelando Pix…" : "Cancelar Pix Esgotados"}
+                <BoltIcon size="1.1em" /> {syncingSoldOut ? "Cancelando Pix…" : "Cancelar Pix Esgotados"}
               </button>
 
               {registrations.length > 0 && (
@@ -2230,7 +2238,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   }}
                   title="Excluir manualmente todas as inscrições dos Hands On"
                 >
-                  🗑️ Excluir Todos ({registrations.length})
+                  <TrashIcon size="1.1em" /> Excluir Todos ({registrations.length})
                 </button>
               )}
             </div>
@@ -2318,7 +2326,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 onClick={() => setViewMode("WORKSHOPS")}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
               >
-                <span>🧪</span> Catálogo por Workshops (12)
+                <span><FlaskIcon size="1.1em" /></span> Catálogo por Workshops (12)
               </button>
 
               <button
@@ -2327,7 +2335,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 onClick={() => setViewMode("ALL_PARTICIPANTS")}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
               >
-                <span>👥</span> Auditoria de Todos os Inscritos ({totalInscritosGlobal})
+                <span><UsersIcon size="1.1em" /></span> Auditoria de Todos os Inscritos ({totalInscritosGlobal})
               </button>
             </div>
 
@@ -2387,7 +2395,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))",
               gap: 16,
             }}
           >
@@ -2468,7 +2476,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     )}
 
                     <p style={{ margin: 0, fontSize: 11, color: "var(--text-muted)" }}>
-                      📍 {w.local}
+                      <MapPinIcon size="1.1em" /> {w.local}
                     </p>
                   </div>
 
@@ -2501,7 +2509,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             }}
                             title="Aumentar ou ajustar vagas deste workshop"
                           >
-                            <span>⚡</span> Vagas ({effectiveVagas})
+                            <span><BoltIcon size="1.1em" /></span> Vagas ({effectiveVagas})
                           </button>
                         </div>
                         <strong style={{ color: isFull ? "var(--danger)" : "var(--text)" }}>
@@ -2545,7 +2553,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             alignItems: "center",
                           }}
                         >
-                          <span>🚨 Esgotou às {sellout.soldOutTimeStr}</span>
+                          <span><AlertIcon size="1.1em" /> Esgotou às {sellout.soldOutTimeStr}</span>
                           {sellout.overCapacityCount > 0 && (
                             <span style={{ color: "var(--warning)", fontWeight: 700 }}>
                               +{sellout.overCapacityCount} excedente(s)
@@ -2626,7 +2634,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     fontWeight: 600,
                   }}
                 >
-                  <span>🟢</span> Confirmados Oficiais ({globalCounts.official})
+                  <span><DotIcon size="0.7em" color="var(--success)" /></span> Confirmados Oficiais ({globalCounts.official})
                 </button>
 
                 <button
@@ -2643,7 +2651,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     fontWeight: 600,
                   }}
                 >
-                  <span>🟡</span> Pendentes Pix ({globalCounts.pending})
+                  <span><DotIcon size="0.7em" color="var(--warning)" /></span> Pendentes Pix ({globalCounts.pending})
                 </button>
 
                 <button
@@ -2660,7 +2668,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     fontWeight: 600,
                   }}
                 >
-                  <span>🔴</span> Além do Limite ({globalCounts.exceeded})
+                  <span><DotIcon size="0.7em" color="var(--danger)" /></span> Além do Limite ({globalCounts.exceeded})
                 </button>
 
                 <button
@@ -2669,7 +2677,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   className={`btn btn-sm ${classificationFilter === "ALL" ? "btn-primary" : "btn-secondary"}`}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
                 >
-                  <span>📋</span> Todos ({globalCounts.total})
+                  <span><ListIcon size="1.1em" /></span> Todos ({globalCounts.total})
                 </button>
               </div>
 
@@ -2711,7 +2719,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   gap: 8,
                 }}
               >
-                <span>⚠️</span>
+                <span><AlertIcon size="1.1em" /></span>
                 <span>
                   <strong>Além do Limite Permitido:</strong> Exibindo participantes que foram confirmados após o esgotamento oficial do workshop ou cadastros com Pix cancelado por falta de vagas. Total: <strong>{allFilteredParticipants.length}</strong> registro(s).
                 </span>
@@ -2822,7 +2830,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
                             <div style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                               <a href={`mailto:${r.email}`} style={{ color: "inherit", textDecoration: "none" }}>
-                                ✉️ {r.email}
+                                <MailIcon size="1.1em" /> {r.email}
                               </a>
                               {r.phone && (
                                 <>
@@ -2834,10 +2842,10 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                       rel="noopener noreferrer"
                                       style={{ color: "var(--success)", textDecoration: "none", fontWeight: 500 }}
                                     >
-                                      💬 {r.phone}
+                                      <MessageIcon size="1.1em" /> {r.phone}
                                     </a>
                                   ) : (
-                                    <span>📱 {r.phone}</span>
+                                    <span><PhoneIcon size="1.1em" /> {r.phone}</span>
                                   )}
                                 </>
                               )}
@@ -2877,7 +2885,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                       fontWeight: 700,
                                     }}
                                   >
-                                    {isOverCapacity ? "⚠️ Confirmado (Excedente)" : "✓ Confirmado"}
+                                    {isOverCapacity ? "Confirmado (Excedente)" : "Confirmado"}
                                   </span>
 
                                   {confirmedRank && (
@@ -2899,7 +2907,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
                                 {pixDateTimeFull && (
                                   <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
-                                    ⚡ {pixDateTimeFull}
+                                    <BoltIcon size="1.1em" /> {pixDateTimeFull}
                                   </span>
                                 )}
                               </div>
@@ -2916,7 +2924,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                       fontWeight: 700,
                                     }}
                                   >
-                                    ⏳ Pendente Pix
+                                    <ClockIcon size="1.1em" /> Pendente Pix
                                   </span>
 
                                   {sellout?.isFull && (
@@ -2931,7 +2939,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                         border: "1px solid rgba(239, 68, 68, 0.35)",
                                       }}
                                     >
-                                      🚫 Vagas Esgotadas
+                                      <BanIcon size="1.1em" /> Vagas Esgotadas
                                     </span>
                                   )}
                                 </div>
@@ -2950,7 +2958,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                   fontWeight: 700,
                                 }}
                               >
-                                {r.status === "CANCELLED" ? "🚫 Cancelado (Esgotado)" : r.status}
+                                {r.status === "CANCELLED" ? "Cancelado (Esgotado)" : r.status}
                               </span>
                             )}
                           </td>
@@ -2968,7 +2976,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                                   fontWeight: 700,
                                 }}
                               >
-                                ✓ Presente
+                                <CheckIcon size="1.1em" /> Presente
                               </span>
                             ) : (
                               <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
@@ -3121,12 +3129,12 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                       >
                         {isConfirmed
                           ? isOverCapacity
-                            ? "⚠️ Confirmado (Excedente)"
-                            : "✓ Confirmado"
+                            ? "Confirmado (Excedente)"
+                            : "Confirmado"
                           : isPending
-                          ? "⏳ Pendente Pix"
+                          ? "Pendente Pix"
                           : r.status === "CANCELLED"
-                          ? "🚫 Cancelado (Esgotado)"
+                          ? "Cancelado (Esgotado)"
                           : r.status}
                       </span>
                     </div>
@@ -3173,7 +3181,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
                       {pixDateTimeFull && (
                         <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
-                          ⚡ {pixDateTimeFull}
+                          <BoltIcon size="1.1em" /> {pixDateTimeFull}
                         </span>
                       )}
 
@@ -3188,7 +3196,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             color: "var(--primary)",
                           }}
                         >
-                          ✓ Presente
+                          <CheckIcon size="1.1em" /> Presente
                         </span>
                       )}
                     </div>
@@ -3196,7 +3204,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     {/* Contato */}
                     <div style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <a href={`mailto:${r.email}`} style={{ color: "var(--text-muted)", textDecoration: "none" }}>
-                        ✉️ {r.email}
+                        <MailIcon size="1.1em" /> {r.email}
                       </a>
                       {whatsappUrl && (
                         <a
@@ -3205,7 +3213,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                           rel="noopener noreferrer"
                           style={{ color: "var(--success)", textDecoration: "none", fontWeight: 600 }}
                         >
-                          💬 WhatsApp ({r.phone})
+                          <MessageIcon size="1.1em" /> WhatsApp ({r.phone})
                         </a>
                       )}
                     </div>
@@ -3227,7 +3235,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                             fontSize: 12,
                           }}
                         >
-                          ✓ Confirmar Pix
+                          <CheckIcon size="1.1em" /> Confirmar Pix
                         </button>
                       )}
 
@@ -3313,7 +3321,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               }}
             >
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                ➕ Adicionar Inscrito no Hands On
+                <PlusIcon size="1.1em" /> Adicionar Inscrito no Hands On
               </h3>
               <button
                 type="button"
@@ -3369,6 +3377,20 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     ))}
                   </optgroup>
                 </select>
+              </label>
+
+              <label className="switch-row">
+                <span className="switch-text">
+                  <strong>Inscrição isenta (cortesia)</strong>
+                  <small>Garante a vaga sem cobrança e não entra na receita do evento.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  className="switch"
+                  checked={manualExempt}
+                  onChange={(e) => setManualExempt(e.target.checked)}
+                />
               </label>
 
               <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
@@ -3452,12 +3474,13 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                 <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
                   <span>Status da Inscrição *</span>
                   <select
-                    value={manualStatus}
+                    value={manualExempt ? "CONFIRMED" : manualStatus}
+                    disabled={manualExempt}
                     onChange={(e) => setManualStatus(e.target.value as any)}
                     style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
                   >
-                    <option value="CONFIRMED">✓ Confirmado (Vaga Garantida)</option>
-                    <option value="PENDING">⏳ Pendente</option>
+                    <option value="CONFIRMED">Confirmado (Vaga Garantida)</option>
+                    <option value="PENDING">Pendente</option>
                   </select>
                 </label>
               </div>
@@ -3558,7 +3581,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     textTransform: "uppercase",
                   }}
                 >
-                  ⚡ Capacidade de Vagas
+                  <BoltIcon size="1.1em" /> Capacidade de Vagas
                 </span>
                 <h3 style={{ margin: "6px 0 2px", fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
                   {capacityModalWorkshop.titulo}
@@ -3614,7 +3637,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   fontWeight: 600,
                 }}
               >
-                ✓ {capacitySuccess}
+                <CheckIcon size="1.1em" /> {capacitySuccess}
               </div>
             )}
 
@@ -3767,12 +3790,12 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                     >
                       {diff > 0 ? (
                         <span>
-                          🟢 <strong>Aumentando em +{diff} vaga(s):</strong> O limite passará de {currentVagas} para {capacityInput}.{" "}
+                          <DotIcon size="0.7em" color="var(--success)" /> <strong>Aumentando em +{diff} vaga(s):</strong> O limite passará de {currentVagas} para {capacityInput}.{" "}
                           Novas inscrições serão liberadas no site oficial e pagamentos Pix pendentes que estavam bloqueados poderão ser confirmados.
                         </span>
                       ) : diff < 0 ? (
                         <span>
-                          ⚠️ <strong>Reduzindo capacidade:</strong> O limite passará de {currentVagas} para {capacityInput}.{" "}
+                          <AlertIcon size="1.1em" /> <strong>Reduzindo capacidade:</strong> O limite passará de {currentVagas} para {capacityInput}.{" "}
                           {capacityInput < wsStats.confirmed ? (
                             <span style={{ color: "#ef4444", fontWeight: 700 }}>
                               Atenção: Já existem {wsStats.confirmed} inscritos confirmados. {wsStats.confirmed - capacityInput} participantes ficarão como excedentes da nova capacidade.

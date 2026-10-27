@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ParagraphSegment, ParagraphTokenKey } from "../api/client";
+import { PaletteIcon } from "./Icons";
 
 /**
  * Editor de texto rico pro parágrafo descritivo do certificado — like
@@ -239,7 +240,7 @@ export function RichTextEditor({
           }}
           title="Outra cor"
         >
-          🎨
+          <PaletteIcon size="1.1em" />
         </button>
         {customColorOpen && (
           <input

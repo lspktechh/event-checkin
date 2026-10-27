@@ -18,6 +18,8 @@ import { BatchesTab } from "./event/BatchesTab";
 import { ScheduleTab } from "./event/ScheduleTab";
 import { CredenciamentoTab } from "./event/CredenciamentoTab";
 import { HandsOnTab } from "./event/HandsOnTab";
+import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, SmartphoneIcon } from "../components/Icons";
+import { Sheet } from "../components/Sheet";
 
 type Tab =
   | "credenciamento"
@@ -46,7 +48,7 @@ const TABS: { key: Tab; label: string; permission: string; gestao?: string[] }[]
   { key: "certificates", label: "Certificados", permission: "certificates.view" },
   {
     key: "credenciamento",
-    label: "📷 Credenciamento",
+    label: "Credenciamento",
     permission: "participants.view",
     gestao: ["participants.edit"],
   },
@@ -102,12 +104,12 @@ export function EventDetailPage() {
   const visibleTabs = useMemo(() => {
     const list = [...TABS];
     if (isCopol) {
-      // Insere "🧪 Hands On" logo após a aba "Inscritos"
+      // Insere "Hands On" logo após a aba "Inscritos"
       const inscritosIdx = list.findIndex((t) => t.key === "inscriptions");
       const insertAt = inscritosIdx >= 0 ? inscritosIdx + 1 : 1;
       list.splice(insertAt, 0, {
         key: "handson" as Tab,
-        label: "🧪 Hands On",
+        label: "Hands On",
         permission: "participants.view",
       });
     }
@@ -118,6 +120,7 @@ export function EventDetailPage() {
     );
   }, [isCopol, hasPermission, contaDeAcompanhamento]);
   const [tab, setTab] = useState<Tab | null>(null);
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
@@ -231,7 +234,7 @@ export function EventDetailPage() {
     <div className="stack">
       <RealtimeNotificationToasts notifications={realtimeNotifications} onDismiss={dismissNotification} />
       <Link to="/eventos" className="muted" style={{ fontSize: 13 }}>
-        ← Eventos
+        <ArrowLeftIcon size="1.1em" /> Eventos
       </Link>
 
       <div className="spread">
@@ -291,7 +294,7 @@ export function EventDetailPage() {
               style={canEditEvent ? { cursor: "pointer" } : undefined}
               title={canEditEvent ? "Clique para editar" : undefined}
             >
-              <h1 style={{ fontSize: 22, margin: 0 }}>{event.name}</h1>
+              <h1 style={{ margin: 0 }}>{event.name}</h1>
               <p className="muted" style={{ margin: "4px 0 0" }}>
                 {new Date(event.startDate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} —{" "}
                 {new Date(event.endDate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
@@ -315,7 +318,7 @@ export function EventDetailPage() {
               padding: "8px 14px",
             }}
           >
-            📱 Fazer Credenciamento
+            <SmartphoneIcon size="1.1em" /> Fazer Credenciamento
           </Link>
           {canEditEvent ? (
             <select value={event.status} onChange={(e) => handleStatusChange(e.target.value as api.EventRecord["status"])} style={{ width: 140 }}>
@@ -329,6 +332,35 @@ export function EventDetailPage() {
           )}
         </div>
       </div>
+
+      {visibleTabs.length > 0 ? (
+        <button type="button" className="tab-menu-trigger" onClick={() => setTabMenuOpen(true)} aria-haspopup="dialog">
+          <span className="tab-menu-label">
+            <span className="tab-menu-eyebrow">Seção do evento</span>
+            <strong>{visibleTabs.find((t) => t.key === activeTab)?.label ?? "Selecionar"}</strong>
+          </span>
+          <ChevronDownIcon size={20} color="var(--text-muted)" />
+        </button>
+      ) : null}
+
+      <Sheet open={tabMenuOpen} onClose={() => setTabMenuOpen(false)} title="Seções do evento">
+        <div className="sheet-group">
+          {visibleTabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={`sheet-item${activeTab === t.key ? " active" : ""}`}
+              onClick={() => {
+                setTab(t.key);
+                setTabMenuOpen(false);
+              }}
+            >
+              {t.label}
+              {activeTab === t.key ? <CheckIcon size={18} /> : null}
+            </button>
+          ))}
+        </div>
+      </Sheet>
 
       {visibleTabs.length > 0 ? (
         <div className="tab-bar">
@@ -365,22 +397,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       type="button"
       onClick={onClick}
       className={`tab-btn ${active ? "active" : ""}`}
-      style={{
-        background: active ? "var(--primary)" : "var(--surface, #ffffff)",
-        color: active ? "#ffffff" : "var(--text, #334155)",
-        border: active ? "1px solid var(--primary)" : "1px solid var(--border, #e2e8f0)",
-        borderRadius: 8,
-        padding: "8px 14px",
-        fontSize: "13.5px",
-        fontWeight: active ? 600 : 500,
-        whiteSpace: "nowrap",
-        cursor: "pointer",
-        transition: "all 0.15s ease",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        boxShadow: active ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
-      }}
+      aria-current={active ? "page" : undefined}
     >
       {children}
     </button>

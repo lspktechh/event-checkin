@@ -33,7 +33,7 @@ export function ApkPage() {
   return (
     <div className="stack">
       <div>
-        <h1 style={{ fontSize: 22, margin: 0 }}>App do terminal (APK)</h1>
+        <h1 style={{ margin: 0 }}>App do terminal (APK)</h1>
         <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
           Build Android do app usado nos terminais de credenciamento (Elgin M10 Pro / iMin D1).
         </p>

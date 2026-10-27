@@ -88,3 +88,13 @@ export function formatDocument(doc?: string | null): string {
 
   return trimmed;
 }
+
+const EMOJI_RE = /(?:[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]️?(?:‍[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]️?)*)\s*/gu;
+
+/**
+ * Tira emojis de textos que vêm prontos do servidor (ex.: categoria
+ * "🧪 Hands On: Workshop"), para a tela exibir só o texto.
+ */
+export function stripEmoji(value: string | null | undefined): string {
+  return (value ?? "").replace(EMOJI_RE, "").trim();
+}

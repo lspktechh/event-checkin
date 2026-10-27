@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { CreditosParceiros } from "@/components/CreditosParceiros";
+import { CheckIcon, ClockIcon, FlaskIcon, MapPinIcon } from "@/components/Icons";
 import { jsPDF } from "jspdf";
 import {
   getParticipantMe,
@@ -488,7 +489,7 @@ export default function CheckInPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--primary)]/10 px-2.5 py-0.5 text-xs font-semibold text-[var(--primary)] mb-1">
-                  <span>🧪</span> Hands On Credenciamento
+                  <FlaskIcon size={13} /> Hands On Credenciamento
                 </div>
                 <h2 className="text-base font-bold text-[var(--foreground)]">
                   Seus Workshops Inscritos
@@ -527,15 +528,15 @@ export default function CheckInPage() {
                       {/* Status Pill */}
                       {isCheckedIn ? (
                         <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                          ✓ Presente
+                          <CheckIcon size={11} /> Presente
                         </span>
                       ) : isConfirmed ? (
                         <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
-                          ✓ Confirmado
+                          <CheckIcon size={11} /> Confirmado
                         </span>
                       ) : isPending ? (
                         <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                          ⏳ Aguardando Pix
+                          <ClockIcon size={11} /> Aguardando Pix
                         </span>
                       ) : (
                         <span className="shrink-0 rounded-full bg-zinc-500/15 px-2.5 py-0.5 text-[11px] font-bold text-zinc-500">
@@ -547,7 +548,7 @@ export default function CheckInPage() {
                     {/* Informações Obrigatórias: Que horas é & Onde vai ser */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs py-2 px-3 rounded-lg bg-[var(--muted)]/50 mb-3 border border-[var(--border)]/50">
                       <div className="flex items-center gap-2">
-                        <span className="text-base">⏰</span>
+                        <ClockIcon size={18} className="text-[var(--primary)]" />
                         <div>
                           <span className="text-[10px] text-[var(--muted-foreground)] block uppercase font-medium">
                             Que horas é
@@ -559,7 +560,7 @@ export default function CheckInPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-base">📍</span>
+                        <MapPinIcon size={18} className="text-[var(--primary)]" />
                         <div>
                           <span className="text-[10px] text-[var(--muted-foreground)] block uppercase font-medium">
                             Onde vai ser
@@ -596,7 +597,7 @@ export default function CheckInPage() {
 
                     {isCheckedIn && (
                       <p className="text-center text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-2">
-                        ✓ Check-in registrado em{" "}
+                        <CheckIcon size={13} className="inline" /> Check-in registrado em{" "}
                         {new Date(ho.checkedInAt!).toLocaleString("pt-BR", {
                           day: "2-digit",
                           month: "2-digit",
@@ -612,7 +613,7 @@ export default function CheckInPage() {
           </div>
         ) : participant.event?.name?.toLowerCase().includes("copol") ? (
           <div className="cartao p-5 text-center border border-[var(--border)] bg-gradient-to-b from-[var(--background)] to-[var(--muted)]/40">
-            <span className="text-2xl mb-1 block">🧪</span>
+            <FlaskIcon size={26} className="mx-auto mb-1 text-[var(--primary)]" />
             <h3 className="text-sm font-bold text-[var(--foreground)]">
               Workshops Hands On COPOL 2026
             </h3>
@@ -736,7 +737,7 @@ export default function CheckInPage() {
         {participant.lastCheckIn && (
           <div className="rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/5 p-4 text-center">
             <p className="text-sm text-[var(--primary)]">
-              ✓ Presença registrada
+              <CheckIcon size={13} className="inline" /> Presença registrada
             </p>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
               {new Date(participant.lastCheckIn.checkedInAt).toLocaleString(

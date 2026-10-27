@@ -3,6 +3,7 @@ import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { ColorField, ContentSection, ListEditor, TextField } from "../../components/FormFields";
 import { RichTextEditor } from "../../components/RichTextEditor";
+import { XIcon } from "../../components/Icons";
 
 // Espelha DEFAULT_CERTIFICATE_SETTINGS do backend
 // (certificate-settings.ts) — preenche o formulário com o que já está no
@@ -465,8 +466,8 @@ export function CertificatesTab({ eventId }: { eventId: string }) {
                     type="button"
                     disabled={signatories.length <= 1}
                     title="Remover signatário"
-                  >
-                    ✕
+                   aria-label="Fechar">
+                    <XIcon size="1.1em" />
                   </button>
                 </div>
               ))}

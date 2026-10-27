@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import * as api from "../../api/client";
-import { CheckIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, CardIcon, CheckIcon, IdCardIcon, MailIcon, PhoneIcon, SmartphoneIcon, TrashIcon, UsersIcon, XIcon } from "../../components/Icons";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
-import { formatPhone, formatDocument } from "../../utils/formatters";
+import { formatPhone, formatDocument, stripEmoji } from "../../utils/formatters";
 import { useAuth } from "../../auth/AuthContext";
 
 function BanIcon({ size = 13, color = "currentColor" }: { size?: number; color?: string }) {
@@ -34,7 +34,9 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
   const [methodFilter, setMethodFilter] = useState<"ALL" | "PIX" | "CARD">("ALL");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<api.InscriptionReportItem | null>(null);
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches ? "cards" : "table"
+  );
 
   useEffect(() => {
     loadInscriptions(true);
@@ -342,7 +344,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
       doc.text(truncate(item.email, 34), cols[1] + 2, y + 4);
       doc.text(formatPhone(item.phone), cols[2] + 2, y + 4);
       doc.text(formatDocument(item.document), cols[3] + 2, y + 4);
-      doc.text(truncate(item.category, 24), cols[4] + 2, y + 4);
+      doc.text(truncate(stripEmoji(item.category), 24), cols[4] + 2, y + 4);
       doc.text(`R$ ${item.amount.toFixed(2)}`, cols[5] + 2, y + 4);
       const metodoStr = item.paymentMethod === "CARD" ? "Cartão" : item.paymentMethod === "PIX" ? "Pix" : "Manual";
       const statusLabel =
@@ -419,8 +421,8 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
               fontSize: 16,
               padding: "0 4px",
             }}
-          >
-            ✕
+           aria-label="Fechar">
+            <XIcon size="1.1em" />
           </button>
         </div>
       )}
@@ -451,14 +453,14 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
               fontSize: 16,
               padding: "0 4px",
             }}
-          >
-            ✕
+           aria-label="Fechar">
+            <XIcon size="1.1em" />
           </button>
         </div>
       )}
 
       {/* Cards de Métricas */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
         <MetricCard label="Total de Inscritos" value={totalCount} onClick={() => setStatusFilter("ALL")} />
         <MetricCard
           label="Pagamentos Confirmados"
@@ -579,7 +581,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
           <div style={{ position: "relative", flex: "1 1 340px", maxWidth: 500 }}>
             <input
               type="text"
-              placeholder="🔍 Buscar por nome, e-mail ou CPF..."
+              placeholder="Buscar por nome, e-mail ou CPF..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{
@@ -607,8 +609,8 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   lineHeight: 1,
                 }}
                 title="Limpar pesquisa"
-              >
-                ✕
+               aria-label="Fechar">
+                <XIcon size="1.1em" />
               </button>
             )}
           </div>
@@ -620,10 +622,10 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
               Todos Meios
             </FilterButton>
             <FilterButton active={methodFilter === "PIX"} onClick={() => setMethodFilter("PIX")}>
-              📱 Pix ({inscriptions.filter((i) => i.paymentMethod === "PIX").length})
+              <SmartphoneIcon size="1.1em" /> Pix ({inscriptions.filter((i) => i.paymentMethod === "PIX").length})
             </FilterButton>
             <FilterButton active={methodFilter === "CARD"} onClick={() => setMethodFilter("CARD")}>
-              💳 Cartão ({inscriptions.filter((i) => i.paymentMethod === "CARD").length})
+              <CardIcon size="1.1em" /> Cartão ({inscriptions.filter((i) => i.paymentMethod === "CARD").length})
             </FilterButton>
           </div>
         </div>
@@ -645,8 +647,8 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
             flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#b45309" }}>
-            <span style={{ fontSize: 16 }}>⚠️</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#ffb340" }}>
+            <span style={{ fontSize: 16 }}><AlertIcon size="1.1em" /></span>
             <span>
               Existem <strong>{duplicatePendingCount}</strong> inscrições pendentes de participantes que <strong>já estão confirmados</strong> no evento.
             </span>
@@ -685,8 +687,8 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
             flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#b45309" }}>
-            <span style={{ fontSize: 16 }}>⚠️</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#ffb340" }}>
+            <span style={{ fontSize: 16 }}><AlertIcon size="1.1em" /></span>
             <span>
               Filtrando <strong>{filtered.length}</strong> inscrições pendentes de participantes que <strong>já possuem inscrição confirmada</strong> no evento.
             </span>
@@ -733,7 +735,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                           className="badge"
                           style={{
                             background: "rgba(234, 179, 8, 0.15)",
-                            color: "#b45309",
+                            color: "#ffb340",
                             borderColor: "rgba(234, 179, 8, 0.4)",
                             fontSize: 10,
                             fontWeight: 700,
@@ -748,7 +750,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                               : "Este participante já possui uma inscrição confirmada/paga no evento"
                           }
                         >
-                          ⚠️ Duplicado (Já Confirmado)
+                          <AlertIcon size="1.1em" /> Duplicado (Já Confirmado)
                         </span>
                       )}
                     </div>
@@ -763,11 +765,11 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         gap: "4px 10px",
                       }}
                     >
-                      <span title="E-mail">✉️ {item.email}</span>
-                      {item.phone && <span title="Telefone">📞 {formatPhone(item.phone)}</span>}
+                      <span title="E-mail"><MailIcon size="1.1em" /> {item.email}</span>
+                      {item.phone && <span title="Telefone"><PhoneIcon size="1.1em" /> {formatPhone(item.phone)}</span>}
                       {item.document && (
                         <span title="CPF" style={{ fontFamily: "monospace" }}>
-                          🪪 {formatDocument(item.document)}
+                          <IdCardIcon size="1.1em" /> {formatDocument(item.document)}
                         </span>
                       )}
                     </div>
@@ -779,7 +781,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                             className="badge"
                             style={{
                               background: "rgba(16, 185, 129, 0.15)",
-                              color: "#059669",
+                              color: "#30d158",
                               borderColor: "rgba(16, 185, 129, 0.35)",
                               fontSize: 11,
                               fontWeight: 700,
@@ -788,7 +790,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                               gap: 4,
                             }}
                           >
-                            👥 Equipe: {item.teamName}
+                            <UsersIcon size="1.1em" /> Equipe: {item.teamName}
                           </span>
                         </div>
                         {item.teamMembers && item.teamMembers.length > 0 && (
@@ -800,7 +802,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                     )}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
-                    <div style={{ fontWeight: 500 }}>{item.category}</div>
+                    <div style={{ fontWeight: 500 }}>{stripEmoji(item.category)}</div>
                     <div style={{ fontWeight: 700, color: "var(--primary)", marginTop: 2, fontSize: 13 }}>
                       R$ {item.amount.toFixed(2).replace(".", ",")}
                     </div>
@@ -825,14 +827,14 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                           className="badge"
                           style={{
                             background: "rgba(234, 179, 8, 0.12)",
-                            color: "#b45309",
+                            color: "#ffb340",
                             borderColor: "rgba(234, 179, 8, 0.35)",
                             fontSize: 10,
                             fontWeight: 700,
                           }}
                           title={`Já pago no lote ${getConfirmedDuplicate(item)?.category ?? "evento"}`}
                         >
-                          Já Pago ({getConfirmedDuplicate(item)?.category ? truncate(getConfirmedDuplicate(item)!.category, 14) : "Confirmado"})
+                          Já Pago ({getConfirmedDuplicate(item)?.category ? truncate(stripEmoji(getConfirmedDuplicate(item)!.category), 14) : "Confirmado"})
                         </span>
                       )}
 
@@ -848,7 +850,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                           }}
                           title="Pagamento via Pix"
                         >
-                          📱 Pix
+                          <SmartphoneIcon size="1.1em" /> Pix
                         </span>
                       )}
 
@@ -864,7 +866,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                           }}
                           title="Pagamento via Cartão"
                         >
-                          💳 Cartão
+                          <CardIcon size="1.1em" /> Cartão
                         </span>
                       )}
 
@@ -957,7 +959,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
           </table>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: 14 }}>
           {filtered.map((item) => (
             <div
               key={item.id}
@@ -973,7 +975,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         className="badge"
                         style={{
                           background: "rgba(234, 179, 8, 0.15)",
-                          color: "#b45309",
+                          color: "#ffb340",
                           borderColor: "rgba(234, 179, 8, 0.4)",
                           fontSize: 10,
                           fontWeight: 700,
@@ -984,7 +986,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                             : "Participante já possui inscrição confirmada"
                         }
                       >
-                        ⚠️ Duplicado
+                        <AlertIcon size="1.1em" /> Duplicado
                       </span>
                     )}
                   </div>
@@ -1010,7 +1012,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         fontWeight: 600,
                       }}
                     >
-                      📱 Pix
+                      <SmartphoneIcon size="1.1em" /> Pix
                     </span>
                   )}
 
@@ -1025,7 +1027,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         fontWeight: 600,
                       }}
                     >
-                      💳 Cartão
+                      <CardIcon size="1.1em" /> Cartão
                     </span>
                   )}
                 </div>
@@ -1039,13 +1041,13 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                     borderRadius: 6,
                     padding: "8px 10px",
                     fontSize: 12,
-                    color: "#b45309",
+                    color: "#ffb340",
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
                   }}
                 >
-                  <span>⚠️</span>
+                  <span><AlertIcon size="1.1em" /></span>
                   <span>
                     <strong>Inscrição Duplicada:</strong> participante já possui inscrição confirmada no evento
                     {getConfirmedDuplicate(item) ? ` (${getConfirmedDuplicate(item)?.category})` : ""}.
@@ -1066,7 +1068,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
               >
                 <div className="spread">
                   <span className="muted">Lote / Categoria:</span>
-                  <span style={{ fontWeight: 500 }}>{item.category}</span>
+                  <span style={{ fontWeight: 500 }}>{stripEmoji(item.category)}</span>
                 </div>
                 <div className="spread">
                   <span className="muted">Valor:</span>
@@ -1097,9 +1099,9 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   <span className="muted">Meio de Pagamento:</span>
                   <span style={{ fontWeight: 600 }}>
                     {item.paymentMethod === "CARD"
-                      ? "💳 Cartão de Crédito"
+                      ? "Cartão de Crédito"
                       : item.paymentMethod === "PIX"
-                        ? "📱 Pix"
+                        ? "Pix"
                         : item.amount === 0
                           ? "Gratuito / Isento"
                           : "Manual / Não informado"}
@@ -1111,8 +1113,8 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                 </div>
                 {item.teamName && (
                   <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
-                    <div style={{ fontWeight: 700, color: "#059669", fontSize: 12 }}>
-                      👥 Equipe: {item.teamName}
+                    <div style={{ fontWeight: 700, color: "#30d158", fontSize: 12 }}>
+                      <UsersIcon size="1.1em" /> Equipe: {item.teamName}
                     </div>
                     {item.teamMembers && item.teamMembers.length > 0 && (
                       <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>

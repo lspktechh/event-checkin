@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { CardIcon, ClockIcon, DotIcon, MailIcon, SmartphoneIcon, XIcon } from "./Icons";
+import { stripEmoji } from "../utils/formatters";
 
 export interface RealtimeInscriptionNotification {
   id: string;
@@ -21,20 +23,7 @@ export function RealtimeNotificationToasts({
   if (notifications.length === 0) return null;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 20,
-        right: 20,
-        zIndex: 99999,
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        maxWidth: 380,
-        width: "calc(100vw - 40px)",
-        pointerEvents: "none",
-      }}
-    >
+    <div className="toast-stack">
       {notifications.map((item) => (
         <ToastItem key={item.id} notification={item} onDismiss={() => onDismiss(item.id)} />
       ))}
@@ -99,7 +88,7 @@ function ToastItem({
             }}
           >
             {notification.category?.toLowerCase().includes("hands on") || notification.category?.startsWith("🧪")
-              ? "🧪 Nova Inscrição · Hands On"
+              ? "Nova Inscrição · Hands On"
               : "Nova Inscrição"}
           </span>
         </div>
@@ -121,8 +110,8 @@ function ToastItem({
           onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
           onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.8")}
           title="Fechar notificação"
-        >
-          ✕
+         aria-label="Fechar">
+          <XIcon size="1.1em" />
         </button>
       </div>
 
@@ -152,7 +141,7 @@ function ToastItem({
           wordBreak: "break-all",
         }}
       >
-        <span style={{ fontSize: 13 }}>✉️</span>
+        <span style={{ fontSize: 13 }}><MailIcon size="1.1em" /></span>
         <span>{notification.email}</span>
       </div>
 
@@ -167,7 +156,7 @@ function ToastItem({
           gap: 6,
         }}
       >
-        <span style={{ fontSize: 12 }}>🕒</span>
+        <span style={{ fontSize: 12 }}><ClockIcon size="1.1em" /></span>
         <span>
           {new Date(notification.createdAt).toLocaleTimeString("pt-BR", {
             hour: "2-digit",
@@ -206,7 +195,7 @@ function ToastItem({
               boxShadow: "0 0 10px rgba(5, 150, 105, 0.4)",
             }}
           >
-            🟢 Gratuito / Isento
+            <DotIcon size="0.7em" color="var(--success)" /> Gratuito / Isento
           </span>
         ) : notification.paymentMethod === "CARD" ? (
           <span
@@ -223,7 +212,7 @@ function ToastItem({
               gap: 4,
             }}
           >
-            💳 Cartão • R$ {notification.amount.toFixed(2).replace(".", ",")}
+            <CardIcon size="1.1em" /> Cartão • R$ {notification.amount.toFixed(2).replace(".", ",")}
           </span>
         ) : (
           <span
@@ -240,7 +229,7 @@ function ToastItem({
               gap: 4,
             }}
           >
-            📱 Pix • R$ {notification.amount.toFixed(2).replace(".", ",")}
+            <SmartphoneIcon size="1.1em" /> Pix • R$ {notification.amount.toFixed(2).replace(".", ",")}
           </span>
         )}
 
@@ -254,9 +243,9 @@ function ToastItem({
             whiteSpace: "nowrap",
             maxWidth: 150,
           }}
-          title={notification.category}
+          title={stripEmoji(notification.category)}
         >
-          {notification.category}
+          {stripEmoji(notification.category)}
         </span>
       </div>
 

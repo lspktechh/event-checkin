@@ -1,7 +1,7 @@
 import React from "react";
 
 interface IconProps extends React.SVGProps<SVGSVGElement> {
-  size?: number;
+  size?: number | string;
   color?: string;
 }
 
@@ -192,5 +192,300 @@ export function ChevronDownIcon({ size = 16, color = "currentColor", ...props }:
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <polyline points="6 9 12 15 18 9" />
     </svg>
+  );
+}
+
+/*
+ * Ícones de interface (traço de 2px, 24x24, herdam a cor do texto).
+ * Substituem os emojis que havia nos botões, selos e listas: um único estilo
+ * visual, sem depender de como cada celular desenha o emoji.
+ */
+function Glyph({ size = 16, color = "currentColor", children, ...props }: IconProps & { children: React.ReactNode }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      {children}
+    </svg>
+  );
+}
+
+export function MailIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <polyline points="3 7 12 13 21 7" />
+    </Glyph>
+  );
+}
+
+export function PhoneIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" />
+    </Glyph>
+  );
+}
+
+export function MessageIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.1A8.4 8.4 0 0 1 3.9 11.5 8.5 8.5 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z" />
+    </Glyph>
+  );
+}
+
+export function CardIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+    </Glyph>
+  );
+}
+
+export function AlertIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </Glyph>
+  );
+}
+
+export function XIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </Glyph>
+  );
+}
+
+export function SearchIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </Glyph>
+  );
+}
+
+export function DownloadIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </Glyph>
+  );
+}
+
+export function RefreshIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15" />
+    </Glyph>
+  );
+}
+
+export function LockIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </Glyph>
+  );
+}
+
+export function UnlockIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+    </Glyph>
+  );
+}
+
+export function UsersIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.9" />
+      <path d="M16 3.1a4 4 0 0 1 0 7.8" />
+    </Glyph>
+  );
+}
+
+export function UserIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </Glyph>
+  );
+}
+
+export function BoltIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </Glyph>
+  );
+}
+
+export function CameraIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </Glyph>
+  );
+}
+
+export function FlashlightIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M18 6c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2l2 4v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V10z" />
+      <line x1="12" y1="2" x2="12" y2="4" />
+      <line x1="12" y1="13" x2="12" y2="15" />
+    </Glyph>
+  );
+}
+
+export function KeyboardIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="6" y1="9" x2="6.01" y2="9" />
+      <line x1="10" y1="9" x2="10.01" y2="9" />
+      <line x1="14" y1="9" x2="14.01" y2="9" />
+      <line x1="18" y1="9" x2="18.01" y2="9" />
+      <line x1="7" y1="15" x2="17" y2="15" />
+    </Glyph>
+  );
+}
+
+export function FlaskIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M9 3h6" />
+      <path d="M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9V3" />
+      <line x1="7.5" y1="14" x2="16.5" y2="14" />
+    </Glyph>
+  );
+}
+
+export function GiftIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <polyline points="20 12 20 22 4 22 4 12" />
+      <rect x="2" y="7" width="20" height="5" />
+      <line x1="12" y1="22" x2="12" y2="7" />
+      <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+    </Glyph>
+  );
+}
+
+export function WalletIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <path d="M20 12V8a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h13" />
+      <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+      <path d="M21 12h-4a2 2 0 0 0 0 4h4z" />
+    </Glyph>
+  );
+}
+
+export function GradCapIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <polygon points="12 3 1 9 12 15 23 9 12 3" />
+      <path d="M5 11.5V17c0 1.5 3.1 3 7 3s7-1.5 7-3v-5.5" />
+    </Glyph>
+  );
+}
+
+export function IdCardIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <circle cx="9" cy="11" r="2" />
+      <path d="M6 17c.5-1.7 1.7-2.5 3-2.5s2.5.8 3 2.5" />
+      <line x1="15" y1="10" x2="19" y2="10" />
+      <line x1="15" y1="14" x2="19" y2="14" />
+    </Glyph>
+  );
+}
+
+export function ArrowLeftIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <polyline points="12 19 5 12 12 5" />
+    </Glyph>
+  );
+}
+
+export function BanIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="4.9" y1="4.9" x2="19.1" y2="19.1" />
+    </Glyph>
+  );
+}
+
+export function ListIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </Glyph>
+  );
+}
+
+export function SmartphoneIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="5" y="2" width="14" height="20" rx="2" />
+      <line x1="12" y1="18" x2="12.01" y2="18" />
+    </Glyph>
+  );
+}
+
+/** Ponto de status (verde/amarelo/vermelho) no lugar das bolinhas coloridas. */
+export function DotIcon({ size = 10, color = "currentColor", ...props }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 10 10" aria-hidden="true" {...props}>
+      <circle cx="5" cy="5" r="5" fill={color} />
+    </svg>
+  );
+}
+
+export function MenuIcon(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </Glyph>
   );
 }

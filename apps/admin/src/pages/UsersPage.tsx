@@ -64,7 +64,7 @@ export function UsersPage() {
     <div className="stack" style={{ gap: 20 }}>
       <div className="spread">
         <div>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Usuários</h1>
+          <h1 style={{ margin: 0 }}>Usuários</h1>
           <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
             Crie e edite usuários, personalize as permissões de acesso e defina os eventos permitidos.
           </p>

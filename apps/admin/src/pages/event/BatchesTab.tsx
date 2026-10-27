@@ -573,7 +573,7 @@ export function BatchesTab({ eventId }: { eventId: string }) {
                           : "Definir este lote como gratuito (R$ 0,00)"
                       }
                     >
-                      {isFree ? "↩ Reverter para Pago" : "🎁 Tornar Grátis"}
+                      {isFree ? "Reverter para Pago" : "Tornar Grátis"}
                     </button>
                   </div>
 

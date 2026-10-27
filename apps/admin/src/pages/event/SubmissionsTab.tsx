@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
+import { MailIcon, XIcon } from "../../components/Icons";
 
 const STATUS_LABEL: Record<api.SubmissionStatus, string> = {
   DRAFT: "Rascunho",
@@ -391,7 +392,7 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                             }}
                             title="E-mail de quem enviou / apresentador"
                           >
-                            ✉️ {principal.email}
+                            <MailIcon size="1.1em" /> {principal.email}
                           </span>
                           {s.authors.length > 1 && (
                             <span className="muted" style={{ fontSize: 12 }}>
@@ -641,8 +642,8 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                   color: "var(--text-muted)",
                 }}
                 onClick={() => setRessalvaModal(null)}
-              >
-                ✕
+               aria-label="Fechar">
+                <XIcon size="1.1em" />
               </button>
             </div>
 
@@ -802,7 +803,7 @@ function ResumoDoTrabalho({ s }: { s: api.SubmissionRecord }) {
             }}
           >
             {s.status === "APPROVED_WITH_RESERVATIONS"
-              ? "⚠️ Ressalvas da comissão para correção:"
+              ? "Ressalvas da comissão para correção:"
               : "Parecer da comissão:"}
           </strong>
           <p

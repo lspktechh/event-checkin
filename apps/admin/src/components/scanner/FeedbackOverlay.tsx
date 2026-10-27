@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { AlertIcon, CheckIcon, XIcon } from "../Icons";
 import type { CheckInFeedbackStatus } from "../../utils/audioFeedback";
 
 export interface FeedbackData {
@@ -15,30 +16,30 @@ interface Props {
 
 const PRESETS: Record<
   CheckInFeedbackStatus,
-  { symbol: string; title: string; background: string }
+  { symbol: ReactNode; title: string; background: string }
 > = {
   CONFIRMED: {
-    symbol: "✓",
+    symbol: <CheckIcon size={64} strokeWidth={3} />,
     title: "PRESENÇA CONFIRMADA",
     background: "#16a34a", // Verde vibrante
   },
   ALREADY_CHECKED_IN: {
-    symbol: "!",
+    symbol: <AlertIcon size={60} strokeWidth={2.5} />,
     title: "PRESENÇA JÁ REGISTRADA",
     background: "#d97706", // Laranja/Âmbar atenção
   },
   INVALID_TOKEN: {
-    symbol: "✕",
+    symbol: <XIcon size={60} strokeWidth={3} />,
     title: "CREDENCIAL INVÁLIDA",
     background: "#dc2626", // Vermelho erro
   },
   PARTICIPANT_INACTIVE: {
-    symbol: "✕",
+    symbol: <XIcon size={60} strokeWidth={3} />,
     title: "CREDENCIAL INATIVA",
     background: "#dc2626", // Vermelho erro
   },
   ERROR: {
-    symbol: "✕",
+    symbol: <XIcon size={60} strokeWidth={3} />,
     title: "ERRO NA LEITURA",
     background: "#dc2626",
   },

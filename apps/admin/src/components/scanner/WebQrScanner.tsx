@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats, type CameraDevice } from "html5-qrcode";
+import { CameraIcon, LockIcon, RefreshIcon } from "../Icons";
 
 interface Props {
   onScan: (decodedText: string) => void;
@@ -303,7 +304,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
           }}
         >
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <span style={{ fontSize: 22 }}>🔒</span>
+            <span style={{ fontSize: 22 }}><LockIcon size="1.1em" /></span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: "var(--warning)" }}>
                 Câmera ao vivo exige HTTPS
@@ -320,7 +321,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
               onClick={() => fileInputRef.current?.click()}
               style={{ fontSize: 12 }}
             >
-              📸 Ou usar Câmera do Aparelho (Foto)
+              <CameraIcon size="1.1em" /> Ou usar Câmera do Aparelho (Foto)
             </button>
           </div>
         </div>
@@ -442,7 +443,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                   fontWeight: 700,
                 }}
               >
-                {cameraError ? "!" : "📷"}
+                {cameraError ? "!" : <CameraIcon size={28} />}
               </div>
 
               <div>
@@ -478,10 +479,10 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                     Como liberar a câmera no seu aparelho:
                   </div>
                   <div style={{ marginBottom: 4 }}>
-                    🍎 <strong>iPhone (Safari):</strong> Toque no ícone <code>aA</code> ao lado do endereço ➔ Ajustes do Site ➔ Câmera ➔ <strong>Permitir</strong>.
+                    <strong>iPhone (Safari):</strong> Toque no ícone <code>aA</code> ao lado do endereço › Ajustes do Site › Câmera › <strong>Permitir</strong>.
                   </div>
                   <div>
-                    🤖 <strong>Android (Chrome):</strong> Toque no ícone de cadeado/ajustes ao lado do endereço ➔ Permissões ➔ Câmera ➔ <strong>Permitir</strong>.
+                    <strong>Android (Chrome):</strong> Toque no ícone de cadeado/ajustes ao lado do endereço › Permissões › Câmera › <strong>Permitir</strong>.
                   </div>
                 </div>
               )}
@@ -503,7 +504,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                     boxShadow: "0 4px 14px rgba(22, 163, 74, 0.4)",
                   }}
                 >
-                  📷 Ativar Câmera ao Vivo
+                  <CameraIcon size="1.1em" /> Ativar Câmera ao Vivo
                 </button>
 
                 <button
@@ -519,7 +520,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                     gap: 8,
                   }}
                 >
-                  📸 Tirar Foto com Câmera do Aparelho
+                  <CameraIcon size="1.1em" /> Tirar Foto com Câmera do Aparelho
                 </button>
 
               </div>
@@ -545,7 +546,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                   style={cameraControlBtn}
                   title="Alternar lanterna"
                 >
-                  {torchOn ? "🔦 Ligada" : "🔦"}
+                  {torchOn ? "Lanterna ligada" : "Lanterna"}
                 </button>
               )}
               {cameras.length > 1 && (
@@ -555,7 +556,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                   style={cameraControlBtn}
                   title="Alternar câmera"
                 >
-                  🔄 Lente
+                  <RefreshIcon size="1.1em" /> Lente
                 </button>
               )}
             </div>
@@ -645,7 +646,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
             padding: "6px 8px",
           }}
         >
-          {manualMode ? "← Voltar para Câmera" : "⌨️ Digitar código manual"}
+          {manualMode ? "Voltar para Câmera" : "Digitar código manual"}
         </button>
 
         {!manualMode && (
@@ -661,7 +662,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
               padding: "6px 8px",
             }}
           >
-            📸 Foto com Câmera Nativa
+            <CameraIcon size="1.1em" /> Foto com Câmera Nativa
           </button>
         )}
       </div>

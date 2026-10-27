@@ -4,6 +4,7 @@ import * as api from "../api/client";
 import { WebQrScanner } from "../components/scanner/WebQrScanner";
 import { FeedbackOverlay, type FeedbackData } from "../components/scanner/FeedbackOverlay";
 import { initAudio, playCheckInFeedback } from "../utils/audioFeedback";
+import { ArrowLeftIcon } from "../components/Icons";
 
 const FEEDBACK_DURATION_MS = 1800;
 
@@ -162,7 +163,7 @@ export function CredenciamentoPage() {
         <h2 style={{ color: "var(--danger)", margin: 0 }}>Erro ao abrir credenciamento</h2>
         <p style={{ color: "var(--text-muted)", margin: 0 }}>{error ?? "Evento não localizado."}</p>
         <Link to="/eventos" className="btn btn-secondary">
-          ← Voltar aos eventos
+          <ArrowLeftIcon size="1.1em" /> Voltar aos eventos
         </Link>
       </div>
     );
@@ -208,7 +209,7 @@ export function CredenciamentoPage() {
             }}
             title="Voltar ao evento"
           >
-            ←
+            <ArrowLeftIcon size="1.1em" />
           </Link>
           <div>
             <h1

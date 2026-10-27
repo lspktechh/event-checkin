@@ -26,9 +26,9 @@ export function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <form onSubmit={handleSubmit} className="card" style={{ width: 360 }}>
-        <h1 style={{ fontSize: 20, marginTop: 0 }}>Painel de Credenciamento</h1>
+    <div className="login-page">
+      <form onSubmit={handleSubmit} className="card login-card">
+        <h1 style={{ marginTop: 0 }}>Painel de Credenciamento</h1>
         <div className="field">
           <label htmlFor="email">E-mail</label>
           <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
