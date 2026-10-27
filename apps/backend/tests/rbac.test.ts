@@ -407,3 +407,32 @@ describe("GET /audit-logs", () => {
     expect(updatedUser.customPermissions).toEqual(["events.view", "participants.view", "participants.create"]);
   });
 });
+
+describe("GET /auth/me", () => {
+  it("valida a sessão, renova o token e retorna os dados do usuário autenticado", async () => {
+    const { user, password } = await createTestAdmin();
+    const loginToken = (await login(user.email, password)).json().data.token;
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: { authorization: `Bearer ${loginToken}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json().data;
+    expect(body.user.email).toBe(user.email);
+    expect(typeof body.token).toBe("string");
+    expect(body.token).toBeTruthy();
+  });
+
+  it("rejeita requisições sem token ou com token inválido", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: { authorization: "Bearer token-invalido-ou-expirado" },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+});

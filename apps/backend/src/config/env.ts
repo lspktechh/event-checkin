@@ -6,7 +6,17 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL é obrigatória"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET deve ter pelo menos 16 caracteres"),
-  JWT_ADMIN_EXPIRES_IN: z.string().default("8h"),
+  JWT_ADMIN_EXPIRES_IN: z
+    .string()
+    .optional()
+    .default("365d")
+    .transform((val) => {
+      // Sessão de longa duração: se não informado ou mantiver o padrão anterior "8h", adota 365 dias
+      if (!val || val.trim() === "" || val.trim() === "8h") {
+        return "365d";
+      }
+      return val.trim();
+    }),
   CORS_ORIGINS: z.string().optional().default(""),
 
   // Diretório onde certificados/comprovantes gerados são gravados (ver

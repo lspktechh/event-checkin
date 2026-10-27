@@ -4,6 +4,13 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3900";
 
 const TOKEN_KEY = "admin_token";
 
+type UnauthorizedListener = () => void;
+let unauthorizedListener: UnauthorizedListener | null = null;
+
+export function setOnUnauthorized(cb: UnauthorizedListener | null): void {
+  unauthorizedListener = cb;
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -68,6 +75,10 @@ async function request<T>(
   if (!json.success) {
     if (response.status === 401) {
       clearToken();
+      localStorage.removeItem("admin_user");
+      if (unauthorizedListener) {
+        unauthorizedListener();
+      }
     }
     throw new ApiError(json.error.message, json.error.code, response.status);
   }
@@ -98,6 +109,10 @@ export function login(email: string, password: string) {
     body: { email, password },
     auth: false,
   });
+}
+
+export function getMe() {
+  return request<{ token: string; user: AdminUser }>("/auth/me");
 }
 
 // --- Perfis e permissões (RBAC) ---

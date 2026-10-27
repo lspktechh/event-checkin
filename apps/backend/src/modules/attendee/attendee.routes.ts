@@ -63,7 +63,7 @@ export async function attendeeRoutes(app: FastifyInstance) {
           eventId: participant.eventId,
           type: "attendee" as const,
         },
-        { expiresIn: "24h" }
+        { expiresIn: "365d" }
       );
 
       const participantPayload = {
@@ -133,7 +133,7 @@ export async function attendeeRoutes(app: FastifyInstance) {
         eventId: participant.eventId,
         type: "attendee" as const,
       },
-      { expiresIn: "24h" }
+      { expiresIn: "365d" }
     );
 
     return reply.send(

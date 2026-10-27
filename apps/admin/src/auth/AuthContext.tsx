@@ -13,28 +13,30 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-/** Sessão do admin: token JWT persistido em localStorage. Sem refresh
- * token nesta fase — expirado (JWT_ADMIN_EXPIRES_IN, padrão 8h no
- * backend), o admin cai de volta pro login (interceptado pelo ApiError
- * 401 em api/client.ts, que já limpa o token). */
+/**
+ * Sessão do admin: token JWT persistido em localStorage com expiração de longa duração
+ * e renovação automática silenciosa (silent refresh via /auth/me).
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<api.AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Escuta 401 global para deslogar imediatamente sem exibir telas quebradas
   useEffect(() => {
-    // Não há endpoint de "quem sou eu" nesta fase do backend — se existe
-    // um token salvo, assumimos a sessão válida até a primeira chamada
-    // autenticada falhar (então o usuário é redirecionado ao login).
-    //
-    // O formato de AdminUser mudou com o RBAC (role virou objeto, ganhou
-    // "permissions") — uma sessão salva ANTES dessa mudança (formato
-    // antigo, ainda no localStorage do navegador de quem já estava
-    // logado) não bate com o que o resto do app espera, e usar esse
-    // objeto quebrado sem checar quebra o render inteiro (tela em
-    // branco). Por isso valida o formato antes de confiar; se não bater,
-    // limpa a sessão velha e cai pro login normalmente, em vez de travar.
+    api.setOnUnauthorized(() => {
+      setUser(null);
+    });
+    return () => {
+      api.setOnUnauthorized(null);
+    };
+  }, []);
+
+  // Inicializa sessão e valida/renova silenciosamente com o backend
+  useEffect(() => {
     const stored = localStorage.getItem("admin_user");
-    if (stored && api.getToken()) {
+    const token = api.getToken();
+
+    if (stored && token) {
       try {
         const parsed = JSON.parse(stored);
         const hasValidShape =
@@ -43,8 +45,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           parsed.role !== null &&
           typeof parsed.role.name === "string" &&
           (parsed.permissions === "ALL" || Array.isArray(parsed.permissions));
+
         if (hasValidShape) {
           setUser(parsed);
+
+          // Validação silenciosa e renovação de token no servidor
+          api
+            .getMe()
+            .then((res) => {
+              api.setToken(res.token);
+              localStorage.setItem("admin_user", JSON.stringify(res.user));
+              setUser(res.user);
+            })
+            .catch((err) => {
+              if (err instanceof api.ApiError && err.httpStatus === 401) {
+                api.clearToken();
+                localStorage.removeItem("admin_user");
+                setUser(null);
+              }
+              // Erros de rede temporários não deslogam o usuário local
+            });
         } else {
           api.clearToken();
           localStorage.removeItem("admin_user");
@@ -55,6 +75,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     setLoading(false);
+  }, []);
+
+  // Quando o usuário volta à aba após horas/dias, renova o token automaticamente
+  useEffect(() => {
+    function handleVisibilityOrFocus() {
+      if (document.visibilityState === "visible" && api.getToken()) {
+        api
+          .getMe()
+          .then((res) => {
+            api.setToken(res.token);
+            localStorage.setItem("admin_user", JSON.stringify(res.user));
+            setUser(res.user);
+          })
+          .catch((err) => {
+            if (err instanceof api.ApiError && err.httpStatus === 401) {
+              api.clearToken();
+              localStorage.removeItem("admin_user");
+              setUser(null);
+            }
+          });
+      }
+    }
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
   }, []);
 
   async function login(email: string, password: string) {
