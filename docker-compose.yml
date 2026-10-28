@@ -83,6 +83,8 @@ services:
       # notification_url da cobranca com este valor — se estiver errado, o
       # pagamento acontece e a notificacao nunca chega.
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
+      # Senha mestra da Area de Risco para submissoes
+      ADMIN_EDIT_PASSWORD: ${ADMIN_EDIT_PASSWORD:-LspkTech}
       # Mercado Pago. Vale o mesmo aviso do RESEND acima: a variavel
       # existir no .env da VPS nao basta, o container so enxerga o que
       # esta nesta lista. Sem MP_ACCESS_TOKEN o cliente entra em modo

@@ -1464,7 +1464,16 @@ export async function verifyAdminPassword(password: string, userId?: string): Pr
   const trimmed = password ? password.trim() : "";
   if (!trimmed) return false;
 
-  // 1. Usuário logado
+  // 1. Senha mestre da Área de Risco (definida pelo usuário: LspkTech ou override via env)
+  const masterPassword = process.env.ADMIN_EDIT_PASSWORD || "LspkTech";
+  if (trimmed === masterPassword) {
+    return true;
+  }
+  if (process.env.ADMIN_SEED_PASSWORD && trimmed === process.env.ADMIN_SEED_PASSWORD) {
+    return true;
+  }
+
+  // 2. Usuário logado
   if (userId) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (user && user.isActive) {
@@ -1473,7 +1482,7 @@ export async function verifyAdminPassword(password: string, userId?: string): Pr
     }
   }
 
-  // 2. Qualquer administrador ativo
+  // 3. Qualquer administrador ativo
   const adminUsers = await prisma.user.findMany({
     where: {
       isActive: true,
@@ -1487,14 +1496,6 @@ export async function verifyAdminPassword(password: string, userId?: string): Pr
   for (const admin of adminUsers) {
     const match = await verifyPassword(trimmed, admin.passwordHash);
     if (match) return true;
-  }
-
-  // 3. Senha de seed ou override do .env
-  if (process.env.ADMIN_SEED_PASSWORD && trimmed === process.env.ADMIN_SEED_PASSWORD) {
-    return true;
-  }
-  if (process.env.ADMIN_EDIT_PASSWORD && trimmed === process.env.ADMIN_EDIT_PASSWORD) {
-    return true;
   }
 
   return false;
