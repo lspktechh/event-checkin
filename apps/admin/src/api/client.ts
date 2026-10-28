@@ -1021,6 +1021,52 @@ export function removeSubmissionFile(eventId: string, submissionId: string, file
   );
 }
 
+/**
+ * Área de Risco: Valida a senha do administrador antes ou durante a edição.
+ */
+export function verifyAdminPassword(eventId: string, submissionId: string, password: string) {
+  return request<{ valid: boolean }>(
+    `/events/${eventId}/submissions/${submissionId}/verify-admin-password`,
+    {
+      method: "POST",
+      body: { password },
+    }
+  );
+}
+
+export interface AdminEditSubmissionPayload {
+  password: string;
+  title?: string;
+  abstract?: string;
+  keywords?: string[];
+  modalityId?: string | null;
+  topicId?: string | null;
+  status?: SubmissionStatus;
+  authors: Array<{
+    name: string;
+    email: string;
+    institution?: string | null;
+    isPresenter?: boolean;
+  }>;
+}
+
+/**
+ * Área de Risco: Edição administrativa de um trabalho e seus integrantes.
+ */
+export function adminEditSubmission(
+  eventId: string,
+  submissionId: string,
+  payload: AdminEditSubmissionPayload
+) {
+  return request<SubmissionRecord>(
+    `/events/${eventId}/submissions/${submissionId}/admin-edit`,
+    {
+      method: "PATCH",
+      body: payload,
+    }
+  );
+}
+
 // --- Lotes Automáticos ---
 export interface BatchItem {
   id: string;

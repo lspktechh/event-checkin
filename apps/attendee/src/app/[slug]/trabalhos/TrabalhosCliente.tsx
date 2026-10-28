@@ -5,6 +5,8 @@ import {
   searchSubmissionsByEmail,
   getSubmissionEditDetails,
   resubmitSubmission,
+  verifyPublicAdminPassword,
+  adminEditPublicSubmission,
   type PublicSubmission,
   type PublicAuthor,
   type SubmissionEditDetailsResponse,
@@ -18,6 +20,7 @@ import {
   EyeIcon,
   FileTextIcon,
   InfoIcon,
+  LockIcon,
   PaperclipIcon,
   PencilIcon,
   PlusIcon,
@@ -131,6 +134,14 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
     useState<SubmissionEditDetailsResponse | null>(null);
   const [carregandoEdicao, setCarregandoEdicao] = useState(false);
 
+  // Estados para abrir trabalho e modo de edição com senha de administrador (Área de Risco)
+  const [trabalhoAberto, setTrabalhoAberto] = useState<PublicSubmission | null>(null);
+  const [mostrandoSenhaAdmin, setMostrandoSenhaAdmin] = useState(false);
+  const [senhaAdmin, setSenhaAdmin] = useState("");
+  const [erroSenhaAdmin, setErroSenhaAdmin] = useState<string | null>(null);
+  const [validandoSenhaAdmin, setValidandoSenhaAdmin] = useState(false);
+  const [editandoAreaDeRisco, setEditandoAreaDeRisco] = useState(false);
+
   // Campos do formulário de edição
   const [formTitulo, setFormTitulo] = useState("");
   const [formResumo, setFormResumo] = useState("");
@@ -207,6 +218,11 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
     setErro(null);
     setSucesso(null);
     setEditDetails(null);
+    setTrabalhoAberto(null);
+    setMostrandoSenhaAdmin(false);
+    setSenhaAdmin("");
+    setErroSenhaAdmin(null);
+    setEditandoAreaDeRisco(false);
 
     try {
       const res = await searchSubmissionsByEmail(slug, email.trim());
@@ -220,10 +236,11 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
     }
   }
 
-  async function handleIniciarEdicao(sub: PublicSubmission) {
+  async function handleIniciarEdicao(sub: PublicSubmission, isRiskArea = false) {
     setCarregandoEdicao(true);
     setErro(null);
     setSucesso(null);
+    setEditandoAreaDeRisco(isRiskArea);
 
     try {
       const details = await getSubmissionEditDetails(slug, sub.id, email.trim());
@@ -253,6 +270,29 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
       );
     } finally {
       setCarregandoEdicao(false);
+    }
+  }
+
+  async function handleDesbloquearAreaDeRisco(e: React.FormEvent) {
+    e.preventDefault();
+    if (!trabalhoAberto || !senhaAdmin.trim()) return;
+
+    setValidandoSenhaAdmin(true);
+    setErroSenhaAdmin(null);
+
+    try {
+      const ok = await verifyPublicAdminPassword(slug, trabalhoAberto.id, senhaAdmin.trim());
+      if (ok) {
+        setMostrandoSenhaAdmin(false);
+        setErroSenhaAdmin(null);
+        await handleIniciarEdicao(trabalhoAberto, true);
+      } else {
+        setErroSenhaAdmin("Senha de administrador incorreta. Acesso não autorizado à Área de Risco.");
+      }
+    } catch (err) {
+      setErroSenhaAdmin(err instanceof Error ? err.message : "Falha ao validar senha de administrador.");
+    } finally {
+      setValidandoSenhaAdmin(false);
     }
   }
 
@@ -331,30 +371,51 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
     setErro(null);
 
     try {
-      const novosConvertidos = await Promise.all(
-        formNovosArquivos.map(async (file) => ({
-          fileName: file.name,
-          dataBase64: await lerBase64(file),
-        }))
-      );
+      let atualizado: PublicSubmission;
 
-      const atualizado = await resubmitSubmission(slug, editDetails.submission.id, {
-        authorEmail: email.trim(),
-        title: formTitulo.trim(),
-        abstract: formResumo.trim(),
-        keywords: palavras,
-        modalityId: formModalidade || null,
-        topicId: formArea || null,
-        authors: formAutores,
-        keepFileIds: formKeepFiles,
-        newFiles: novosConvertidos,
-        correctionsNotes: formNotas.trim() || undefined,
-      });
+      if (editandoAreaDeRisco) {
+        atualizado = await adminEditPublicSubmission(slug, editDetails.submission.id, {
+          password: senhaAdmin.trim(),
+          title: formTitulo.trim(),
+          abstract: formResumo.trim(),
+          keywords: palavras,
+          modalityId: formModalidade || null,
+          topicId: formArea || null,
+          authors: formAutores,
+        });
 
-      setSucesso(
-        `Trabalho "${atualizado.code}" corrigido e reenviado com sucesso! O corretor já poderá avaliar a nova versão no painel.`
-      );
+        setSucesso(
+          `Trabalho "${atualizado.code}" atualizado com sucesso pela Área de Risco! Todos os novos integrantes e dados foram salvos.`
+        );
+      } else {
+        const novosConvertidos = await Promise.all(
+          formNovosArquivos.map(async (file) => ({
+            fileName: file.name,
+            dataBase64: await lerBase64(file),
+          }))
+        );
+
+        atualizado = await resubmitSubmission(slug, editDetails.submission.id, {
+          authorEmail: email.trim(),
+          title: formTitulo.trim(),
+          abstract: formResumo.trim(),
+          keywords: palavras,
+          modalityId: formModalidade || null,
+          topicId: formArea || null,
+          authors: formAutores,
+          keepFileIds: formKeepFiles,
+          newFiles: novosConvertidos,
+          correctionsNotes: formNotas.trim() || undefined,
+        });
+
+        setSucesso(
+          `Trabalho "${atualizado.code}" corrigido e reenviado com sucesso! O corretor já poderá avaliar a nova versão no painel.`
+        );
+      }
+
       setEditDetails(null);
+      setTrabalhoAberto(atualizado);
+      setEditandoAreaDeRisco(false);
 
       // Atualiza a lista na tela
       setTrabalhos((prev) =>
@@ -447,7 +508,7 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
         )}
 
         {/* MODO 2: Lista de Trabalhos Encontrados */}
-        {!editDetails && pesquisado && (
+        {!editDetails && pesquisado && !trabalhoAberto && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">
@@ -485,7 +546,16 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                         <span className="mono text-xs font-semibold text-[var(--primary)]">
                           {sub.code}
                         </span>
-                        <h3 className="mt-1 text-lg font-bold text-[var(--foreground)]">
+                        <h3
+                          onClick={() => {
+                            setTrabalhoAberto(sub);
+                            setMostrandoSenhaAdmin(false);
+                            setSenhaAdmin("");
+                            setErroSenhaAdmin(null);
+                          }}
+                          className="mt-1 text-lg font-bold text-[var(--foreground)] cursor-pointer hover:text-[var(--primary)] transition"
+                          title="Clique para abrir os detalhes do trabalho"
+                        >
                           {sub.title}
                         </h3>
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -631,31 +701,306 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                       </div>
                     )}
 
-                    {/* Botão de Ação / Edição */}
+                    {/* Botão de Ação: Abrir Trabalho */}
                     <div className="pt-2">
-                      {podeEditar ? (
-                        <button
-                          type="button"
-                          onClick={() => handleIniciarEdicao(sub)}
-                          disabled={carregandoEdicao}
-                          className="flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-5 py-2.5 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/30 cursor-pointer"
-                        >
-                          <PencilIcon className="h-4 w-4 shrink-0" />
-                          {sub.status === "APPROVED_WITH_RESERVATIONS"
-                            ? "Enviar Correções Solicitadas"
-                            : "Editar Trabalho"}
-                        </button>
-                      ) : sub.status === "APPROVED" ? (
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                          <CheckIcon className="h-4 w-4 shrink-0" />
-                          Trabalho aprovado em definitivo pela comissão.
-                        </div>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTrabalhoAberto(sub);
+                          setMostrandoSenhaAdmin(false);
+                          setSenhaAdmin("");
+                          setErroSenhaAdmin(null);
+                        }}
+                        className="flex items-center gap-2 rounded-xl bg-[var(--primary)]/15 border border-[var(--primary)]/35 px-5 py-2.5 text-sm font-semibold text-[var(--primary)] transition hover:bg-[var(--primary)]/25 cursor-pointer"
+                      >
+                        <EyeIcon className="h-4 w-4 shrink-0" />
+                        Abrir Trabalho
+                      </button>
                     </div>
                   </div>
                 );
               })
             )}
+          </div>
+        )}
+
+        {/* MODO 2.5: Ficha Detalhada do Trabalho Aberto com Área de Risco */}
+        {!editDetails && trabalhoAberto && (
+          <div className="cartao space-y-6 p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
+              <div>
+                <span className="mono text-xs font-semibold text-[var(--primary)]">
+                  {trabalhoAberto.code}
+                </span>
+                <h2 className="mt-1 text-xl font-bold text-[var(--foreground)]">
+                  {trabalhoAberto.title}
+                </h2>
+                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  {trabalhoAberto.modality ? trabalhoAberto.modality.name : "Sem modalidade"}
+                  {trabalhoAberto.topic ? ` · ${trabalhoAberto.topic.name}` : ""}
+                </p>
+              </div>
+
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTrabalhoAberto(null);
+                    setMostrandoSenhaAdmin(false);
+                  }}
+                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-white cursor-pointer"
+                >
+                  ← Voltar aos trabalhos
+                </button>
+
+                {(() => {
+                  const statusStyle =
+                    STATUS_CONFIG[trabalhoAberto.status] || STATUS_CONFIG.SUBMITTED;
+                  return (
+                    <div
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold shadow-sm"
+                      style={{
+                        backgroundColor: statusStyle.bg,
+                        color: statusStyle.color,
+                        border: `1px solid ${statusStyle.border}`,
+                      }}
+                    >
+                      <span
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: statusStyle.dot }}
+                      />
+                      {statusStyle.label}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Parecer / Ressalvas da comissão se houver */}
+            {trabalhoAberto.decisionReason && (
+              <div
+                className="rounded-xl p-4 text-sm"
+                style={{
+                  backgroundColor:
+                    trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS"
+                      ? "rgba(245, 158, 11, 0.12)"
+                      : "rgba(239, 68, 68, 0.1)",
+                  borderLeft: `4px solid ${
+                    trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS"
+                      ? "#f59e0b"
+                      : "#ef4444"
+                  }`,
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertTriangleIcon
+                    className="h-4 w-4 shrink-0"
+                    style={{
+                      color:
+                        trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS"
+                          ? "#fbbf24"
+                          : "#f87171",
+                    }}
+                  />
+                  <strong
+                    className="block text-xs font-bold uppercase tracking-wider"
+                    style={{
+                      color:
+                        trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS"
+                          ? "#fbbf24"
+                          : "#f87171",
+                    }}
+                  >
+                    Parecer da comissão / O que precisa ser corrigido:
+                  </strong>
+                </div>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--foreground)]">
+                  {trabalhoAberto.decisionReason}
+                </p>
+              </div>
+            )}
+
+            {/* Resumo Completo */}
+            <div>
+              <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
+                Resumo:
+              </span>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--foreground)]">
+                {trabalhoAberto.abstract}
+              </p>
+            </div>
+
+            {/* Palavras-chave */}
+            {trabalhoAberto.keywords && trabalhoAberto.keywords.length > 0 && (
+              <div>
+                <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
+                  Palavras-chave:
+                </span>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {trabalhoAberto.keywords.map((kw, i) => (
+                    <span
+                      key={i}
+                      className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs text-[var(--foreground)]"
+                    >
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Integrantes do Grupo / Autores */}
+            <div>
+              <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
+                Integrantes do Grupo / Autores ({trabalhoAberto.authors.length}):
+              </span>
+              <div className="mt-2 space-y-2">
+                {trabalhoAberto.authors.map((a) => (
+                  <div
+                    key={a.id || a.email}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)]/70 p-3 text-sm text-[var(--foreground)]"
+                  >
+                    <div>
+                      <strong>{a.name}</strong>
+                      <span className="ml-2 text-xs text-[var(--muted-foreground)]">
+                        ({a.email})
+                      </span>
+                      {a.institution && (
+                        <span className="ml-2 text-xs text-[var(--muted-foreground)]">
+                          · {a.institution}
+                        </span>
+                      )}
+                    </div>
+                    {a.isPresenter && (
+                      <span className="inline-flex items-center gap-1 self-start sm:self-auto rounded bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-amber-300 border border-amber-400/20">
+                        <StarIcon className="h-3 w-3 text-amber-400 fill-amber-400" />
+                        Apresentador
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Arquivos com Visualizador */}
+            {trabalhoAberto.files && trabalhoAberto.files.length > 0 && (
+              <div>
+                <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
+                  Arquivos enviados:
+                </span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {trabalhoAberto.files.map((f) => (
+                    <div
+                      key={f.id}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)]/80 px-3 py-2 text-xs text-[var(--foreground)]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => abrirDocumento(trabalhoAberto.id, f, trabalhoAberto.title)}
+                        className="flex items-center gap-1.5 font-medium hover:text-[var(--primary)] transition cursor-pointer text-left"
+                        title="Visualizar documento"
+                      >
+                        <EyeIcon className="h-4 w-4 shrink-0 text-[var(--primary)]" />
+                        <span className="underline decoration-dotted underline-offset-2">
+                          {f.fileName ?? "Arquivo"}
+                        </span>
+                      </button>
+                      {f.fileSizeBytes && (
+                        <span className="text-[var(--muted-foreground)]">
+                          ({formatarBytes(f.fileSizeBytes)})
+                        </span>
+                      )}
+                      <a
+                        href={`/api/publico/trabalhos/arquivo/${encodeURIComponent(trabalhoAberto.id)}/${encodeURIComponent(f.id)}?download=1`}
+                        download={f.fileName ?? "arquivo"}
+                        className="text-[var(--muted-foreground)] hover:text-white ml-1 p-0.5"
+                        title="Baixar arquivo"
+                      >
+                        <DownloadIcon className="h-4 w-4 shrink-0" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Ações Regulares de Correção */}
+            {trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS" && (
+              <div className="pt-2 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => handleIniciarEdicao(trabalhoAberto, false)}
+                  disabled={carregandoEdicao}
+                  className="flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-5 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/30 cursor-pointer"
+                >
+                  <PencilIcon className="h-4 w-4 shrink-0" />
+                  Enviar Correções Solicitadas pela Comissão
+                </button>
+              </div>
+            )}
+
+            {/* ── ÁREA DE RISCO: HABILITAR MODO DE EDIÇÃO COM SENHA DE ADMINISTRADOR ── */}
+            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-5 space-y-3">
+              <div className="flex items-center gap-2.5 text-red-400 font-bold text-sm">
+                <AlertCircleIcon className="h-5 w-5 shrink-0 text-red-400" />
+                <span>Área de Risco — Edição Administrativa</span>
+              </div>
+              <p className="text-xs leading-relaxed text-red-200/90">
+                Alguém enviou o trabalho sem o nome de todo mundo do grupo? Precisa adicionar integrantes que faltaram ou alterar autores e informações após o envio? O modo de edição nesta área de risco é restrito e só pode ser habilitado com a <strong>senha do administrador</strong>.
+              </p>
+
+              {!mostrandoSenhaAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrandoSenhaAdmin(true);
+                    setErroSenhaAdmin(null);
+                    setSenhaAdmin("");
+                  }}
+                  className="flex items-center gap-2 rounded-xl bg-red-500/25 border border-red-500/50 px-4 py-2.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/35 cursor-pointer mt-2"
+                >
+                  <LockIcon className="h-3.5 w-3.5 shrink-0" />
+                  Habilitar Modo de Edição (Área de Risco)
+                </button>
+              ) : (
+                <form
+                  onSubmit={handleDesbloquearAreaDeRisco}
+                  className="space-y-3 rounded-xl border border-red-500/30 bg-[var(--background)]/90 p-4 mt-3"
+                >
+                  <label className="block text-xs font-semibold text-[var(--foreground)]">
+                    Informe a senha do administrador para liberar a edição:
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <input
+                      type="password"
+                      required
+                      autoFocus
+                      placeholder="Senha do administrador"
+                      value={senhaAdmin}
+                      onChange={(e) => setSenhaAdmin(e.target.value)}
+                      className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-red-400 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={validandoSenhaAdmin || !senhaAdmin.trim()}
+                      className="rounded-xl bg-red-600 px-5 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+                    >
+                      {validandoSenhaAdmin ? "Validando..." : "Desbloquear Edição"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMostrandoSenhaAdmin(false)}
+                      className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-white cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  {erroSenhaAdmin && (
+                    <p className="text-xs text-red-400 font-medium">{erroSenhaAdmin}</p>
+                  )}
+                </form>
+              )}
+            </div>
           </div>
         )}
 
@@ -680,6 +1025,21 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
                 Voltar
               </button>
             </div>
+
+            {/* Aviso de Modo de Edição Ativo (Área de Risco) */}
+            {editandoAreaDeRisco && (
+              <div className="rounded-xl border border-red-500/50 bg-red-500/15 p-4 text-sm text-red-200">
+                <div className="flex items-center gap-2">
+                  <AlertCircleIcon className="h-4 w-4 shrink-0 text-red-400" />
+                  <strong className="block text-xs font-bold uppercase tracking-wider text-red-400">
+                    Modo de Edição Ativo (Área de Risco) — Autorizado pelo Administrador
+                  </strong>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-red-100">
+                  Você está autorizado a adicionar ou alterar qualquer integrante do grupo na seção &quot;Autores do Trabalho&quot; abaixo, além de atualizar título, resumo e áreas temáticas.
+                </p>
+              </div>
+            )}
 
             {/* Parecer do Corretor em Destaque no Topo do Formulário */}
             {editDetails.submission.decisionReason && (
@@ -1028,11 +1388,15 @@ export function TrabalhosCliente({ slug }: { slug: string }) {
               <button
                 type="submit"
                 disabled={enviandoCorrecao}
-                className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                className={`rounded-xl px-6 py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-50 cursor-pointer ${
+                  editandoAreaDeRisco ? "bg-emerald-600 hover:bg-emerald-500" : "bg-[var(--primary)]"
+                }`}
               >
                 {enviandoCorrecao
-                  ? "Enviando Trabalho Corrigido..."
-                  : "Salvar e Enviar Trabalho Corrigido"}
+                  ? "Salvando alterações..."
+                  : editandoAreaDeRisco
+                    ? "Salvar Alterações (Área de Risco)"
+                    : "Salvar e Enviar Trabalho Corrigido"}
               </button>
             </div>
           </form>

@@ -320,3 +320,53 @@ export async function resubmitSubmission(
   }
   return data.data;
 }
+
+export interface AdminEditPublicPayload {
+  password: string;
+  title?: string;
+  abstract?: string;
+  keywords?: string[];
+  modalityId?: string | null;
+  topicId?: string | null;
+  authors: PublicAuthor[];
+}
+
+export async function verifyPublicAdminPassword(
+  slug: string,
+  submissionId: string,
+  password: string
+): Promise<boolean> {
+  const res = await fetch(
+    `/api/publico/trabalhos/${encodeURIComponent(slug)}/${encodeURIComponent(submissionId)}/verify-password`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error?.message ?? "Falha ao validar senha");
+  }
+  return Boolean(data.data?.valid);
+}
+
+export async function adminEditPublicSubmission(
+  slug: string,
+  submissionId: string,
+  input: AdminEditPublicPayload
+): Promise<PublicSubmission> {
+  const res = await fetch(
+    `/api/publico/trabalhos/${encodeURIComponent(slug)}/${encodeURIComponent(submissionId)}/admin-edit`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error?.message ?? "Falha ao editar trabalho");
+  }
+  return data.data;
+}

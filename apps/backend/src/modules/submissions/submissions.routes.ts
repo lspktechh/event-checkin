@@ -21,6 +21,8 @@ import {
   submissionIdParams,
   submissionSettingsSchema,
   uploadFileSchema,
+  adminEditSubmissionSchema,
+  verifyAdminPasswordSchema,
 } from "./submissions.schema.js";
 
 export async function submissionsRoutes(app: FastifyInstance) {
@@ -288,6 +290,35 @@ export async function submissionsRoutes(app: FastifyInstance) {
     }
   );
 
+  // ── Área de Risco: edição administrativa com confirmação de senha ────
+  app.post(
+    "/events/:eventId/submissions/:submissionId/verify-admin-password",
+    { preHandler: requirePermission("submissions.manage") },
+    async (request) => {
+      const { password } = verifyAdminPasswordSchema.parse(request.body);
+      const valid = await service.verifyAdminPassword(password, request.admin?.userId);
+      return ok({ valid });
+    }
+  );
+
+  app.patch(
+    "/events/:eventId/submissions/:submissionId/admin-edit",
+    { preHandler: requirePermission("submissions.manage") },
+    async (request) => {
+      const { eventId, submissionId } = submissionIdParams.parse(request.params);
+      const input = adminEditSubmissionSchema.parse(request.body);
+      const atualizado = await service.adminEditSubmission(eventId, submissionId, {
+        ...input,
+        userId: request.admin?.userId,
+      });
+      await recordAudit(request, "submissions.admin_edit", "Submission", submissionId, {
+        code: atualizado.code,
+        authorsCount: input.authors.length,
+      });
+      return ok(atualizado);
+    }
+  );
+
   // ── envio público (site do evento) ───────────────────────────────────
   //
   // Sem login: é o próprio autor, pelo site. O que protege é o módulo
@@ -420,6 +451,29 @@ export async function submissionsRoutes(app: FastifyInstance) {
           `${tipo === "pdf" ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`
         )
         .send(buffer);
+    }
+  );
+
+  // ── Área de Risco pública (com confirmação da senha de administrador) ─
+  app.post(
+    "/public/events/:slugOrId/submissions/:submissionId/verify-admin-password",
+    async (request) => {
+      const { password } = verifyAdminPasswordSchema.parse(request.body);
+      const valid = await service.verifyAdminPassword(password);
+      return ok({ valid });
+    }
+  );
+
+  app.post(
+    "/public/events/:slugOrId/submissions/:submissionId/admin-edit",
+    async (request) => {
+      const { slugOrId, submissionId } = request.params as {
+        slugOrId: string;
+        submissionId: string;
+      };
+      const input = adminEditSubmissionSchema.parse(request.body);
+      const s = await service.adminEditPublicSubmission(slugOrId, submissionId, input);
+      return ok(s);
     }
   );
 }

@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
-import { MailIcon, XIcon } from "../../components/Icons";
+import {
+  AlertIcon,
+  CheckIcon,
+  DownloadIcon,
+  EyeIcon,
+  LockIcon,
+  MailIcon,
+  PlusIcon,
+  TrashIcon,
+  UsersIcon,
+  XIcon,
+} from "../../components/Icons";
 
 const STATUS_LABEL: Record<api.SubmissionStatus, string> = {
   DRAFT: "Rascunho",
@@ -96,20 +107,202 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
     reason: string;
   } | null>(null);
 
+  // ── Estados para Ficha do Trabalho e Área de Risco ──
+  const [trabalhoAberto, setTrabalhoAberto] = useState<api.SubmissionRecord | null>(null);
+  const [modalidades, setModalidades] = useState<api.CatalogItem[]>([]);
+  const [topicos, setTopicos] = useState<api.CatalogItem[]>([]);
+  const [modoEdicaoAtivo, setModoEdicaoAtivo] = useState(false);
+  const [mostrandoPromptSenha, setMostrandoPromptSenha] = useState(false);
+  const [senhaAdmin, setSenhaAdmin] = useState("");
+  const [erroSenha, setErroSenha] = useState<string | null>(null);
+  const [validandoSenha, setValidandoSenha] = useState(false);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+
+  // Campos do formulário de edição
+  const [editTitulo, setEditTitulo] = useState("");
+  const [editResumo, setEditResumo] = useState("");
+  const [editPalavras, setEditPalavras] = useState("");
+  const [editModalidade, setEditModalidade] = useState("");
+  const [editArea, setEditArea] = useState("");
+  const [editStatus, setEditStatus] = useState<api.SubmissionStatus>("SUBMITTED");
+  const [editAutores, setEditAutores] = useState<
+    Array<{
+      id?: string;
+      name: string;
+      email: string;
+      institution: string;
+      isPresenter: boolean;
+    }>
+  >([]);
+
+  function abrirTrabalho(s: api.SubmissionRecord) {
+    setTrabalhoAberto(s);
+    setModoEdicaoAtivo(false);
+    setMostrandoPromptSenha(false);
+    setSenhaAdmin("");
+    setErroSenha(null);
+
+    setEditTitulo(s.title);
+    setEditResumo(s.abstract);
+    setEditPalavras(s.keywords.join(", "));
+    setEditModalidade(s.modality?.id || "");
+    setEditArea(s.topic?.id || "");
+    setEditStatus(s.status);
+    setEditAutores(
+      s.authors.map((a) => ({
+        id: a.id,
+        name: a.name,
+        email: a.email,
+        institution: a.institution || "",
+        isPresenter: a.isPresenter,
+      }))
+    );
+  }
+
+  async function handleDesbloquearEdicao(e: React.FormEvent) {
+    e.preventDefault();
+    if (!senhaAdmin.trim() || !trabalhoAberto) return;
+
+    setValidandoSenha(true);
+    setErroSenha(null);
+
+    try {
+      const res = await api.verifyAdminPassword(eventId, trabalhoAberto.id, senhaAdmin.trim());
+      if (res.valid) {
+        setModoEdicaoAtivo(true);
+        setMostrandoPromptSenha(false);
+        setErroSenha(null);
+      } else {
+        setErroSenha("Senha incorreta. Apenas administradores podem habilitar o modo de edição.");
+      }
+    } catch (err) {
+      setErroSenha(err instanceof Error ? err.message : "Falha ao validar senha de administrador.");
+    } finally {
+      setValidandoSenha(false);
+    }
+  }
+
+  function handleAddAutor() {
+    setEditAutores((prev) => [
+      ...prev,
+      {
+        name: "",
+        email: "",
+        institution: "",
+        isPresenter: prev.length === 0,
+      },
+    ]);
+  }
+
+  function handleUpdateAutor(index: number, campo: string, valor: any) {
+    setEditAutores((prev) =>
+      prev.map((a, i) => {
+        if (i === index) {
+          return { ...a, [campo]: valor };
+        }
+        if (campo === "isPresenter" && valor === true) {
+          return { ...a, isPresenter: false };
+        }
+        return a;
+      })
+    );
+  }
+
+  function handleRemoveAutor(index: number) {
+    if (editAutores.length <= 1) {
+      alert("O trabalho precisa ter pelo menos um integrante/autor.");
+      return;
+    }
+    const removido = editAutores[index];
+    const novaLista = editAutores.filter((_, i) => i !== index);
+    if (removido.isPresenter && novaLista.length > 0) {
+      novaLista[0].isPresenter = true;
+    }
+    setEditAutores(novaLista);
+  }
+
+  async function handleSalvarEdicaoAdmin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!trabalhoAberto) return;
+
+    if (!editTitulo.trim()) {
+      alert("Informe o título do trabalho.");
+      return;
+    }
+    if (!editResumo.trim() || editResumo.trim().length < 20) {
+      alert("O resumo precisa ter no mínimo 20 caracteres.");
+      return;
+    }
+    if (editAutores.length === 0) {
+      alert("Informe pelo menos um integrante/autor.");
+      return;
+    }
+    for (let i = 0; i < editAutores.length; i++) {
+      const a = editAutores[i];
+      if (!a.name.trim()) {
+        alert(`Informe o nome do integrante #${i + 1}.`);
+        return;
+      }
+      if (!a.email.trim() || !a.email.includes("@")) {
+        alert(`Informe um e-mail válido para o integrante "${a.name || `#${i + 1}`}".`);
+        return;
+      }
+    }
+
+    const palavras = editPalavras
+      .split(/[,;]+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    setSalvandoEdicao(true);
+    setError(null);
+
+    try {
+      const atualizado = await api.adminEditSubmission(eventId, trabalhoAberto.id, {
+        password: senhaAdmin.trim(),
+        title: editTitulo.trim(),
+        abstract: editResumo.trim(),
+        keywords: palavras.length > 0 ? palavras : undefined,
+        modalityId: editModalidade || null,
+        topicId: editArea || null,
+        status: editStatus,
+        authors: editAutores.map((a) => ({
+          name: a.name.trim(),
+          email: a.email.trim().toLowerCase(),
+          institution: a.institution.trim() || null,
+          isPresenter: a.isPresenter,
+        })),
+      });
+
+      setTrabalhoAberto(atualizado);
+      setLista((prev) => prev.map((item) => (item.id === atualizado.id ? atualizado : item)));
+      setModoEdicaoAtivo(false);
+      setAviso(`Trabalho ${atualizado.code} atualizado com sucesso! Novos integrantes e dados gravados.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao salvar alterações do trabalho.");
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  }
+
   async function carregar() {
     setCarregando(true);
     try {
-      const [s, l] = await Promise.all([
+      const [s, l, mods, tops] = await Promise.all([
         api.getSubmissionSettings(eventId),
         api.listSubmissions(eventId, {
           search: busca || undefined,
           status: filtroStatus || undefined,
         }),
+        api.listModalities(eventId).catch(() => []),
+        api.listTopics(eventId).catch(() => []),
       ]);
       setSettings(s);
       setLista(l.items);
       setTotal(l.total);
       setResumo(l.resumo);
+      setModalidades(mods);
+      setTopicos(tops);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar");
@@ -369,7 +562,13 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
               <div key={s.id} className="card">
                 <div className="spread">
                   <div>
-                    <strong>{s.title}</strong>
+                    <strong
+                      style={{ cursor: "pointer", color: "var(--foreground)" }}
+                      onClick={() => abrirTrabalho(s)}
+                      title="Clique para abrir os detalhes e integrantes deste trabalho"
+                    >
+                      {s.title}
+                    </strong>
                     <div className="muted" style={{ marginTop: 4 }}>
                       <span className="monospace" style={{ fontWeight: 600 }}>{s.code}</span>
                       {s.modality ? ` · ${s.modality.name}` : ""}
@@ -423,7 +622,25 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
 
                 <ResumoDoTrabalho s={s} />
 
-                <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
+                <div className="row" style={{ marginTop: 12, flexWrap: "wrap", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{
+                      background: "rgba(10, 132, 255, 0.12)",
+                      color: "#0a84ff",
+                      borderColor: "rgba(10, 132, 255, 0.4)",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                    onClick={() => abrirTrabalho(s)}
+                    title="Abrir trabalho e gerenciar integrantes / Área de Risco"
+                  >
+                    <EyeIcon size="1.1em" /> Abrir Trabalho
+                  </button>
+
                   {s.files.length > 0
                     ? s.files.map((f, i) => (
                         <button
@@ -735,6 +952,577 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                   : "Confirmar Aprovação com Ressalva"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal / Ficha do Trabalho Aberto com Área de Risco ── */}
+      {trabalhoAberto && (
+        <div
+          role="dialog"
+          aria-modal
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#000000bb",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 60,
+            padding: 16,
+          }}
+          onClick={() => {
+            if (
+              modoEdicaoAtivo &&
+              !window.confirm("Você está no modo de edição. Deseja realmente fechar e perder alterações não salvas?")
+            ) {
+              return;
+            }
+            setTrabalhoAberto(null);
+            setModoEdicaoAtivo(false);
+          }}
+        >
+          <div
+            className="card stack"
+            style={{
+              width: 780,
+              maxWidth: "100%",
+              gap: 16,
+              maxHeight: "92vh",
+              overflowY: "auto",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.6)",
+              border: modoEdicaoAtivo ? "2px solid #ff453a" : "1px solid var(--border)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho da Ficha */}
+            <div className="spread" style={{ alignItems: "flex-start", gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                  <span className="monospace" style={{ fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>
+                    {trabalhoAberto.code}
+                  </span>
+                  <span className={`badge ${STATUS_BADGE[trabalhoAberto.status]}`}>
+                    {STATUS_LABEL[trabalhoAberto.status]}
+                  </span>
+                  {trabalhoAberto.modality && (
+                    <span className="badge badge-muted">{trabalhoAberto.modality.name}</span>
+                  )}
+                  {trabalhoAberto.topic && (
+                    <span className="badge badge-muted">{trabalhoAberto.topic.name}</span>
+                  )}
+                </div>
+                <h2 style={{ margin: 0, fontSize: 18, lineHeight: 1.4 }}>
+                  {trabalhoAberto.title}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-muted)",
+                  padding: 4,
+                }}
+                onClick={() => {
+                  if (modoEdicaoAtivo && !window.confirm("Deseja fechar sem salvar?")) return;
+                  setTrabalhoAberto(null);
+                  setModoEdicaoAtivo(false);
+                }}
+                aria-label="Fechar"
+              >
+                <XIcon size="1.2em" />
+              </button>
+            </div>
+
+            {/* SEÇÃO 1: MODO VISUALIZAÇÃO */}
+            {!modoEdicaoAtivo && (
+              <div className="stack" style={{ gap: 16 }}>
+                {/* Autores / Integrantes Atuais */}
+                <div
+                  style={{
+                    background: "var(--card-subtle, rgba(255,255,255,0.03))",
+                    padding: 14,
+                    borderRadius: 10,
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, fontWeight: 600 }}>
+                    <UsersIcon size="1.1em" />
+                    <span>Integrantes do Grupo / Autores ({trabalhoAberto.authors.length})</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {trabalhoAberto.authors.map((a, i) => (
+                      <div
+                        key={a.id || i}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 12px",
+                          borderRadius: 6,
+                          background: "var(--background)",
+                          border: "1px solid var(--border)",
+                          fontSize: 13,
+                        }}
+                      >
+                        <div>
+                          <strong style={{ color: "var(--foreground)" }}>{a.name}</strong>
+                          <span className="muted" style={{ marginLeft: 8 }}>
+                            ({a.email})
+                          </span>
+                          {a.institution && (
+                            <span className="muted" style={{ marginLeft: 6 }}>
+                              · {a.institution}
+                            </span>
+                          )}
+                        </div>
+                        {a.isPresenter && (
+                          <span className="badge badge-amber" style={{ fontSize: 11, fontWeight: 600 }}>
+                            ⭐ Apresentador
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Resumo */}
+                <div>
+                  <strong style={{ fontSize: 13, display: "block", marginBottom: 4 }}>Resumo:</strong>
+                  <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--foreground)" }}>
+                    {trabalhoAberto.abstract}
+                  </p>
+                </div>
+
+                {/* Palavras-chave */}
+                {trabalhoAberto.keywords && trabalhoAberto.keywords.length > 0 && (
+                  <div>
+                    <strong style={{ fontSize: 13, display: "block", marginBottom: 4 }}>Palavras-chave:</strong>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {trabalhoAberto.keywords.map((kw, i) => (
+                        <span key={i} className="badge badge-muted" style={{ fontSize: 12 }}>
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Arquivos */}
+                {trabalhoAberto.files && trabalhoAberto.files.length > 0 && (
+                  <div>
+                    <strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Arquivos Anexados:</strong>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {trabalhoAberto.files.map((f, i) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={() => abrirArquivo(trabalhoAberto, f)}
+                        >
+                          <DownloadIcon size="1.1em" /> {f.fileName || `Arquivo ${i + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Parecer / Ressalvas se houver */}
+                {trabalhoAberto.decisionReason && (
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 8,
+                      background:
+                        trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS"
+                          ? "rgba(245, 158, 11, 0.12)"
+                          : "rgba(239, 68, 68, 0.1)",
+                      borderLeft: `4px solid ${
+                        trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS" ? "#f59e0b" : "#ef4444"
+                      }`,
+                      fontSize: 13,
+                    }}
+                  >
+                    <strong
+                      style={{
+                        display: "block",
+                        marginBottom: 4,
+                        color: trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS" ? "#f59e0b" : "#f87171",
+                      }}
+                    >
+                      {trabalhoAberto.status === "APPROVED_WITH_RESERVATIONS"
+                        ? "Ressalvas da comissão para correção:"
+                        : "Parecer da comissão:"}
+                    </strong>
+                    <p style={{ margin: 0, whiteSpace: "pre-line", lineHeight: 1.5 }}>
+                      {trabalhoAberto.decisionReason}
+                    </p>
+                  </div>
+                )}
+
+                {/* ── ÁREA DE RISCO (HABILITAR MODO DE EDIÇÃO) ── */}
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: 16,
+                    borderRadius: 12,
+                    background: "rgba(255, 69, 58, 0.08)",
+                    border: "1px solid rgba(255, 69, 58, 0.35)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#ff453a", fontWeight: 700, fontSize: 15 }}>
+                    <AlertIcon size="1.2em" />
+                    <span>Área de Risco — Edição Administrativa</span>
+                  </div>
+                  <p style={{ margin: "8px 0 0", fontSize: 13, lineHeight: 1.5, color: "var(--foreground)" }}>
+                    Utilize esta área caso o trabalho tenha sido enviado sem o nome de todos os integrantes do grupo,
+                    ou seja necessário corrigir autores, título ou dados diretamente no sistema.
+                    Por ser uma área crítica, a ativação do modo de edição exige a <strong>senha do administrador</strong>.
+                  </p>
+
+                  {!mostrandoPromptSenha ? (
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      style={{ marginTop: 14, display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+                      onClick={() => {
+                        setMostrandoPromptSenha(true);
+                        setErroSenha(null);
+                        setSenhaAdmin("");
+                      }}
+                    >
+                      <LockIcon size="1.1em" />
+                      Habilitar Modo de Edição (Área de Risco)
+                    </button>
+                  ) : (
+                    <form
+                      onSubmit={handleDesbloquearEdicao}
+                      style={{
+                        marginTop: 14,
+                        padding: 12,
+                        borderRadius: 8,
+                        background: "var(--background)",
+                        border: "1px solid var(--border)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10,
+                      }}
+                    >
+                      <label style={{ fontSize: 13, fontWeight: 600 }}>
+                        Digite a Senha do Administrador para desbloquear:
+                      </label>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <input
+                          type="password"
+                          autoFocus
+                          required
+                          placeholder="Senha de administrador"
+                          value={senhaAdmin}
+                          onChange={(e) => setSenhaAdmin(e.target.value)}
+                          style={{
+                            flex: 1,
+                            minWidth: 200,
+                            padding: "8px 12px",
+                            background: "var(--input-bg, #1a1a1a)",
+                            color: "var(--foreground)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            fontSize: 14,
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={validandoSenha || !senhaAdmin.trim()}
+                          className="btn btn-danger btn-sm"
+                          style={{ fontWeight: 600 }}
+                        >
+                          {validandoSenha ? "Verificando..." : "Desbloquear Edição"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setMostrandoPromptSenha(false)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                      {erroSenha && (
+                        <div style={{ color: "var(--danger)", fontSize: 12, fontWeight: 500 }}>
+                          {erroSenha}
+                        </div>
+                      )}
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SEÇÃO 2: MODO DE EDIÇÃO ATIVO (ÁREA DE RISCO) */}
+            {modoEdicaoAtivo && (
+              <form onSubmit={handleSalvarEdicaoAdmin} className="stack" style={{ gap: 16 }}>
+                {/* Banner Modo Ativo */}
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    background: "rgba(255, 69, 58, 0.18)",
+                    border: "1px solid #ff453a",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <AlertIcon size="1.2em" color="#ff453a" />
+                    <div>
+                      <strong style={{ color: "#ff453a", fontSize: 14 }}>Modo de Edição Ativo (Área de Risco)</strong>
+                      <div style={{ fontSize: 12, color: "var(--foreground)" }}>
+                        Adicione ou altere os integrantes do grupo abaixo e clique em Salvar Alterações ao finalizar.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => {
+                      if (window.confirm("Deseja sair do modo de edição? Alterações não salvas serão perdidas.")) {
+                        setModoEdicaoAtivo(false);
+                      }
+                    }}
+                  >
+                    Fechar Edição
+                  </button>
+                </div>
+
+                {/* BLOCO PRINCIPAL: INTEGRANTES DO GRUPO (AUTORES) */}
+                <div
+                  style={{
+                    padding: 16,
+                    borderRadius: 10,
+                    background: "var(--card-subtle, rgba(255,255,255,0.02))",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div className="spread" style={{ marginBottom: 10, alignItems: "center" }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}>
+                        <UsersIcon size="1.1em" />
+                        Integrantes do Grupo / Autores ({editAutores.length})
+                      </h4>
+                      <p className="muted" style={{ margin: "2px 0 0", fontSize: 12 }}>
+                        Inclua aqui os nomes dos integrantes do grupo que não foram enviados originalmente:
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        background: "rgba(10, 132, 255, 0.15)",
+                        color: "#0a84ff",
+                        borderColor: "rgba(10, 132, 255, 0.4)",
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                      onClick={handleAddAutor}
+                    >
+                      <PlusIcon size="1.1em" /> Adicionar Integrante
+                    </button>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {editAutores.map((autor, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: 12,
+                          borderRadius: 8,
+                          background: "var(--background)",
+                          border: "1px solid var(--border)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                        }}
+                      >
+                        <div className="spread" style={{ alignItems: "center" }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--primary)" }}>
+                            Integrante #{idx + 1}
+                          </span>
+                          {editAutores.length > 1 && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-danger"
+                              style={{ padding: "2px 8px", fontSize: 12 }}
+                              onClick={() => handleRemoveAutor(idx)}
+                              title="Remover este integrante"
+                            >
+                              <TrashIcon size="1em" /> Remover
+                            </button>
+                          )}
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+                          <label className="field" style={{ margin: 0 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600 }}>Nome Completo *</span>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Nome do integrante"
+                              value={autor.name}
+                              onChange={(e) => handleUpdateAutor(idx, "name", e.target.value)}
+                            />
+                          </label>
+                          <label className="field" style={{ margin: 0 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600 }}>E-mail *</span>
+                            <input
+                              type="email"
+                              required
+                              placeholder="email@instituicao.edu.br"
+                              value={autor.email}
+                              onChange={(e) => handleUpdateAutor(idx, "email", e.target.value)}
+                            />
+                          </label>
+                          <label className="field" style={{ margin: 0 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600 }}>Instituição (Opcional)</span>
+                            <input
+                              type="text"
+                              placeholder="Ex: USP, UNIFESP, etc."
+                              value={autor.institution}
+                              onChange={(e) => handleUpdateAutor(idx, "institution", e.target.value)}
+                            />
+                          </label>
+                        </div>
+
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, marginTop: 4 }}>
+                          <input
+                            type="checkbox"
+                            checked={autor.isPresenter}
+                            onChange={(e) => handleUpdateAutor(idx, "isPresenter", e.target.checked)}
+                            style={{ width: "auto" }}
+                          />
+                          <span>Apresentador principal deste trabalho no evento</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* DEMAIS DADOS DO TRABALHO */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+                  <label className="field">
+                    <span style={{ fontWeight: 600 }}>Título do Trabalho *</span>
+                    <input
+                      type="text"
+                      required
+                      value={editTitulo}
+                      onChange={(e) => setEditTitulo(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span style={{ fontWeight: 600 }}>Resumo *</span>
+                    <textarea
+                      rows={5}
+                      required
+                      value={editResumo}
+                      onChange={(e) => setEditResumo(e.target.value)}
+                      style={{ resize: "vertical", lineHeight: 1.5 }}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span style={{ fontWeight: 600 }}>Palavras-chave (separadas por vírgula) *</span>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: saúde, tecnologia, inovação"
+                      value={editPalavras}
+                      onChange={(e) => setEditPalavras(e.target.value)}
+                    />
+                  </label>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                    {modalidades.length > 0 && (
+                      <label className="field">
+                        <span style={{ fontWeight: 600 }}>Modalidade</span>
+                        <select
+                          value={editModalidade}
+                          onChange={(e) => setEditModalidade(e.target.value)}
+                        >
+                          <option value="">Sem modalidade</option>
+                          {modalidades.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+
+                    {topicos.length > 0 && (
+                      <label className="field">
+                        <span style={{ fontWeight: 600 }}>Eixo / Área Temática</span>
+                        <select
+                          value={editArea}
+                          onChange={(e) => setEditArea(e.target.value)}
+                        >
+                          <option value="">Sem área</option>
+                          {topicos.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+
+                    <label className="field">
+                      <span style={{ fontWeight: 600 }}>Status do Trabalho</span>
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value as api.SubmissionStatus)}
+                      >
+                        {Object.entries(STATUS_LABEL).map(([k, v]) => (
+                          <option key={k} value={k}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                {/* BOTÕES DE SALVAMENTO */}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      if (window.confirm("Deseja cancelar a edição? As alterações feitas serão perdidas.")) {
+                        setModoEdicaoAtivo(false);
+                      }
+                    }}
+                    disabled={salvandoEdicao}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{ background: "#30d158", borderColor: "#30d158", color: "#ffffff", fontWeight: 700 }}
+                    disabled={salvandoEdicao}
+                  >
+                    <CheckIcon size="1.1em" /> {salvandoEdicao ? "Salvando Alterações..." : "Salvar Alterações (Área de Risco)"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

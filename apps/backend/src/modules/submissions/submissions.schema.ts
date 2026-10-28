@@ -78,6 +78,50 @@ export const createSubmissionSchema = z.object({
 
 export const updateSubmissionSchema = createSubmissionSchema.partial();
 
+export const verifyAdminPasswordSchema = z.object({
+  password: z.string().min(1, "Informe a senha do administrador."),
+});
+
+export const adminEditSubmissionSchema = z.object({
+  password: z.string().min(1, "Informe a senha do administrador."),
+  title: z
+    .string()
+    .trim()
+    .min(5, "O título precisa ter pelo menos 5 caracteres.")
+    .max(300, "O título pode ter no máximo 300 caracteres.")
+    .optional(),
+  abstract: z
+    .string()
+    .trim()
+    .min(20, "O resumo precisa ter pelo menos 20 caracteres.")
+    .max(10000)
+    .optional(),
+  keywords: z
+    .array(z.string().trim().min(1).max(50))
+    .min(1, "Informe pelo menos uma palavra-chave.")
+    .optional(),
+  modalityId: z.string().uuid().nullable().optional(),
+  topicId: z.string().uuid().nullable().optional(),
+  status: z
+    .enum([
+      "DRAFT",
+      "SUBMITTED",
+      "UNDER_REVIEW",
+      "APPROVED",
+      "APPROVED_WITH_RESERVATIONS",
+      "RESUBMITTED",
+      "REJECTED",
+      "WITHDRAWN",
+    ])
+    .optional(),
+  authors: z
+    .array(authorSchema)
+    .min(1, "O trabalho precisa ter pelo menos um integrante/autor.")
+    .max(20, "Informe no máximo 20 autores por trabalho."),
+});
+
+export type AdminEditSubmissionInput = z.infer<typeof adminEditSubmissionSchema>;
+
 export const decideSubmissionSchema = z
   .object({
     decision: z.enum(["APPROVED", "APPROVED_WITH_RESERVATIONS", "REJECTED"]),

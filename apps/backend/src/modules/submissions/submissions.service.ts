@@ -14,7 +14,9 @@ import { receberParte, retirarArquivo } from "./submissions.parts.js";
 import { MAX_ARQUIVOS_POR_TRABALHO } from "./submissions.schema.js";
 import { emailService } from "../../lib/email/email.service.js";
 import { resolveEmailSettings } from "../../lib/email/email-settings.js";
+import { verifyPassword } from "../../shared/passwords.js";
 import type {
+  AdminEditSubmissionInput,
   CreateSubmissionInput,
   PublicCreateSubmissionInput,
   PublicUploadPartInput,
@@ -1453,4 +1455,146 @@ export async function readPublicSubmissionFile(submissionId: string, fileId: str
     fileId
   );
   return { buffer, fileName, tipo, contentType };
+}
+
+/**
+ * Confere se a senha informada pertence a um administrador do sistema.
+ */
+export async function verifyAdminPassword(password: string, userId?: string): Promise<boolean> {
+  const trimmed = password ? password.trim() : "";
+  if (!trimmed) return false;
+
+  // 1. Usuário logado
+  if (userId) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user && user.isActive) {
+      const match = await verifyPassword(trimmed, user.passwordHash);
+      if (match) return true;
+    }
+  }
+
+  // 2. Qualquer administrador ativo
+  const adminUsers = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { role: { key: "ADMINISTRADOR" } },
+        { role: { isSystem: true } },
+      ],
+    },
+  });
+
+  for (const admin of adminUsers) {
+    const match = await verifyPassword(trimmed, admin.passwordHash);
+    if (match) return true;
+  }
+
+  // 3. Senha de seed ou override do .env
+  if (process.env.ADMIN_SEED_PASSWORD && trimmed === process.env.ADMIN_SEED_PASSWORD) {
+    return true;
+  }
+  if (process.env.ADMIN_EDIT_PASSWORD && trimmed === process.env.ADMIN_EDIT_PASSWORD) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Área de Risco: edição administrativa direta de uma submissão.
+ *
+ * Permite ao administrador alterar e incluir integrantes do grupo (autores)
+ * que faltaram no envio inicial, atualizar título, resumo, palavras-chave,
+ * modalidade, tema e status.
+ */
+export async function adminEditSubmission(
+  eventId: string,
+  submissionId: string,
+  input: AdminEditSubmissionInput & { userId?: string }
+) {
+  const ok = await verifyAdminPassword(input.password, input.userId);
+  if (!ok) {
+    throw new ValidationError("Senha de administrador incorreta. Acesso negado à Área de Risco.");
+  }
+
+  const s = await prisma.submission.findFirst({
+    where: { id: submissionId, eventId },
+    include: { authors: true },
+  });
+  if (!s) throw new NotFoundError("Trabalho não encontrado neste evento.");
+
+  if (!input.authors || input.authors.length === 0) {
+    throw new ValidationError("O trabalho deve conter pelo menos um autor/integrante.");
+  }
+
+  // Garante que há exatamente um apresentador
+  const hasPresenter = input.authors.some((a) => a.isPresenter);
+  const autoresFormatados = input.authors.map((a, i) => ({
+    name: a.name.trim(),
+    email: a.email.trim().toLowerCase(),
+    institution: a.institution?.trim() || null,
+    isPresenter: hasPresenter ? Boolean(a.isPresenter) : i === 0,
+    position: i,
+  }));
+
+  if (input.modalityId) {
+    const mod = await prisma.submissionModality.findFirst({
+      where: { id: input.modalityId, eventId },
+    });
+    if (!mod) throw new ValidationError("Modalidade selecionada não pertence a este evento.");
+  }
+  if (input.topicId) {
+    const top = await prisma.submissionTopic.findFirst({
+      where: { id: input.topicId, eventId },
+    });
+    if (!top) throw new ValidationError("Área temática selecionada não pertence a este evento.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // 1. Deletar autores atuais
+    await tx.submissionAuthor.deleteMany({
+      where: { submissionId: s.id },
+    });
+
+    // 2. Inserir os autores novos/atualizados
+    await tx.submissionAuthor.createMany({
+      data: autoresFormatados.map((a) => ({
+        submissionId: s.id,
+        name: a.name,
+        email: a.email,
+        institution: a.institution,
+        isPresenter: a.isPresenter,
+        position: a.position,
+      })),
+    });
+
+    // 3. Atualizar campos da submissão
+    const dadosUpdate: any = { updatedAt: new Date() };
+    if (input.title !== undefined) dadosUpdate.title = input.title.trim();
+    if (input.abstract !== undefined) dadosUpdate.abstract = input.abstract.trim();
+    if (input.keywords !== undefined) dadosUpdate.keywords = input.keywords;
+    if (input.modalityId !== undefined) dadosUpdate.modalityId = input.modalityId;
+    if (input.topicId !== undefined) dadosUpdate.topicId = input.topicId;
+    if (input.status !== undefined) dadosUpdate.status = input.status;
+
+    return tx.submission.update({
+      where: { id: s.id },
+      data: dadosUpdate,
+      include: {
+        authors: { orderBy: { position: "asc" } },
+        files: { orderBy: { position: "asc" } },
+        modality: { select: { id: true, name: true } },
+        topic: { select: { id: true, name: true } },
+      },
+    });
+  });
+}
+
+export async function adminEditPublicSubmission(
+  slugOrId: string,
+  submissionId: string,
+  input: AdminEditSubmissionInput
+) {
+  const event = await resolveEvent(slugOrId);
+  return adminEditSubmission(event.id, submissionId, input);
 }
