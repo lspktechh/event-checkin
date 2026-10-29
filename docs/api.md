@@ -108,6 +108,41 @@ distribuídas na ordem do arquivo: o que passa do limite aparece como
 `failed: [{ row, reason }]` com linhas aceitas no preview que falharam ao
 gravar (ex.: o lote encheu no meio).
 
+### Editar inscrição (requer `participants.edit`)
+
+`PATCH /events/:eventId/inscriptions/:id` — corpo parcial, só muda o que vier:
+
+```json
+{
+  "name": "…", "email": "…", "document": "…", "phone": "…" | null, "institution": "…" | null,
+  "pagamento": { "forma": "CORTESIA" | "MANUAL" | "PIX" | "CARD", "valor": 120.5 }
+}
+```
+
+Tudo numa **única transação**, e os dados valem para a inscrição **e** para o
+participante ligado (o portal entra pelo e-mail do participante).
+
+- E-mail/CPF que passam a ser de **outro participante ativo** → `409 JA_INSCRITO`
+  (só se o campo mudou; duplicado antigo não bloqueia corrigir um telefone).
+- `pagamento.forma`: `CORTESIA` zera o valor e marca `isCourtesy`; `MANUAL`,
+  `PIX` e `CARD` são pagamento feito **fora do sistema** (`paymentProvider:
+  MANUAL`; `PIX`/`CARD` dizem como). Sem `valor`: mantém o já cobrado ou, se
+  era cortesia, o preço do lote. `valor` ≤ 0 → `422`.
+- A forma de pagamento só muda em inscrição **confirmada** (`409
+  PAGAMENTO_NAO_EDITAVEL`) e **nunca** em inscrição paga pelo gateway
+  (`409 PAGAMENTO_GATEWAY`). A vaga do lote não muda.
+
+### Editar participante
+
+`PATCH /events/:eventId/participants/:participantId` agora também:
+
+- atualiza a inscrição de origem (nome, e-mail, CPF, telefone), na mesma transação;
+- confere duplicado de e-mail/CPF (`409 JA_INSCRITO`);
+- aceita `cortesia` **só** para participante sem inscrição; com inscrição
+  → `409 CORTESIA_PELA_INSCRICAO` (a cortesia vem da forma de pagamento).
+
+`GET /events/:eventId/participants` devolve `hasInscription` em cada item.
+
 ## Terminais
 
 | Método | Path | Auth | Descrição |

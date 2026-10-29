@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import * as api from "../../api/client";
-import { AlertIcon, CardIcon, CheckIcon, IdCardIcon, MailIcon, PhoneIcon, SmartphoneIcon, TrashIcon, UsersIcon, XIcon } from "../../components/Icons";
+import { AlertIcon, CardIcon, CheckIcon, EditIcon, IdCardIcon, MailIcon, PhoneIcon, SmartphoneIcon, TrashIcon, UsersIcon, XIcon } from "../../components/Icons";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
 import { ImportCsvModal } from "../../components/ImportCsvModal";
 import { ManualInscriptionModal } from "../../components/ManualInscriptionModal";
+import { EditInscriptionModal } from "../../components/EditInscriptionModal";
 import { formatPhone, formatDocument, stripEmoji } from "../../utils/formatters";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -41,6 +42,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
   const [methodFilter, setMethodFilter] = useState<"ALL" | "PIX" | "CARD">("ALL");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<api.InscriptionReportItem | null>(null);
+  const [editTarget, setEditTarget] = useState<api.InscriptionReportItem | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "cards">(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches ? "cards" : "table"
   );
@@ -925,6 +927,17 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     {canEdit ? (
                     <div className="row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "nowrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        title="Editar dados e forma de pagamento"
+                        disabled={actionLoading === item.id}
+                        onClick={() => setEditTarget(item)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 9px", fontSize: 12 }}
+                      >
+                        <EditIcon size={13} />
+                        Editar
+                      </button>
                       {item.amount === 0 && (item.status === "PENDING" || item.status === "CANCELLED") && (
                         <button
                           type="button"
@@ -1172,6 +1185,24 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   justifyContent: "flex-end",
                 }}
               >
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={actionLoading === item.id}
+                  onClick={() => setEditTarget(item)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    flex: 1,
+                    justifyContent: "center",
+                    padding: "6px 10px",
+                    fontSize: 12,
+                  }}
+                >
+                  <EditIcon size={14} />
+                  Editar
+                </button>
                 {item.amount === 0 && (item.status === "PENDING" || item.status === "CANCELLED") && (
                   <button
                     type="button"
@@ -1243,6 +1274,20 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
           onClose={() => setShowManual(false)}
           onCreated={(message) => {
             setShowManual(false);
+            setError(null);
+            setSuccessMessage(message);
+            loadInscriptions();
+          }}
+        />
+      )}
+
+      {editTarget && (
+        <EditInscriptionModal
+          eventId={eventId}
+          item={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={(message) => {
+            setEditTarget(null);
             setError(null);
             setSuccessMessage(message);
             loadInscriptions();

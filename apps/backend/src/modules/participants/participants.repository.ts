@@ -16,6 +16,15 @@ export function listParticipantsByEvent(eventId: string) {
   });
 }
 
+/** Ids dos participantes do evento que vieram de uma inscrição. */
+export async function listInscribedParticipantIds(eventId: string): Promise<Set<string>> {
+  const rows = await prisma.inscription.findMany({
+    where: { eventId, participantId: { not: null } },
+    select: { participantId: true },
+  });
+  return new Set(rows.map((r) => r.participantId!));
+}
+
 export function findParticipantById(eventId: string, participantId: string) {
   return prisma.participant.findFirst({ where: { id: participantId, eventId } });
 }
@@ -37,6 +46,30 @@ export function listParticipantsForOfflineSync(eventId: string) {
 
 export function updateParticipant(participantId: string, data: Prisma.ParticipantUpdateInput) {
   return prisma.participant.update({ where: { id: participantId }, data });
+}
+
+/** Inscrição de onde o participante veio (confirmação de pagamento ou
+ * cortesia lançada pelo painel). Participante criado direto na aba
+ * Participantes ou por CSV de participantes não tem. */
+export function findLinkedInscription(participantId: string) {
+  return prisma.inscription.findFirst({ where: { participantId } });
+}
+
+/** Atualiza o participante e, se vier de uma inscrição, os mesmos dados
+ * nela — na mesma transação, para os dois nunca divergirem. */
+export function updateParticipantAndInscription(
+  participantId: string,
+  participantData: Prisma.ParticipantUpdateInput,
+  inscriptionId: string | null,
+  inscriptionData: Prisma.InscriptionUpdateInput
+) {
+  return prisma.$transaction(async (tx) => {
+    const participant = await tx.participant.update({ where: { id: participantId }, data: participantData });
+    if (inscriptionId) {
+      await tx.inscription.update({ where: { id: inscriptionId }, data: inscriptionData });
+    }
+    return participant;
+  });
 }
 
 /** Apaga o participante. onDelete: Cascade (ver schema.prisma) remove

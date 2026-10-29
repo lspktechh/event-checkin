@@ -7,12 +7,14 @@ import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { recordAudit } from "../audit/audit.service.js";
 import * as inscriptionsService from "./inscriptions.service.js";
 import * as inscriptionsManual from "./inscriptions.manual.js";
+import * as inscriptionsEdit from "./inscriptions.edit.js";
 import {
   createInscriptionSchema,
   createManualInscriptionSchema,
   eventInscriptionParamsSchema,
   importInscriptionsSchema,
   inscriptionEventParamsSchema,
+  updateInscriptionSchema,
   picPayWebhookSchema,
 } from "./inscriptions.schema.js";
 
@@ -136,6 +138,39 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
         failed: report.failed.length,
       });
       return ok(report);
+    }
+  );
+
+  // Admin — Editar dados da pessoa e/ou forma de pagamento
+  app.patch(
+    "/events/:eventId/inscriptions/:id",
+    { preHandler: requirePermission("participants.edit") },
+    async (request) => {
+      const { eventId, id } = eventInscriptionParamsSchema.parse(request.params);
+      const input = updateInscriptionSchema.parse(request.body);
+      const ins = await inscriptionsEdit.updateInscription(eventId, id, input);
+      // Na auditoria vão os NOMES dos campos, não os valores: são CPF e
+      // e-mail de terceiros.
+      await recordAudit(request, "inscription.update", "Inscription", id, {
+        eventId,
+        campos: Object.entries(input)
+          .filter(([, v]) => v !== undefined)
+          .map(([k]) => k),
+        forma: input.pagamento?.forma,
+      });
+      return ok({
+        id: ins.id,
+        name: ins.name,
+        email: ins.email,
+        document: ins.document,
+        phone: ins.phone,
+        institution: ins.institution,
+        status: ins.status,
+        amount: Number(ins.amount),
+        isCourtesy: ins.isCourtesy,
+        paymentMethod: ins.paymentMethod,
+        paymentProvider: ins.paymentProvider,
+      });
     }
   );
 

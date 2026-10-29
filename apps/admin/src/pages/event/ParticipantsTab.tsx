@@ -3,6 +3,7 @@ import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { QrCodeModal } from "../../components/QrCodeModal";
 import { ImportCsvModal } from "../../components/ImportCsvModal";
+import { EditParticipantModal } from "../../components/EditParticipantModal";
 
 const CERT_LABEL: Record<api.CertificateRowStatus, string> = {
   LOCKED: "Bloqueado",
@@ -34,6 +35,7 @@ export function ParticipantsTab({ eventId }: { eventId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [qrTarget, setQrTarget] = useState<api.ParticipantRecord | null>(null);
+  const [editTarget, setEditTarget] = useState<api.ParticipantRecord | null>(null);
   const [busyCertId, setBusyCertId] = useState<string | null>(null);
 
   function reload() {
@@ -219,6 +221,9 @@ export function ParticipantsTab({ eventId }: { eventId: string }) {
                     <div className="row">
                       {canEdit ? (
                         <>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setEditTarget(p)}>
+                            Editar
+                          </button>
                           <button className="btn btn-secondary btn-sm" onClick={() => handleRotateToken(p)}>
                             Gerar novo QR
                           </button>
@@ -248,6 +253,17 @@ export function ParticipantsTab({ eventId }: { eventId: string }) {
 
       {qrTarget ? (
         <QrCodeModal participantName={qrTarget.name} qrToken={qrTarget.qrToken} onClose={() => setQrTarget(null)} />
+      ) : null}
+      {editTarget ? (
+        <EditParticipantModal
+          eventId={eventId}
+          participant={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            reload();
+          }}
+        />
       ) : null}
       {showImport ? (
         <ImportCsvModal
