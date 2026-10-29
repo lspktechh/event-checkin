@@ -39,8 +39,8 @@ export async function participantsRoutes(app: FastifyInstance) {
     { preHandler: requirePermission("participants.create") },
     async (request) => {
       const { eventId } = eventIdParamsSchema.parse(request.params);
-      const { csv, confirm } = importParticipantsSchema.parse(request.body);
-      const report = await participantsService.importParticipants(eventId, csv, confirm);
+      const { csv, confirm, cortesia } = importParticipantsSchema.parse(request.body);
+      const report = await participantsService.importParticipants(eventId, csv, confirm, cortesia);
       await recordAudit(request, "participant.import", "Participant", null, { eventId, ...report });
       return ok(report);
     }

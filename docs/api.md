@@ -43,7 +43,7 @@ Resposta: `{ token, user: { id, name, email, role } }`
 
 | Método | Path | Descrição |
 |---|---|---|
-| POST | `/events/:eventId/participants` | Cria participante. Body: `name, email?, phone?, document?` |
+| POST | `/events/:eventId/participants` | Cria participante. Body: `name, email?, phone?, document?, cortesia?` (`cortesia: true` só marca o participante como convidado da organização; participante não tem valor) |
 | GET | `/events/:eventId/participants` | Lista participantes do evento |
 | PATCH | `/events/:eventId/participants/:participantId` | Atualiza dados/status (`ACTIVE`\|`CANCELLED`) |
 | POST | `/events/:eventId/participants/:participantId/rotate-qr-token` | Revoga o QR atual e gera um novo |
@@ -54,7 +54,9 @@ Resposta: `{ token, user: { id, name, email, role } }`
 
 Colunas esperadas (cabeçalho, case-insensitive): `nome,email,telefone,documento`.
 
-Body: `{ "csv": "<conteúdo do arquivo>", "confirm": boolean }`
+Body: `{ "csv": "<conteúdo do arquivo>", "confirm": boolean, "cortesia"?: boolean }`
+(`cortesia: true` marca todos os participantes gravados como convidados da
+organização).
 
 - `confirm: false` (ou omitido) → **modo preview**: valida, normaliza e
   detecta duplicados (dentro do próprio arquivo e contra participantes já
@@ -80,6 +82,31 @@ Body: `{ "csv": "<conteúdo do arquivo>", "confirm": boolean }`
   }
 }
 ```
+
+## Inscrições lançadas pelo painel (requer `participants.create`)
+
+| Método | Path | Descrição |
+|---|---|---|
+| POST | `/events/:eventId/inscriptions/manual` | Lança uma inscrição já **confirmada**, com participante, QR e comprovante por e-mail. Body: `name, email, document, phone?, institution?, notes?, cortesia?` |
+| POST | `/events/:eventId/inscriptions/import` | Importa inscritos por CSV (mesmas colunas e modo preview/confirm da importação de participantes). Body: `csv, confirm?, cortesia?` |
+
+Ambas usam o **lote ativo** do evento e ocupam uma vaga dele:
+
+- `cortesia: true` → valor zero (fora da receita), `Inscription.isCourtesy` e
+  `Participant.isCourtesy` marcados.
+- `cortesia: false` (padrão) → preço do lote, `paymentProvider: MANUAL` (pago
+  por fora do sistema).
+- Sem lote ativo (todos encerrados ou esgotados) → `409`/`403`, como na
+  inscrição pública. Não exige "inscrições abertas" nem aceite de termo.
+- Quem já é participante **ativo** no evento (mesmo e-mail ou CPF, ignorando
+  máscara) é recusado: `409 JA_INSCRITO` na manual; `duplicate` no preview da
+  importação.
+
+Na importação, e-mail e CPF são obrigatórios e as vagas do lote são
+distribuídas na ordem do arquivo: o que passa do limite aparece como
+`invalid` ("Sem vaga no …") já no preview. A resposta inclui
+`failed: [{ row, reason }]` com linhas aceitas no preview que falharam ao
+gravar (ex.: o lote encheu no meio).
 
 ## Terminais
 

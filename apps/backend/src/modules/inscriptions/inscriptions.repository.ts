@@ -16,9 +16,14 @@ export interface CreateInscriptionParams {
   qrCodeBase64?: string | null;
   qrCodeContent?: string | null;
   paymentExpiresAt?: Date | null;
-  /** Versao do termo aceito. Ver inscriptions.schema.ts. */
-  consentVersion: string;
-  consentAcceptedAt: Date;
+  /** Cortesia dada pela organização (valor zero, ocupa vaga do lote). */
+  isCourtesy?: boolean;
+  /** Preenchido só em inscrição lançada à mão (pagamento fora do sistema). */
+  paymentProvider?: PaymentProvider | null;
+  /** Versao do termo aceito. Ver inscriptions.schema.ts. `null` só na
+   * inscrição lançada pela organização, onde ninguém aceitou termo. */
+  consentVersion: string | null;
+  consentAcceptedAt: Date | null;
   consentIp?: string | null;
   /** Inscrição em equipe (ver Event.siteContent.equipe). */
   teamName?: string | null;
@@ -52,6 +57,8 @@ export function createInscription(
       qrCodeBase64: params.qrCodeBase64 ?? null,
       qrCodeContent: params.qrCodeContent ?? null,
       paymentExpiresAt: params.paymentExpiresAt ?? null,
+      isCourtesy: params.isCourtesy ?? false,
+      paymentProvider: params.paymentProvider ?? null,
       consentVersion: params.consentVersion,
       consentAcceptedAt: params.consentAcceptedAt,
       consentIp: params.consentIp ?? null,

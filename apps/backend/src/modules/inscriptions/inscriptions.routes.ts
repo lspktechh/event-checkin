@@ -6,9 +6,12 @@ import { BadRequestError, NotFoundError } from "../../shared/errors.js";
 import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { recordAudit } from "../audit/audit.service.js";
 import * as inscriptionsService from "./inscriptions.service.js";
+import * as inscriptionsManual from "./inscriptions.manual.js";
 import {
   createInscriptionSchema,
+  createManualInscriptionSchema,
   eventInscriptionParamsSchema,
+  importInscriptionsSchema,
   inscriptionEventParamsSchema,
   picPayWebhookSchema,
 } from "./inscriptions.schema.js";
@@ -92,6 +95,46 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
     async (request) => {
       const { eventId } = eventIdParams.parse(request.params);
       const report = await inscriptionsService.getInscriptionsReport(eventId);
+      return ok(report);
+    }
+  );
+
+  // Admin — Lançar inscrição à mão (cortesia ou paga por fora)
+  app.post(
+    "/events/:eventId/inscriptions/manual",
+    { preHandler: requirePermission("participants.create") },
+    async (request, reply) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const input = createManualInscriptionSchema.parse(request.body);
+      const inscription = await inscriptionsManual.createManualInscription(eventId, input);
+      await recordAudit(request, "inscription.create_manual", "Inscription", inscription.id, {
+        eventId,
+        cortesia: input.cortesia,
+      });
+      return reply.status(201).send(ok(inscription));
+    }
+  );
+
+  // Admin — Importar inscritos por CSV (preview com confirm=false)
+  app.post(
+    "/events/:eventId/inscriptions/import",
+    { preHandler: requirePermission("participants.create") },
+    async (request) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const { csv, confirm, cortesia } = importInscriptionsSchema.parse(request.body);
+      const report = await inscriptionsManual.importInscriptions(eventId, csv, confirm, cortesia);
+      // Só contagens na auditoria: as linhas têm CPF e e-mail de terceiros.
+      await recordAudit(request, "inscription.import", "Inscription", null, {
+        eventId,
+        confirm,
+        cortesia,
+        totalRows: report.totalRows,
+        validCount: report.validCount,
+        invalidCount: report.invalidCount,
+        duplicateCount: report.duplicateCount,
+        imported: report.imported,
+        failed: report.failed.length,
+      });
       return ok(report);
     }
   );

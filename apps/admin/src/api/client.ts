@@ -487,6 +487,8 @@ export interface ParticipantRecord {
   status: "ACTIVE" | "CANCELLED";
   qrToken: string;
   revokedAt: string | null;
+  /** Convidado da organização (sem pagamento). */
+  isCourtesy: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -495,7 +497,7 @@ export function listParticipants(eventId: string) {
 }
 export function createParticipant(
   eventId: string,
-  input: { name: string; email?: string; phone?: string; document?: string }
+  input: { name: string; email?: string; phone?: string; document?: string; cortesia?: boolean }
 ) {
   return request<ParticipantRecord>(`/events/${eventId}/participants`, { method: "POST", body: input });
 }
@@ -534,11 +536,14 @@ export interface ImportReport {
   duplicateCount: number;
   imported: number;
   rows: ImportRow[];
+  /** Só na importação de inscrições: linhas aceitas na análise que
+   * falharam ao gravar (ex.: o lote encheu no meio). */
+  failed?: { row: number; reason: string }[];
 }
-export function importParticipants(eventId: string, csv: string, confirm: boolean) {
+export function importParticipants(eventId: string, csv: string, confirm: boolean, cortesia = false) {
   return request<ImportReport>(`/events/${eventId}/participants/import`, {
     method: "POST",
-    body: { csv, confirm },
+    body: { csv, confirm, cortesia },
   });
 }
 
@@ -1219,6 +1224,8 @@ export interface InscriptionReportItem {
   category: string;
   amount: number;
   status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  /** Cortesia da organização: valor zero, mas ocupa vaga do lote. */
+  isCourtesy: boolean;
   teamName?: string | null;
   teamMembers?: string[];
   notes?: string | null;
@@ -1231,6 +1238,32 @@ export interface InscriptionReportItem {
 
 export function getInscriptionsReport(eventId: string) {
   return request<InscriptionReportItem[]>(`/events/${eventId}/inscriptions/report`);
+}
+
+export interface ManualInscriptionInput {
+  name: string;
+  email: string;
+  document: string;
+  phone?: string;
+  institution?: string;
+  notes?: string;
+  cortesia: boolean;
+}
+
+/** Lança uma inscrição pela organização: cortesia (valor zero, ocupa vaga)
+ * ou paga por fora (preço do lote). Já nasce confirmada, com QR. */
+export function createManualInscription(eventId: string, input: ManualInscriptionInput) {
+  return request<{ id: string; status: "CONFIRMED"; amount: number; isCourtesy: boolean; participantId: string | null }>(
+    `/events/${eventId}/inscriptions/manual`,
+    { method: "POST", body: input }
+  );
+}
+
+export function importInscriptions(eventId: string, csv: string, confirm: boolean, cortesia = false) {
+  return request<ImportReport>(`/events/${eventId}/inscriptions/import`, {
+    method: "POST",
+    body: { csv, confirm, cortesia },
+  });
 }
 
 export function confirmInscription(eventId: string, id: string): Promise<any> {
