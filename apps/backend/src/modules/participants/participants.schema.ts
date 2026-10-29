@@ -17,6 +17,9 @@ export const updateParticipantSchema = z.object({
   phone: z.string().trim().max(30).optional(),
   document: z.string().trim().max(30).optional(),
   status: z.enum(["ACTIVE", "CANCELLED"]).optional(),
+  // Só vale para participante SEM inscrição; com inscrição, a cortesia vem
+  // da forma de pagamento (ver participants.service.updateParticipant).
+  cortesia: z.boolean().optional(),
 });
 
 export type UpdateParticipantInput = z.infer<typeof updateParticipantSchema>;

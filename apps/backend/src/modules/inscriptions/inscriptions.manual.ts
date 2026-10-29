@@ -1,43 +1,12 @@
-import type { Prisma } from "@prisma/client";
 import { prisma } from "../../database/prisma.js";
 import { AppError, ConflictError, ForbiddenError } from "../../shared/errors.js";
 import { getEventOrThrow } from "../events/events.service.js";
 import * as batchesService from "../batches/batches.service.js";
 import { EMAIL_REGEX, parseCsvRows, type ImportReport, type ImportRowResult } from "../participants/participants.import.js";
+import { isAlreadyInEvent, normalizeEmail, onlyDigits } from "../participants/participants.identity.js";
 import * as inscriptionsRepository from "./inscriptions.repository.js";
 import { confirmInscriptionPayment } from "./inscriptions.service.js";
 import type { CreateManualInscriptionInput } from "./inscriptions.schema.js";
-
-export function onlyDigits(value: string | null | undefined): string {
-  return (value ?? "").replace(/\D/g, "");
-}
-
-export function normalizeEmail(value: string | null | undefined): string {
-  return (value ?? "").trim().toLowerCase();
-}
-
-/** Já existe participante ATIVO neste evento com o mesmo e-mail ou CPF?
- *
- * Compara CPF só pelos dígitos ("123.456.789-01" e "12345678901" são a
- * mesma pessoa) e ignora participante cancelado — quem teve a inscrição
- * cancelada pode ser readmitido pela organização. */
-export async function isAlreadyInEvent(
-  db: Prisma.TransactionClient | typeof prisma,
-  eventId: string,
-  candidate: { email?: string | null; document?: string | null },
-): Promise<boolean> {
-  const email = normalizeEmail(candidate.email);
-  const document = onlyDigits(candidate.document);
-  if (!email && !document) return false;
-
-  const ativos = await db.participant.findMany({
-    where: { eventId, status: "ACTIVE" },
-    select: { email: true, document: true },
-  });
-  return ativos.some(
-    (p) => (email && normalizeEmail(p.email) === email) || (document && onlyDigits(p.document) === document),
-  );
-}
 
 /**
  * Inscrição lançada pela organização no painel.

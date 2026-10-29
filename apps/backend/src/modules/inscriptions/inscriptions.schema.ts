@@ -53,6 +53,30 @@ export const createManualInscriptionSchema = z.object({
 
 export type CreateManualInscriptionInput = z.infer<typeof createManualInscriptionSchema>;
 
+/** Edição pelo painel: dados da pessoa e/ou forma de pagamento. Só muda
+ * o que vier no corpo; `null` limpa telefone/instituição. */
+export const updateInscriptionSchema = z
+  .object({
+    name: z.string().trim().min(1, "Nome é obrigatório").max(200).optional(),
+    email: z.string().trim().email("E-mail inválido").optional(),
+    document: z.string().trim().min(1, "CPF é obrigatório").max(20).optional(),
+    phone: z.string().trim().max(20).nullable().optional(),
+    institution: z.string().trim().max(200).nullable().optional(),
+    pagamento: z
+      .object({
+        // CORTESIA zera o valor. MANUAL é pago fora do sistema (dinheiro,
+        // Pix direto); PIX e CARD dizem COMO foi pago, também por fora.
+        forma: z.enum(["CORTESIA", "MANUAL", "PIX", "CARD"]),
+        // Valor efetivamente pago. Sem ele, vale o que já foi cobrado ou,
+        // se era cortesia, o preço do lote. Ignorado em CORTESIA.
+        valor: z.number().nonnegative().optional(),
+      })
+      .optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Nenhum campo para atualizar" });
+
+export type UpdateInscriptionInput = z.infer<typeof updateInscriptionSchema>;
+
 export const importInscriptionsSchema = z.object({
   csv: z.string().min(1, "Conteúdo CSV vazio"),
   confirm: z.boolean().optional().default(false),

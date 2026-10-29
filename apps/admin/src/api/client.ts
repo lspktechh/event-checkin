@@ -489,6 +489,9 @@ export interface ParticipantRecord {
   revokedAt: string | null;
   /** Convidado da organização (sem pagamento). */
   isCourtesy: boolean;
+  /** Veio de uma inscrição: a cortesia é definida pela forma de pagamento
+   * dela (aba Inscritos), não pelo participante. */
+  hasInscription: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -504,7 +507,7 @@ export function createParticipant(
 export function updateParticipant(
   eventId: string,
   participantId: string,
-  input: Partial<Pick<ParticipantRecord, "name" | "email" | "phone" | "document" | "status">>
+  input: Partial<Pick<ParticipantRecord, "name" | "email" | "phone" | "document" | "status">> & { cortesia?: boolean }
 ) {
   return request<ParticipantRecord>(`/events/${eventId}/participants/${participantId}`, {
     method: "PATCH",
@@ -1257,6 +1260,28 @@ export function createManualInscription(eventId: string, input: ManualInscriptio
     `/events/${eventId}/inscriptions/manual`,
     { method: "POST", body: input }
   );
+}
+
+/** Como a pessoa pagou. CORTESIA zera o valor; as outras três são pagamento
+ * feito FORA do sistema (MANUAL = dinheiro/outro; PIX e CARD dizem como). */
+export type PaymentForm = "CORTESIA" | "MANUAL" | "PIX" | "CARD";
+
+export interface UpdateInscriptionInput {
+  name?: string;
+  email?: string;
+  document?: string;
+  phone?: string | null;
+  institution?: string | null;
+  pagamento?: { forma: PaymentForm; valor?: number };
+}
+
+/** Edita dados da pessoa e/ou forma de pagamento. Atualiza inscrição e
+ * participante juntos; só muda o que for enviado. */
+export function updateInscription(eventId: string, id: string, input: UpdateInscriptionInput) {
+  return request<{ id: string; amount: number; isCourtesy: boolean }>(`/events/${eventId}/inscriptions/${id}`, {
+    method: "PATCH",
+    body: input,
+  });
 }
 
 export function importInscriptions(eventId: string, csv: string, confirm: boolean, cortesia = false) {
