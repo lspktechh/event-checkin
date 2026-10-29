@@ -184,7 +184,14 @@ export function ParticipantsTab({ eventId }: { eventId: string }) {
             <tbody>
               {participants.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.name}</td>
+                  <td>
+                    {p.name}
+                    {p.isCourtesy ? (
+                      <span className="badge badge-purple" style={{ marginLeft: 8 }} title="Convidado da organização, sem pagamento">
+                        Cortesia
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="muted">{p.email ?? "—"}</td>
                   <td>
                     <span className={`badge ${p.status === "ACTIVE" ? "badge-success" : "badge-danger"}`}>
@@ -244,7 +251,14 @@ export function ParticipantsTab({ eventId }: { eventId: string }) {
       ) : null}
       {showImport ? (
         <ImportCsvModal
-          eventId={eventId}
+          title="Importar participantes (CSV)"
+          hint={
+            <>
+              Colunas esperadas: <code>nome,email,telefone,documento</code>
+            </>
+          }
+          courtesyHint="Marca todos os participantes do arquivo como convidados da organização."
+          run={(csv, confirm, cortesia) => api.importParticipants(eventId, csv, confirm, cortesia)}
           onClose={() => setShowImport(false)}
           onImported={() => {
             setShowImport(false);
@@ -321,6 +335,7 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [document, setDocument] = useState("");
+  const [cortesia, setCortesia] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -334,11 +349,13 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
         email: email || undefined,
         phone: phone || undefined,
         document: document || undefined,
+        cortesia,
       });
       setName("");
       setEmail("");
       setPhone("");
       setDocument("");
+      setCortesia(false);
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao criar participante");
@@ -367,6 +384,19 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
           <input id="p-doc" value={document} onChange={(e) => setDocument(e.target.value)} />
         </div>
       </div>
+      <label className="switch-row" style={{ margin: "12px 0" }}>
+        <span className="switch-text">
+          <strong>Cortesia</strong>
+          <small>Convidado da organização, sem pagamento. Fica marcado na lista.</small>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={cortesia}
+          onChange={(e) => setCortesia(e.target.checked)}
+        />
+      </label>
       {error ? <p className="error-text">{error}</p> : null}
       <button className="btn" type="submit" disabled={saving}>
         {saving ? "Criando..." : "Criar participante"}

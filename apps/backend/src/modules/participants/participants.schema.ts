@@ -5,6 +5,8 @@ export const createParticipantSchema = z.object({
   email: z.string().trim().email("E-mail inválido").optional().or(z.literal("")).transform((v) => (v ? v : undefined)),
   phone: z.string().trim().max(30).optional(),
   document: z.string().trim().max(30).optional(),
+  // Convidado da organização. É só uma marca: participante não tem valor.
+  cortesia: z.boolean().optional().default(false),
 });
 
 export type CreateParticipantInput = z.infer<typeof createParticipantSchema>;
@@ -22,6 +24,8 @@ export type UpdateParticipantInput = z.infer<typeof updateParticipantSchema>;
 export const importParticipantsSchema = z.object({
   csv: z.string().min(1, "Conteúdo CSV vazio"),
   confirm: z.boolean().optional().default(false),
+  // Marca todos os participantes gravados como cortesia.
+  cortesia: z.boolean().optional().default(false),
 });
 
 export type ImportParticipantsInput = z.infer<typeof importParticipantsSchema>;

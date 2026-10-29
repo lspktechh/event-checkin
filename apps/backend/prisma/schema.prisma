@@ -528,6 +528,11 @@ model Participant {
   qrToken   String    @unique
   revokedAt DateTime?
 
+  // Cortesia: convidado da organização, sem pagamento. É só uma marca —
+  // participante não tem valor; o dinheiro (ou a falta dele) vive na
+  // Inscription.
+  isCourtesy Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -661,6 +666,12 @@ model Inscription {
   paymentExpiresAt DateTime?
   batchId          String?
   batch            EventBatch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  // Cortesia dada pela organização pelo painel: valor zero, mas ocupa
+  // vaga do lote (batchId preenchido). Existe porque, com lote, o
+  // relatório mostra o nome do lote no lugar de `category`, e uma
+  // inscrição gratuita de lote de preço zero seria indistinguível dela.
+  isCourtesy       Boolean           @default(false)
 
   // ---- consentimento (LGPD art. 8o, §1o) --------------------------
   // O onus de provar que o consentimento foi obtido e' do controlador.

@@ -20,7 +20,7 @@ export interface ImportReport {
   rows: ImportRowResult[];
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function normalizeDigits(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -28,15 +28,22 @@ function normalizeDigits(value: string | undefined): string | undefined {
   return digits.length > 0 ? digits : undefined;
 }
 
+export interface ParsedCsvRow {
+  /** Número da linha no arquivo (o cabeçalho é a linha 1). */
+  row: number;
+  name?: string;
+  email?: string;
+  phone?: string;
+  document?: string;
+}
+
 /**
- * Faz o parse do CSV (colunas esperadas: nome,email,telefone,documento),
- * normaliza os campos e detecta duplicados — tanto dentro do próprio
- * arquivo quanto contra participantes já cadastrados no evento.
- * Nunca grava nada no banco; é usado tanto no preview quanto como primeira
- * etapa da confirmação da importação (seção 20 da especificação: "Nunca
- * importar cegamente").
+ * Faz o parse do CSV (colunas esperadas: nome,email,telefone,documento)
+ * e normaliza os campos: e-mail em minúsculas, telefone e documento só
+ * com dígitos. Não valida nada — quem usa decide o que é obrigatório.
+ * Compartilhado pela importação de participantes e de inscrições.
  */
-export async function analyzeImport(eventId: string, csvContent: string): Promise<ImportReport> {
+export function parseCsvRows(csvContent: string): ParsedCsvRow[] {
   let records: Record<string, string>[];
   try {
     records = parse(csvContent, {
@@ -52,11 +59,7 @@ export async function analyzeImport(eventId: string, csvContent: string): Promis
     throw new ValidationError("CSV não contém nenhuma linha de dados");
   }
 
-  const seenEmails = new Set<string>();
-  const seenDocuments = new Set<string>();
-  const rows: ImportRowResult[] = [];
-
-  const normalized = records.map((record, index) => {
+  return records.map((record, index) => {
     const name = record.nome?.trim() || record.name?.trim();
     const emailRaw = (record.email ?? "").trim().toLowerCase();
     const email = emailRaw.length > 0 ? emailRaw : undefined;
@@ -64,6 +67,20 @@ export async function analyzeImport(eventId: string, csvContent: string): Promis
     const document = normalizeDigits(record.documento ?? record.document);
     return { row: index + 2, name, email, phone, document }; // +2: header é a linha 1
   });
+}
+
+/**
+ * Detecta duplicados — tanto dentro do próprio arquivo quanto contra
+ * participantes já cadastrados no evento.
+ * Nunca grava nada no banco; é usado tanto no preview quanto como primeira
+ * etapa da confirmação da importação (seção 20 da especificação: "Nunca
+ * importar cegamente").
+ */
+export async function analyzeImport(eventId: string, csvContent: string): Promise<ImportReport> {
+  const normalized = parseCsvRows(csvContent);
+  const seenEmails = new Set<string>();
+  const seenDocuments = new Set<string>();
+  const rows: ImportRowResult[] = [];
 
   const existing = await participantsRepository.findExistingByEmailOrDocument(
     eventId,

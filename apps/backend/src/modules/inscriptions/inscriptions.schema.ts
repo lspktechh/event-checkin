@@ -38,6 +38,28 @@ export const createInscriptionSchema = z.object({
 
 export type CreateInscriptionInput = z.infer<typeof createInscriptionSchema>;
 
+/** Inscrição feita pela organização no painel. Sem aceite de termo (não é
+ * a pessoa quem preenche) e sem categoria: o lote ativo decide o preço. */
+export const createManualInscriptionSchema = z.object({
+  name: z.string().trim().min(1, "Nome é obrigatório").max(200),
+  email: z.string().trim().email("E-mail inválido"),
+  document: z.string().trim().min(1, "CPF é obrigatório").max(20),
+  phone: z.string().trim().max(20).optional().nullable(),
+  institution: z.string().trim().max(200).optional().nullable(),
+  notes: z.string().trim().max(50000).optional().nullable(),
+  // Cortesia: valor zero, mas ocupa vaga do lote.
+  cortesia: z.boolean().optional().default(false),
+});
+
+export type CreateManualInscriptionInput = z.infer<typeof createManualInscriptionSchema>;
+
+export const importInscriptionsSchema = z.object({
+  csv: z.string().min(1, "Conteúdo CSV vazio"),
+  confirm: z.boolean().optional().default(false),
+  // Vale para o arquivo inteiro.
+  cortesia: z.boolean().optional().default(false),
+});
+
 export const inscriptionEventParamsSchema = z.object({
   eventId: z.string().uuid("eventId inválido"),
 });

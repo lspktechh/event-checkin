@@ -413,6 +413,7 @@ export async function confirmInscriptionPayment(inscriptionId: string, authoriza
         document: inscription.document,
         qrToken,
         status: "ACTIVE",
+        isCourtesy: inscription.isCourtesy,
       },
     });
 
@@ -806,6 +807,7 @@ export async function getInscriptionsReport(eventId: string) {
       category: ins.batch?.name ?? ins.category,
       amount: Number(ins.amount),
       status: ins.status,
+      isCourtesy: ins.isCourtesy,
       teamName: resolvedTeamName,
       teamMembers: resolvedMembers,
       notes: ins.notes,

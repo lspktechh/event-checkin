@@ -3,6 +3,8 @@ import jsPDF from "jspdf";
 import * as api from "../../api/client";
 import { AlertIcon, CardIcon, CheckIcon, IdCardIcon, MailIcon, PhoneIcon, SmartphoneIcon, TrashIcon, UsersIcon, XIcon } from "../../components/Icons";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
+import { ImportCsvModal } from "../../components/ImportCsvModal";
+import { ManualInscriptionModal } from "../../components/ManualInscriptionModal";
 import { formatPhone, formatDocument, stripEmoji } from "../../utils/formatters";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -25,6 +27,11 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
   // conta só de leitura não vê esses botões (antes via e dava 403).
   const { hasPermission } = useAuth();
   const canEdit = hasPermission("participants.edit");
+  // Lançar e importar inscrições exige participants.create (mesma regra
+  // do cadastro de participantes).
+  const canCreate = hasPermission("participants.create");
+  const [showManual, setShowManual] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [inscriptions, setInscriptions] = useState<api.InscriptionReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -198,7 +205,12 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
 
   const pixConfirmedCount = inscriptions.filter((i) => i.status === "CONFIRMED" && i.paymentMethod === "PIX").length;
   const cardConfirmedCount = inscriptions.filter((i) => i.status === "CONFIRMED" && i.paymentMethod === "CARD").length;
-  const manualConfirmedCount = inscriptions.filter((i) => i.status === "CONFIRMED" && !i.paymentMethod).length;
+  // Cortesia não é "manual": é convidado sem pagamento. Contar junto
+  // faria "Manual" parecer dinheiro recebido por fora.
+  const courtesyConfirmedCount = inscriptions.filter((i) => i.status === "CONFIRMED" && i.isCourtesy).length;
+  const manualConfirmedCount = inscriptions.filter(
+    (i) => i.status === "CONFIRMED" && !i.paymentMethod && !i.isCourtesy
+  ).length;
 
   const pixPendingCount = inscriptions.filter((i) => i.status === "PENDING" && i.paymentMethod === "PIX").length;
   const cardPendingCount = inscriptions.filter((i) => i.status === "PENDING" && i.paymentMethod === "CARD").length;
@@ -239,9 +251,11 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
           ? "Cartão de Crédito"
           : i.paymentMethod === "PIX"
             ? "PIX"
-            : i.amount === 0
-              ? "Gratuito / Isento"
-              : "Manual / Não informado";
+            : i.isCourtesy
+              ? "Cortesia"
+              : i.amount === 0
+                ? "Gratuito / Isento"
+                : "Manual / Não informado";
       return [
         `"${i.name.replace(/"/g, '""')}"`,
         `"${i.email}"`,
@@ -375,6 +389,16 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
         </div>
 
         <div className="row" style={{ gap: 10 }}>
+          {canCreate && (
+            <>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(true)}>
+                Importar
+              </button>
+              <button className="btn btn-sm" onClick={() => setShowManual(true)}>
+                + Nova inscrição
+              </button>
+            </>
+          )}
           {canEdit && (
             <button
               className="btn btn-secondary btn-sm"
@@ -465,7 +489,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
         <MetricCard
           label="Pagamentos Confirmados"
           value={confirmedCount}
-          subvalue={`${pixConfirmedCount} Pix • ${cardConfirmedCount} Cartão${manualConfirmedCount > 0 ? ` • ${manualConfirmedCount} Manual` : ""}`}
+          subvalue={`${pixConfirmedCount} Pix • ${cardConfirmedCount} Cartão${manualConfirmedCount > 0 ? ` • ${manualConfirmedCount} Manual` : ""}${courtesyConfirmedCount > 0 ? ` • ${courtesyConfirmedCount} Cortesia` : ""}`}
           highlight="success"
           onClick={() => setStatusFilter("CONFIRMED")}
         />
@@ -870,7 +894,17 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         </span>
                       )}
 
-                      {!item.paymentMethod && item.amount === 0 && (
+                      {item.isCourtesy && (
+                        <span
+                          className="badge badge-purple"
+                          style={{ fontSize: 11, fontWeight: 600 }}
+                          title="Cortesia da organização: valor zero, ocupa vaga do lote"
+                        >
+                          Cortesia
+                        </span>
+                      )}
+
+                      {!item.paymentMethod && item.amount === 0 && !item.isCourtesy && (
                         <span
                           className="badge"
                           style={{
@@ -1102,9 +1136,11 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                       ? "Cartão de Crédito"
                       : item.paymentMethod === "PIX"
                         ? "Pix"
-                        : item.amount === 0
-                          ? "Gratuito / Isento"
-                          : "Manual / Não informado"}
+                        : item.isCourtesy
+                          ? "Cortesia"
+                          : item.amount === 0
+                            ? "Gratuito / Isento"
+                            : "Manual / Não informado"}
                   </span>
                 </div>
                 <div className="spread">
@@ -1199,6 +1235,40 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
             </div>
           ))}
         </div>
+      )}
+
+      {showManual && (
+        <ManualInscriptionModal
+          eventId={eventId}
+          onClose={() => setShowManual(false)}
+          onCreated={(message) => {
+            setShowManual(false);
+            setError(null);
+            setSuccessMessage(message);
+            loadInscriptions();
+          }}
+        />
+      )}
+
+      {showImport && (
+        <ImportCsvModal
+          title="Importar inscritos (CSV)"
+          hint={
+            <>
+              Colunas esperadas: <code>nome,email,telefone,documento</code>. E-mail e CPF são obrigatórios. Cada inscrito
+              ocupa uma vaga do lote ativo e recebe ingresso e QR.
+            </>
+          }
+          courtesyHint="Sem pagamento: valor zero e fora da receita, mas cada pessoa ocupa uma vaga do lote. Desligado, vale o preço do lote como pago por fora."
+          run={(csv, confirm, cortesia) => api.importInscriptions(eventId, csv, confirm, cortesia)}
+          onClose={() => setShowImport(false)}
+          onImported={() => {
+            setShowImport(false);
+            setError(null);
+            setSuccessMessage("Inscritos importados. Ingresso e credencial gerados.");
+            loadInscriptions();
+          }}
+        />
       )}
 
       {/* Modal de Confirmação de Exclusão */}

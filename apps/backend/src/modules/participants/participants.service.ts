@@ -12,6 +12,7 @@ export async function createParticipant(eventId: string, input: CreateParticipan
     phone: input.phone,
     document: input.document,
     qrToken: generateQrToken(),
+    isCourtesy: input.cortesia,
   });
 }
 
@@ -51,7 +52,12 @@ export async function rotateQrToken(eventId: string, participantId: string) {
   });
 }
 
-export async function importParticipants(eventId: string, csv: string, confirm: boolean): Promise<ImportReport & { imported: number }> {
+export async function importParticipants(
+  eventId: string,
+  csv: string,
+  confirm: boolean,
+  cortesia = false,
+): Promise<ImportReport & { imported: number }> {
   const report = await analyzeImport(eventId, csv);
 
   if (!confirm) {
@@ -68,6 +74,7 @@ export async function importParticipants(eventId: string, csv: string, confirm: 
         phone: row.phone,
         document: row.document,
         qrToken: generateQrToken(),
+        isCourtesy: cortesia,
       }))
     );
   }
