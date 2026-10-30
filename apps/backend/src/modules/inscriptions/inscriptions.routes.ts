@@ -48,6 +48,21 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
     return ok(status);
   });
 
+  // Público — Banco de Talentos (equipes com vagas e candidatos disponíveis)
+  app.get("/public/events/:slugOrId/talent-pool", async (request) => {
+    const { slugOrId } = request.params as { slugOrId: string };
+    const talentPool = await inscriptionsService.getTalentPool(slugOrId);
+    return ok(talentPool);
+  });
+
+  // Público — Cancelar / excluir inscrição própria (ex: criada por engano)
+  app.post("/public/events/:slugOrId/inscriptions/:id/cancel", async (request, reply) => {
+    const { slugOrId, id } = request.params as { slugOrId: string; id: string };
+    const { email } = z.object({ email: z.string().email() }).parse(request.body);
+    const result = await inscriptionsService.cancelPublicInscription(slugOrId, id, email);
+    return reply.status(200).send(ok(result));
+  });
+
   // Webhook do PicPay (recebe notificação de pagamento)
   app.post("/inscriptions/picpay/webhook", async (request, reply) => {
     const xSellerToken = request.headers["x-seller-token"] as string | undefined;

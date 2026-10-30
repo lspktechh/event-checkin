@@ -971,3 +971,183 @@ export async function sortearEquipes(eventId: string) {
   };
 }
 
+/**
+ * Retorna as equipes e os candidatos solo registrados para o Banco de Talentos
+ */
+export async function getTalentPool(slugOrId: string) {
+  const event = await prisma.event.findFirst({
+    where: {
+      OR: [{ slug: slugOrId }, { id: slugOrId }],
+    },
+    select: { id: true, name: true, slug: true },
+  });
+
+  if (!event) {
+    throw new NotFoundError("Evento não encontrado");
+  }
+
+  const inscriptions = await prisma.inscription.findMany({
+    where: {
+      eventId: event.id,
+      status: { not: "CANCELLED" },
+    },
+    include: {
+      teamMembers: {
+        orderBy: { order: "asc" },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const equipes: Array<{
+    id: string;
+    nome: string;
+    ideia: string;
+    eixo: string;
+    vagasRestantes: number;
+    abertaANovos: boolean;
+    competenciasPresentes: string[];
+    faltaNaEquipe: string[];
+    liderContato: string;
+    totalMembros: number;
+    membros: string[];
+    createdAt: string;
+  }> = [];
+
+  const candidatos: Array<{
+    id: string;
+    nome: string;
+    email: string;
+    curso: string;
+    vinculo: string;
+    competencias: string[];
+    papel: string;
+    eixoInteresse: string;
+    bio: string;
+    createdAt: string;
+  }> = [];
+
+  for (const insc of inscriptions) {
+    let notes: any = null;
+    try {
+      if (insc.notes) {
+        notes = typeof insc.notes === "string" ? JSON.parse(insc.notes) : insc.notes;
+      }
+    } catch {
+      notes = null;
+    }
+
+    const isSubmission = notes?.tipo_registro === "SUBMISSAO_TRABALHO" || insc.name?.startsWith("[TRABALHO]");
+    if (isSubmission) {
+      continue;
+    }
+
+    const trilha = notes?.trilha;
+    const isSolo = trilha === "sem_ideia" || (!insc.teamName && (!notes?.equipeNome || notes?.equipeNome.trim() === ""));
+
+    if (isSolo) {
+      const lider = notes?.lider || notes?.membros_detalhes?.[0];
+      const competencias = lider?.competencias || notes?.ficha_prototipo?.competencias_equipe || [];
+      const papel = lider?.papel || "Disponível para equipe";
+      const curso = lider?.curso || insc.institution || "Estudante / Profissional";
+      const vinculo = lider?.vinculo || "Participante";
+      const eixo = notes?.definir?.eixo || notes?.ficha_prototipo?.eixo || "Infraestrutura em Saúde Digital";
+
+      candidatos.push({
+        id: insc.id,
+        nome: insc.name,
+        email: insc.email,
+        curso,
+        vinculo,
+        competencias: Array.isArray(competencias) ? competencias : [],
+        papel,
+        eixoInteresse: eixo,
+        bio: lider?.bio || `Interesse no eixo ${eixo}. Busco equipe para o INOVA SAÚDE 2026.`,
+        createdAt: insc.createdAt.toISOString(),
+      });
+    } else {
+      const abertaANovos = notes?.fechamento?.aberta_a_novos !== false;
+      const nomeEquipe = insc.teamName?.trim() || notes?.equipeNome?.trim() || (insc.name ? `Equipe de ${insc.name}` : "Equipe Inovadora");
+      const fp = notes?.ficha_prototipo;
+      const memberNames = [insc.name, ...insc.teamMembers.map((m) => m.name)];
+      const totalMembros = memberNames.length;
+      const vagasRestantes = Math.max(1, 6 - totalMembros);
+
+      const ideia = fp?.funcao || notes?.idear?.nome_solucao || notes?.definir?.frase?.o_que || "Solução inovadora em saúde";
+      const eixo = fp?.eixo || notes?.definir?.eixo || "Logística e Gestão de Serviços de Saúde";
+      const competenciasPresentes = fp?.competencias_equipe || [];
+      const faltaNaEquipe = (fp?.falta_na_equipe && fp.falta_na_equipe.length > 0)
+        ? fp.falta_na_equipe
+        : ["Comunicação e Pitch", "Design e UI/UX"];
+
+      equipes.push({
+        id: insc.id,
+        nome: nomeEquipe,
+        ideia,
+        eixo,
+        vagasRestantes: abertaANovos ? vagasRestantes : 0,
+        abertaANovos,
+        competenciasPresentes: Array.isArray(competenciasPresentes) ? competenciasPresentes : [],
+        faltaNaEquipe: Array.isArray(faltaNaEquipe) ? faltaNaEquipe : [],
+        liderContato: insc.email,
+        totalMembros,
+        membros: memberNames,
+        createdAt: insc.createdAt.toISOString(),
+      });
+    }
+  }
+
+  return {
+    eventId: event.id,
+    eventName: event.name,
+    equipes,
+    candidatos,
+  };
+}
+
+/**
+ * Permite que um participante cancele ou exclua sua própria inscrição
+ * caso tenha criado por engano, validando o e-mail cadastrado.
+ */
+export async function cancelPublicInscription(slugOrId: string, inscriptionId: string, email: string) {
+  const event = await prisma.event.findFirst({
+    where: {
+      OR: [{ slug: slugOrId }, { id: slugOrId }],
+    },
+    select: { id: true },
+  });
+
+  if (!event) {
+    throw new NotFoundError("Evento não encontrado");
+  }
+
+  const inscription = await prisma.inscription.findUnique({
+    where: { id: inscriptionId },
+  });
+
+  if (!inscription || inscription.eventId !== event.id) {
+    throw new NotFoundError("Inscrição não encontrada");
+  }
+
+  if (inscription.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
+    throw new ForbiddenError("O e-mail informado não confere com o e-mail da inscrição.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (inscription.participantId) {
+      await tx.participant.deleteMany({
+        where: { id: inscription.participantId },
+      });
+    }
+    await tx.teamMember.deleteMany({
+      where: { inscriptionId: inscription.id },
+    });
+    await tx.inscription.delete({
+      where: { id: inscription.id },
+    });
+  });
+
+  return { success: true, message: "Inscrição removida com sucesso" };
+}
+
+
