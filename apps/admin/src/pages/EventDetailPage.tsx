@@ -108,7 +108,7 @@ export function EventDetailPage() {
     if (!event) return false;
     return (
       event.name.toLowerCase().includes("inova") ||
-      event.slug?.toLowerCase().includes("inova") ||
+      (event as any).slug?.toLowerCase().includes("inova") ||
       event.id === "e7b5f120-4a81-4993-9c5e-85a265da4168"
     );
   }, [event]);
