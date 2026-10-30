@@ -18,6 +18,7 @@ import { BatchesTab } from "./event/BatchesTab";
 import { ScheduleTab } from "./event/ScheduleTab";
 import { CredenciamentoTab } from "./event/CredenciamentoTab";
 import { HandsOnTab } from "./event/HandsOnTab";
+import { TeamsTab } from "./event/TeamsTab";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, SmartphoneIcon } from "../components/Icons";
 import { Sheet } from "../components/Sheet";
 
@@ -25,6 +26,7 @@ type Tab =
   | "credenciamento"
   | "participants"
   | "inscriptions"
+  | "teams"
   | "handson"
   | "batches"
   | "schedule"
@@ -101,8 +103,28 @@ export function EventDetailPage() {
     );
   }, [event]);
 
+  // Eventos com foco em equipes (como INOVA SAÚDE) devem exibir a aba de Equipes
+  const isInovaSaude = useMemo(() => {
+    if (!event) return false;
+    return (
+      event.name.toLowerCase().includes("inova") ||
+      event.slug?.toLowerCase().includes("inova") ||
+      event.id === "e7b5f120-4a81-4993-9c5e-85a265da4168"
+    );
+  }, [event]);
+
   const visibleTabs = useMemo(() => {
     const list = [...TABS];
+    if (isInovaSaude) {
+      // Insere "Equipes" logo após a aba "Inscritos"
+      const inscritosIdx = list.findIndex((t) => t.key === "inscriptions");
+      const insertAt = inscritosIdx >= 0 ? inscritosIdx + 1 : 1;
+      list.splice(insertAt, 0, {
+        key: "teams" as Tab,
+        label: "Equipes",
+        permission: "participants.view",
+      });
+    }
     if (isCopol) {
       // Insere "Hands On" logo após a aba "Inscritos"
       const inscritosIdx = list.findIndex((t) => t.key === "inscriptions");
@@ -118,7 +140,7 @@ export function EventDetailPage() {
         hasPermission(t.permission) &&
         (!contaDeAcompanhamento || !t.gestao || t.gestao.some((p) => hasPermission(p)))
     );
-  }, [isCopol, hasPermission, contaDeAcompanhamento]);
+  }, [isInovaSaude, isCopol, hasPermission, contaDeAcompanhamento]);
   const [tab, setTab] = useState<Tab | null>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -375,6 +397,7 @@ export function EventDetailPage() {
       {activeTab === "credenciamento" ? <CredenciamentoTab eventId={eventId} /> : null}
       {activeTab === "participants" ? <ParticipantsTab eventId={eventId} /> : null}
       {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} /> : null}
+      {activeTab === "teams" && eventId ? <TeamsTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "handson" && eventId ? <HandsOnTab eventId={eventId} /> : null}
       {activeTab === "batches" ? <BatchesTab eventId={eventId} /> : null}
       {activeTab === "schedule" ? <ScheduleTab eventId={eventId} /> : null}
