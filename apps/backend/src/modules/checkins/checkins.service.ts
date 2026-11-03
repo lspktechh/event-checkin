@@ -3,6 +3,7 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../../shared/error
 import { prisma } from "../../database/prisma.js";
 import * as participantsRepository from "../participants/participants.repository.js";
 import * as checkinsRepository from "./checkins.repository.js";
+import { OutsideEventPeriodError, eventDays, resolveEventDay, type EventDay } from "./event-day.js";
 import { attendeeEventBus } from "../attendee/attendee.events.js";
 import { adminCheckInBus } from "../admin/adminMonitor.events.js";
 import { resolveEmailSettings } from "../../lib/email/email-settings.js";
@@ -16,9 +17,11 @@ export interface CheckInParticipantInfo {
   document: string | null;
 }
 
+/** `day` só vem em evento com credenciamento por dia (Event.multiDayCheckIn);
+ * nos demais é `null` e o resultado é o mesmo de sempre. */
 export type CheckInOutcome =
-  | { status: "CONFIRMED"; checkIn: CheckIn; participant: CheckInParticipantInfo }
-  | { status: "ALREADY_CHECKED_IN"; checkIn: CheckIn; participant: CheckInParticipantInfo };
+  | { status: "CONFIRMED"; checkIn: CheckIn; participant: CheckInParticipantInfo; day: EventDay | null }
+  | { status: "ALREADY_CHECKED_IN"; checkIn: CheckIn; participant: CheckInParticipantInfo; day: EventDay | null };
 
 export interface PerformCheckInParams {
   eventId: string;
@@ -42,13 +45,25 @@ function isUniqueConflictOn(error: unknown, field: string): boolean {
  * Regra central de check-in, compartilhada pelo endpoint online
  * (POST /events/:eventId/checkins) e pela sincronização offline
  * (POST /terminals/sync). A duplicidade é resolvida pela constraint
- * UNIQUE(eventId, participantId) do banco — mesmo sob concorrência real
- * entre dois terminais, apenas um INSERT vence; o outro cai no catch
- * abaixo e é tratado como ALREADY_CHECKED_IN, não como erro.
+ * UNIQUE(eventId, participantId, dayIndex) do banco — mesmo sob concorrência
+ * real entre dois terminais/câmeras, apenas um INSERT vence; o outro cai no
+ * catch abaixo e é tratado como ALREADY_CHECKED_IN, não como erro.
+ *
+ * Evento comum tem dayIndex 0 (um check-in só). Evento por dia
+ * (multiDayCheckIn, o COPOL) tem dayIndex 1, 2, 3…, calculado AQUI no
+ * servidor pelo horário da leitura e pelas datas do evento — nunca pelo
+ * navegador. Na sincronização offline o horário é o da leitura, não o da
+ * sincronização.
  */
 export async function performCheckIn(params: PerformCheckInParams): Promise<CheckInOutcome> {
   const { eventId, qrToken, terminalId, source, localCheckInId } = params;
   const checkedInAt = params.checkedInAt ?? new Date();
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { multiDayCheckIn: true, startDate: true, endDate: true, timezone: true },
+  });
+  const dayAt = (instant: Date): EventDay | null => (event?.multiDayCheckIn ? resolveEventDay(event, instant) : null);
 
   // Idempotência de reenvio: se este exato registro offline já foi
   // sincronizado antes (retry de rede, por exemplo), devolve o resultado
@@ -61,6 +76,7 @@ export async function performCheckIn(params: PerformCheckInParams): Promise<Chec
         status: "CONFIRMED",
         checkIn: existingByLocalId,
         participant: { id: participant!.id, name: participant!.name, email: participant!.email, phone: participant!.phone, document: participant!.document },
+        day: dayAt(existingByLocalId.checkedInAt),
       };
     }
   }
@@ -73,6 +89,15 @@ export async function performCheckIn(params: PerformCheckInParams): Promise<Chec
     throw new ForbiddenError("Credencial inativa");
   }
 
+  // Evento por dia: o dia sai do horário da leitura. Fora do primeiro e do
+  // último dia não existe dia correspondente — recusa em vez de gravar
+  // numa data que não é a da presença.
+  const day = dayAt(checkedInAt);
+  if (event?.multiDayCheckIn && !day) {
+    throw new OutsideEventPeriodError(event);
+  }
+  const dayIndex = day?.index ?? 0;
+
   try {
     const checkIn = await checkinsRepository.createCheckIn({
       eventId,
@@ -81,6 +106,7 @@ export async function performCheckIn(params: PerformCheckInParams): Promise<Chec
       source,
       checkedInAt,
       localCheckInId: localCheckInId ?? null,
+      dayIndex,
     });
 
     // Comprovante de presença por e-mail, se o evento pedir.
@@ -119,10 +145,10 @@ export async function performCheckIn(params: PerformCheckInParams): Promise<Chec
       source: params.source,
     });
 
-    return { status: "CONFIRMED", checkIn, participant: { id: participant.id, name: participant.name, email: participant.email, phone: participant.phone, document: participant.document } };
+    return { status: "CONFIRMED", checkIn, participant: { id: participant.id, name: participant.name, email: participant.email, phone: participant.phone, document: participant.document }, day };
   } catch (error) {
     if (isUniqueConflictOn(error, "participantId")) {
-      const existing = await checkinsRepository.findByEventAndParticipant(eventId, participant.id);
+      const existing = await checkinsRepository.findByEventParticipantAndDay(eventId, participant.id, dayIndex);
       if (existing) {
         // Publish already checked in event for SSE subscribers
         attendeeEventBus.publish(participant.id, {
@@ -172,13 +198,14 @@ export async function performCheckIn(params: PerformCheckInParams): Promise<Chec
           status: "ALREADY_CHECKED_IN",
           checkIn: existing,
           participant: { id: participant.id, name: participant.name, email: participant.email, phone: participant.phone, document: participant.document },
+          day,
         };
       }
     }
     if (isUniqueConflictOn(error, "localCheckInId") && terminalId && localCheckInId) {
       const existing = await checkinsRepository.findByTerminalAndLocalId(terminalId, localCheckInId);
       if (existing) {
-        return { status: "CONFIRMED", checkIn: existing, participant: { id: participant.id, name: participant.name, email: participant.email, phone: participant.phone, document: participant.document } };
+        return { status: "CONFIRMED", checkIn: existing, participant: { id: participant.id, name: participant.name, email: participant.email, phone: participant.phone, document: participant.document }, day };
       }
     }
     throw new ConflictError("CHECKIN_CONFLICT", "Não foi possível registrar a presença. Tente novamente.");
@@ -240,23 +267,45 @@ export async function getRecentCheckInsForMonitor(eventId: string, limit = 50) {
 }
 
 export async function getEventStatistics(eventId: string) {
-  const [totalParticipants, totalCheckIns, byTerminal] = await Promise.all([
+  const [event, totalParticipants, presentPeople, byTerminal] = await Promise.all([
+    prisma.event.findUnique({
+      where: { id: eventId },
+      select: { multiDayCheckIn: true, startDate: true, endDate: true, timezone: true },
+    }),
     participantsRepository.listParticipantsByEvent(eventId).then((rows) => rows.length),
-    checkinsRepository.countByEvent(eventId),
+    // Pessoas, não linhas: em evento por dia a mesma pessoa tem uma linha por dia.
+    checkinsRepository.countPresentParticipants(eventId),
     checkinsRepository.countByEventAndTerminal(eventId),
   ]);
 
-  const attendancePercentage = totalParticipants > 0 ? (totalCheckIns / totalParticipants) * 100 : 0;
+  const attendancePercentage = totalParticipants > 0 ? (presentPeople / totalParticipants) * 100 : 0;
 
-  return {
+  const stats = {
     totalRegistered: totalParticipants,
-    totalCheckedIn: totalCheckIns,
-    totalAbsent: totalParticipants - totalCheckIns,
+    totalCheckedIn: presentPeople,
+    totalAbsent: totalParticipants - presentPeople,
     attendancePercentage: Number(attendancePercentage.toFixed(2)),
     checkInsByTerminal: byTerminal.map((row) => ({
       terminalId: row.terminalId,
       count: row._count._all,
     })),
+  };
+
+  // Evento comum não ganha nenhum campo novo.
+  if (!event?.multiDayCheckIn) return stats;
+
+  const byDay = await checkinsRepository.countByDay(eventId);
+  const days = eventDays(event);
+  const perDay = days.map((d) => ({ index: d.index, date: d.date, checkedIn: byDay.get(d.index) ?? 0 }));
+  const todayInfo = resolveEventDay(event, new Date());
+  return {
+    ...stats,
+    multiDay: {
+      total: days.length,
+      // null fora dos dias do evento (antes do início ou depois do fim).
+      today: todayInfo ? { index: todayInfo.index, date: todayInfo.date, checkedIn: byDay.get(todayInfo.index) ?? 0 } : null,
+      perDay,
+    },
   };
 }
 
@@ -271,8 +320,10 @@ export async function getEventReport(eventId: string) {
     eventName: event?.name ?? "Evento",
     eventLocation: event?.location ?? "",
     totalRegistered: totalParticipants,
-    totalCheckedIn: checkIns.length,
+    // Pessoas, não linhas (em evento por dia há uma linha por dia).
+    totalCheckedIn: new Set(checkIns.map((c) => c.participantId)).size,
     checkIns: checkIns.map((c) => ({
+      dayIndex: c.dayIndex,
       participantName: c.participant.name,
       participantEmail: c.participant.email,
       participantPhone: c.participant.phone,

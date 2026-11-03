@@ -10,9 +10,13 @@ export function findParticipantInEvent(eventId: string, participantId: string) {
   return prisma.participant.findFirst({ where: { id: participantId, eventId } });
 }
 
+/** A primeira presença do participante no evento. Em evento por dia pode
+ * haver uma por dia; para elegibilidade e comprovante basta a primeira
+ * (presença em QUALQUER dia conta), e a ordem torna a escolha estável. */
 export function findCheckIn(eventId: string, participantId: string) {
-  return prisma.checkIn.findUnique({
-    where: { eventId_participantId: { eventId, participantId } },
+  return prisma.checkIn.findFirst({
+    where: { eventId, participantId },
+    orderBy: { checkedInAt: "asc" },
     include: { terminal: { select: { name: true } } },
   });
 }
@@ -135,8 +139,11 @@ export function countParticipants(eventId: string) {
   return prisma.participant.count({ where: { eventId, status: "ACTIVE" } });
 }
 
-export function countCheckIns(eventId: string) {
-  return prisma.checkIn.count({ where: { eventId } });
+/** Pessoas presentes (não linhas): em evento por dia a mesma pessoa tem uma
+ * presença por dia e não pode contar três vezes. */
+export async function countCheckIns(eventId: string) {
+  const rows = await prisma.checkIn.groupBy({ by: ["participantId"], where: { eventId } });
+  return rows.length;
 }
 
 /** Cria (idempotente) uma linha Certificate LOCKED para todo participante
@@ -147,7 +154,13 @@ export function countCheckIns(eventId: string) {
  * que o status real (LOCKED/ELIGIBLE) é sempre recalculado, não gravado
  * por esta função. */
 export async function ensureCertificatesForPresentParticipants(eventId: string) {
-  const present = await prisma.checkIn.findMany({ where: { eventId }, select: { participantId: true } });
+  // distinct: em evento por dia a mesma pessoa tem várias presenças, e
+  // sem isso o createMany abaixo tentaria criar o mesmo certificado 2x.
+  const present = await prisma.checkIn.findMany({
+    where: { eventId },
+    select: { participantId: true },
+    distinct: ["participantId"],
+  });
   const existing = await prisma.certificate.findMany({ where: { eventId }, select: { participantId: true } });
   const existingIds = new Set(existing.map((c) => c.participantId));
   const toCreate = present.filter((c) => !existingIds.has(c.participantId));

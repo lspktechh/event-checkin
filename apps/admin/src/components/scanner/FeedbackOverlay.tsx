@@ -1,12 +1,18 @@
 import type { CSSProperties, ReactNode } from "react";
 import { AlertIcon, CheckIcon, XIcon } from "../Icons";
 import type { CheckInFeedbackStatus } from "../../utils/audioFeedback";
+import type { CheckInDay } from "../../api/client";
+import { dayLabel } from "../../utils/eventDay";
 
 export interface FeedbackData {
   status: CheckInFeedbackStatus;
   participantName?: string | null;
   checkedInAt?: string | null;
   message?: string | null;
+  /** Dia do evento (só em evento com credenciamento por dia). */
+  day?: CheckInDay | null;
+  /** Troca o título padrão do status (ex.: "FORA DO PERÍODO"). */
+  title?: string;
 }
 
 interface Props {
@@ -111,8 +117,25 @@ export function FeedbackOverlay({ data, onDismiss }: Props) {
           textShadow: "0 2px 8px rgba(0,0,0,0.3)",
         }}
       >
-        {preset.title}
+        {data.title ?? preset.title}
       </h2>
+
+      {data.day ? (
+        <p
+          style={{
+            margin: "0 0 12px",
+            padding: "4px 14px",
+            borderRadius: 999,
+            backgroundColor: "rgba(0, 0, 0, 0.25)",
+            fontSize: "clamp(15px, 3.5vw, 19px)",
+            fontWeight: 800,
+            letterSpacing: "0.5px",
+            textTransform: "uppercase",
+          }}
+        >
+          {dayLabel(data.day)}
+        </p>
+      ) : null}
 
       {data.participantName ? (
         <p
@@ -136,7 +159,7 @@ export function FeedbackOverlay({ data, onDismiss }: Props) {
             margin: "4px 0 0",
           }}
         >
-          Já registrado às <strong>{formatTime(data.checkedInAt)}</strong>
+          Já registrado {data.day ? "neste dia " : ""}às <strong>{formatTime(data.checkedInAt)}</strong>
         </p>
       ) : null}
 

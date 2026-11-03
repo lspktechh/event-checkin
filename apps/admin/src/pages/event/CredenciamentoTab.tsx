@@ -5,6 +5,8 @@ import { WebQrScanner } from "../../components/scanner/WebQrScanner";
 import { FeedbackOverlay, type FeedbackData } from "../../components/scanner/FeedbackOverlay";
 import { initAudio, playCheckInFeedback } from "../../utils/audioFeedback";
 import { SmartphoneIcon } from "../../components/Icons";
+import { DayBanner } from "../../components/scanner/DayBanner";
+import { useCheckInStats } from "../../hooks/useCheckInStats";
 
 const FEEDBACK_DURATION_MS = 1800;
 
@@ -13,6 +15,7 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
   const [paused, setPaused] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [sessionCount, setSessionCount] = useState(0);
+  const { stats, refresh: refreshStats } = useCheckInStats(eventId);
 
   const processingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -30,10 +33,12 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
       if (outcome.status === "CONFIRMED") {
         playCheckInFeedback("CONFIRMED");
         setSessionCount((prev) => prev + 1);
+        void refreshStats();
         setFeedback({
           status: "CONFIRMED",
           participantName: outcome.participant.name,
           checkedInAt: outcome.checkedInAt,
+          day: outcome.day,
         });
       } else {
         playCheckInFeedback("ALREADY_CHECKED_IN");
@@ -41,6 +46,7 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
           status: "ALREADY_CHECKED_IN",
           participantName: outcome.participant.name,
           checkedInAt: outcome.checkedInAt,
+          day: outcome.day,
         });
       }
     } catch (err) {
@@ -50,6 +56,13 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
           setFeedback({
             status: "INVALID_TOKEN",
             message: "QR Code não reconhecido ou pertence a outro evento.",
+          });
+        } else if (err.code === "FORA_DO_PERIODO") {
+          playCheckInFeedback("ERROR");
+          setFeedback({
+            status: "ERROR",
+            title: "FORA DO PERÍODO",
+            message: err.message,
           });
         } else if (err.httpStatus === 403 || err.code === "FORBIDDEN") {
           playCheckInFeedback("PARTICIPANT_INACTIVE");
@@ -90,6 +103,7 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
 
   return (
     <div className="stack" style={{ position: "relative" }}>
+      <DayBanner stats={stats} />
       <div
         className="card"
         style={{

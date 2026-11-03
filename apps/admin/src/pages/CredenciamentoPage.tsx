@@ -5,6 +5,8 @@ import { WebQrScanner } from "../components/scanner/WebQrScanner";
 import { FeedbackOverlay, type FeedbackData } from "../components/scanner/FeedbackOverlay";
 import { initAudio, playCheckInFeedback } from "../utils/audioFeedback";
 import { ArrowLeftIcon } from "../components/Icons";
+import { DayBanner } from "../components/scanner/DayBanner";
+import { useCheckInStats } from "../hooks/useCheckInStats";
 
 const FEEDBACK_DURATION_MS = 1800;
 
@@ -16,7 +18,11 @@ export function CredenciamentoPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [sessionCount, setSessionCount] = useState(0);
-  const [totalConfirmed, setTotalConfirmed] = useState<number | null>(null);
+  // Estatísticas atualizadas sozinhas (a cada minuto e depois de cada leitura):
+  // em evento por dia, a faixa do dia e o contador "hoje" dependem delas.
+  const { stats, refresh: refreshStats } = useCheckInStats(eventId);
+  // Evento por dia conta o DIA DE HOJE; os demais, o total do evento.
+  const totalConfirmed = stats ? (stats.multiDay ? (stats.multiDay.today?.checkedIn ?? null) : stats.totalCheckedIn) : null;
 
   const [manualMode, setManualMode] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -30,15 +36,12 @@ export function CredenciamentoPage() {
 
     let mounted = true;
 
-    // Carrega dados do evento e estatísticas
-    Promise.all([
-      api.getEvent(eventId),
-      api.getStatistics(eventId).catch(() => null),
-    ])
-      .then(([ev, stats]) => {
+    // Carrega os dados do evento (as estatísticas vêm de useCheckInStats)
+    api
+      .getEvent(eventId)
+      .then((ev) => {
         if (!mounted) return;
         setEvent(ev);
-        if (stats) setTotalConfirmed(stats.totalCheckedIn);
         setLoading(false);
       })
       .catch((err) => {
@@ -67,12 +70,13 @@ export function CredenciamentoPage() {
       if (outcome.status === "CONFIRMED") {
         playCheckInFeedback("CONFIRMED");
         setSessionCount((prev) => prev + 1);
-        setTotalConfirmed((prev) => (prev !== null ? prev + 1 : null));
+        void refreshStats();
 
         setFeedback({
           status: "CONFIRMED",
           participantName: outcome.participant.name,
           checkedInAt: outcome.checkedInAt,
+          day: outcome.day,
         });
       } else {
         // ALREADY_CHECKED_IN
@@ -81,6 +85,7 @@ export function CredenciamentoPage() {
           status: "ALREADY_CHECKED_IN",
           participantName: outcome.participant.name,
           checkedInAt: outcome.checkedInAt,
+          day: outcome.day,
         });
       }
     } catch (err) {
@@ -90,6 +95,13 @@ export function CredenciamentoPage() {
           setFeedback({
             status: "INVALID_TOKEN",
             message: "QR Code não encontrado ou pertence a outro evento.",
+          });
+        } else if (err.code === "FORA_DO_PERIODO") {
+          playCheckInFeedback("ERROR");
+          setFeedback({
+            status: "ERROR",
+            title: "FORA DO PERÍODO",
+            message: err.message,
           });
         } else if (err.httpStatus === 403 || err.code === "FORBIDDEN") {
           playCheckInFeedback("PARTICIPANT_INACTIVE");
@@ -263,10 +275,13 @@ export function CredenciamentoPage() {
                 +{sessionCount} nesta sessão ·{" "}
               </span>
             )}
-            {totalConfirmed !== null ? `${totalConfirmed} no total` : ""}
+            {totalConfirmed !== null ? `${totalConfirmed} ${stats?.multiDay ? "hoje" : "no total"}` : ""}
           </div>
         </div>
       </header>
+
+      {/* Evento por dia: qual dia está sendo credenciado */}
+      <DayBanner stats={stats} />
 
       {/* Área Central: Câmera ou Manual */}
       <main

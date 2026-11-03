@@ -6,6 +6,13 @@ import * as checkinsService from "./checkins.service.js";
 import * as checkinsRepository from "./checkins.repository.js";
 import { checkinEventParamsSchema, createCheckInSchema } from "./checkins.schema.js";
 import { adminCheckInBus } from "../admin/adminMonitor.events.js";
+import { OutsideEventPeriodError } from "./event-day.js";
+
+/** Leituras que viram "rejeitada" no monitor e em checkin_attempts: QR
+ * inválido, participante inativo ou fora do período do evento. */
+function isRejection(error: unknown): error is NotFoundError | ForbiddenError | OutsideEventPeriodError {
+  return error instanceof NotFoundError || error instanceof ForbiddenError || error instanceof OutsideEventPeriodError;
+}
 
 function cleanQrToken(raw: string): string {
   const trimmed = raw.trim();
@@ -45,11 +52,12 @@ export async function checkinsRoutes(app: FastifyInstance) {
           status: outcome.status,
           participant: outcome.participant,
           checkedInAt: outcome.checkIn.checkedInAt,
+          day: outcome.day,
         })
       );
     } catch (error) {
       // Publish rejected check-ins to admin monitor
-      if (error instanceof NotFoundError || error instanceof ForbiddenError) {
+      if (isRejection(error)) {
         adminCheckInBus.publish(eventId, {
           type: "check_in",
           eventId,
@@ -116,10 +124,11 @@ export async function checkinsRoutes(app: FastifyInstance) {
             status: outcome.status,
             participant: outcome.participant,
             checkedInAt: outcome.checkIn.checkedInAt,
+            day: outcome.day,
           })
         );
       } catch (error) {
-        if (error instanceof NotFoundError || error instanceof ForbiddenError) {
+        if (isRejection(error)) {
           adminCheckInBus.publish(eventId, {
             type: "check_in",
             eventId,

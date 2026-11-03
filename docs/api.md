@@ -175,6 +175,27 @@ Erros (HTTP 4xx, rejeições de fato):
 |---|---|---|
 | 404 | `NOT_FOUND` | QR token não existe, não pertence a este evento, ou foi revogado |
 | 403 | `FORBIDDEN` | Participante com status `CANCELLED` |
+| 409 | `FORA_DO_PERIODO` | Só em evento por dia: leitura antes do 1º dia ou depois do último |
+
+A leitura do painel (câmera ao vivo no navegador, `POST /events/:eventId/checkins/admin`)
+usa a mesma regra e as mesmas respostas.
+
+### Credenciamento por dia (`Event.multiDayCheckIn`, ligado só no COPOL)
+
+Nesse modo o **mesmo QR Code vale em todos os dias** e cada dia tem a sua
+presença. Em qualquer outro evento nada muda: um check-in por participante no
+evento todo (`CheckIn.dayIndex = 0`).
+
+- A regra do banco é `UNIQUE(eventId, participantId, dayIndex)`: a duplicidade é
+  por **participante + dia**, e vale mesmo com duas câmeras lendo ao mesmo tempo.
+- O dia (`dayIndex` 1, 2, 3…) é calculado **no servidor** pelo horário da leitura
+  e pelas datas e fuso do evento (`Event.startDate/endDate/timezone`). O dia vira
+  à meia-noite de **Brasília**, não de UTC. Na sincronização offline vale o
+  horário da leitura, não o da sincronização.
+- A resposta traz `day: { "index": 2, "total": 3, "date": "2026-11-06" }`
+  (`null` em evento comum). Repetir no mesmo dia → `ALREADY_CHECKED_IN`; o dia
+  seguinte não é bloqueado pelo anterior.
+- Certificados e comprovante continuam liberados com presença em **qualquer** dia.
 
 ### `GET /events/:eventId/statistics`
 Auth: admin.
@@ -191,6 +212,20 @@ Auth: admin.
   }
 }
 ```
+
+`totalCheckedIn` conta **pessoas** (em evento por dia, quem veio em 3 dias conta
+uma vez). Só em evento por dia a resposta ganha:
+
+```json
+"multiDay": {
+  "total": 3,
+  "today": { "index": 2, "date": "2026-11-06", "checkedIn": 412 },   // null fora dos dias do evento
+  "perDay": [{ "index": 1, "date": "2026-11-05", "checkedIn": 380 }, …]
+}
+```
+
+`GET /events/:eventId/report` também conta pessoas em `totalCheckedIn` e cada
+linha de `checkIns` traz `dayIndex` (0 em evento comum).
 
 ## Sincronização offline (requer token de terminal)
 
