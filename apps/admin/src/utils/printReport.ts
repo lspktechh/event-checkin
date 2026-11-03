@@ -882,14 +882,26 @@ export function printHandsOnReport({
 }
 
 function openReportWindow(html: string, windowTitle: string) {
-  const win = window.open("", "_blank");
-  if (!win) {
-    alert("O navegador bloqueou a abertura da janela de impressão. Por favor, permita pop-ups para este site para abrir a tela de impressão.");
-    return;
+  try {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+    const win = window.open(blobUrl, "_blank");
+    if (!win) {
+      alert("O navegador bloqueou a abertura da janela de impressão. Por favor, permita pop-ups para este site para abrir a tela de impressão.");
+      return;
+    }
+    win.focus();
+  } catch {
+    // Fallback para document.write
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("O navegador bloqueou a abertura da janela de impressão. Por favor, permita pop-ups para este site para abrir a tela de impressão.");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.title = windowTitle;
+    win.document.close();
+    win.focus();
   }
-  win.document.open();
-  win.document.write(html);
-  win.document.title = windowTitle;
-  win.document.close();
-  win.focus();
 }
