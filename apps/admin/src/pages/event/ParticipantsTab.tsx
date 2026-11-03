@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { QrCodeModal } from "../../components/QrCodeModal";
 import { ImportCsvModal } from "../../components/ImportCsvModal";
 import { EditParticipantModal } from "../../components/EditParticipantModal";
+import { downloadParticipantsCsv, downloadParticipantsPdf } from "../../utils/participantsReport";
 
 const CERT_LABEL: Record<api.CertificateRowStatus, string> = {
   LOCKED: "Bloqueado",
@@ -19,7 +20,7 @@ const CERT_BADGE_CLASS: Record<api.CertificateRowStatus, string> = {
   REVOKED: "badge badge-danger",
 };
 
-export function ParticipantsTab({ eventId }: { eventId: string }) {
+export function ParticipantsTab({ eventId, eventName }: { eventId: string; eventName?: string }) {
   const { hasPermission } = useAuth();
   const canIssue = hasPermission("certificates.issue");
   // Botão que o perfil não pode usar não aparece — antes aparecia e dava
@@ -146,16 +147,33 @@ export function ParticipantsTab({ eventId }: { eventId: string }) {
         <p className="muted" style={{ margin: 0 }}>
           {participants ? `${participants.length} participante(s)` : "Carregando..."}
         </p>
-        {canCreate ? (
-          <div className="row">
-            <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-              Importar CSV
-            </button>
-            <button className="btn" onClick={() => setShowForm((v) => !v)}>
-              {showForm ? "Cancelar" : "+ Novo participante"}
-            </button>
-          </div>
-        ) : null}
+        <div className="row">
+          {/* O relatório vale para quem enxerga a aba: são os mesmos dados da lista. */}
+          <button
+            className="btn btn-secondary"
+            onClick={() => participants && downloadParticipantsCsv(participants, eventName)}
+            disabled={!participants || participants.length === 0}
+          >
+            Exportar CSV
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => participants && downloadParticipantsPdf(participants, eventName)}
+            disabled={!participants || participants.length === 0}
+          >
+            Baixar PDF
+          </button>
+          {canCreate ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+                Importar CSV
+              </button>
+              <button className="btn" onClick={() => setShowForm((v) => !v)}>
+                {showForm ? "Cancelar" : "+ Novo participante"}
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {showForm ? (
