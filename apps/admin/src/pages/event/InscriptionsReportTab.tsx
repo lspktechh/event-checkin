@@ -11,6 +11,7 @@ import { formatPhone, formatDocument, stripEmoji } from "../../utils/formatters"
 import { isParticipantSemEquipe, generateInscriptionMarkdown, parseInscriptionNotes } from "../../utils/inscriptionMarkdown";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { useAuth } from "../../auth/AuthContext";
+import { printInscriptionsReport } from "../../utils/printReport";
 
 function BanIcon({ size = 13, color = "currentColor" }: { size?: number; color?: string }) {
   return (
@@ -430,6 +431,16 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
           </button>
           <button className="btn btn-sm" onClick={handleExportPdf} disabled={filtered.length === 0}>
             Baixar PDF
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => printInscriptionsReport({ eventName: eventName || "3º COPOL", inscriptions: filtered })}
+            disabled={filtered.length === 0}
+            title="Abre a tela de impressão em formato horizontal (deitado) com dados de inscrição, confirmação de pagamento e aptidão de entrada"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, background: "#1e293b", borderColor: "#334155" }}
+          >
+            🖨️ Imprimir Lista (Deitado)
           </button>
         </div>
       </div>

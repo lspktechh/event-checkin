@@ -1256,6 +1256,10 @@ export interface InscriptionReportItem {
   paymentId: string | null;
   participantId: string | null;
   createdAt: string;
+  updatedAt?: string;
+  paidAt?: string | null;
+  confirmedAt?: string | null;
+  checkedInAt?: string | null;
 }
 
 export function getInscriptionsReport(eventId: string) {
