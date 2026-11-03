@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import * as api from "../../api/client";
 import { AlertIcon, ClockIcon, BanIcon, BoltIcon, CalendarIcon, CheckIcon, DotIcon, DownloadIcon, FlaskIcon, GradCapIcon, ListIcon, MailIcon, MapPinIcon, MessageIcon, PhoneIcon, PlusIcon, RefreshIcon, SearchIcon, TrashIcon, UserIcon, UsersIcon, WalletIcon } from "../../components/Icons";
+import { printHandsOnReport } from "../../utils/printReport";
 
 interface WorkshopDef {
   id: string;
@@ -1210,6 +1211,24 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
             <button
               type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() =>
+                printHandsOnReport({
+                  eventName: "3º COPOL",
+                  registrations: workshopRegistrations,
+                  workshopTitle: selectedWorkshop.titulo,
+                  workshopSelloutData,
+                  workshopCapacities: capacities,
+                })
+              }
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+              title="Abre a tela de impressão em formato horizontal (deitado) da lista deste workshop"
+            >
+              🖨️ Imprimir Lista (Deitado)
+            </button>
+
+            <button
+              type="button"
               className="btn btn-sm"
               onClick={() => openCapacityModal(selectedWorkshop)}
               style={{
@@ -2206,6 +2225,31 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
 
               <button
                 type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() =>
+                  printHandsOnReport({
+                    eventName: "3º COPOL",
+                    registrations,
+                    workshopSelloutData,
+                    workshopCapacities: capacities,
+                  })
+                }
+                disabled={registrations.length === 0}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontWeight: 600,
+                  background: "#1e293b",
+                  borderColor: "#334155",
+                }}
+                title="Abre a tela de impressão em formato horizontal (deitado) com o controle geral de todos os Workshops Hands On"
+              >
+                🖨️ Imprimir Controle Geral (Deitado)
+              </button>
+
+              <button
+                type="button"
                 className="btn btn-sm"
                 disabled={syncingSoldOut}
                 onClick={handleSyncSoldOut}
@@ -2702,6 +2746,24 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   onChange={(e) => setParticipantSearch(e.target.value)}
                   style={{ width: 230, padding: "7px 12px", borderRadius: 6, fontSize: 13 }}
                 />
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() =>
+                    printHandsOnReport({
+                      eventName: "3º COPOL",
+                      registrations: allFilteredParticipants,
+                      workshopSelloutData,
+                      workshopCapacities: capacities,
+                    })
+                  }
+                  disabled={allFilteredParticipants.length === 0}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, background: "#1e293b", borderColor: "#334155" }}
+                  title="Abre a tela de impressão em formato horizontal (deitado) com a lista filtrada de inscritos"
+                >
+                  🖨️ Imprimir Lista Filtrada (Deitado)
+                </button>
               </div>
             </div>
 
