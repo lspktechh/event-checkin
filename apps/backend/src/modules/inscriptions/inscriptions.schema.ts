@@ -62,6 +62,7 @@ export const updateInscriptionSchema = z
     document: z.string().trim().min(1, "CPF é obrigatório").max(20).optional(),
     phone: z.string().trim().max(20).nullable().optional(),
     institution: z.string().trim().max(200).nullable().optional(),
+    notes: z.string().trim().max(100000).nullable().optional(),
     pagamento: z
       .object({
         // CORTESIA zera o valor. MANUAL é pago fora do sistema (dinheiro,

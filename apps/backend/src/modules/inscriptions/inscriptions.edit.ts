@@ -105,7 +105,12 @@ export async function updateInscription(eventId: string, id: string, input: Upda
 
     const atualizada = await tx.inscription.update({
       where: { id },
-      data: { ...dadosDaPessoa, institution: input.institution, ...(pagamento?.inscricao ?? {}) },
+      data: {
+        ...dadosDaPessoa,
+        institution: input.institution,
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(pagamento?.inscricao ?? {}),
+      },
     });
 
     if (atual.participantId) {

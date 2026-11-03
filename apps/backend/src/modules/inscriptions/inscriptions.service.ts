@@ -1018,6 +1018,7 @@ export async function getTalentPool(slugOrId: string) {
     id: string;
     nome: string;
     email: string;
+    telefone?: string;
     curso: string;
     vinculo: string;
     competencias: string[];
@@ -1052,11 +1053,13 @@ export async function getTalentPool(slugOrId: string) {
       const curso = lider?.curso || insc.institution || "Estudante / Profissional";
       const vinculo = lider?.vinculo || "Participante";
       const eixo = notes?.definir?.eixo || notes?.ficha_prototipo?.eixo || "Infraestrutura em Saúde Digital";
+      const telefone = insc.phone || lider?.telefone || lider?.phone || undefined;
 
       candidatos.push({
         id: insc.id,
         nome: insc.name,
         email: insc.email,
+        telefone,
         curso,
         vinculo,
         competencias: Array.isArray(competencias) ? competencias : [],

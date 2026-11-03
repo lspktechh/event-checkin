@@ -1273,6 +1273,7 @@ export interface UpdateInscriptionInput {
   phone?: string | null;
   institution?: string | null;
   pagamento?: { forma: PaymentForm; valor?: number };
+  notes?: string | null;
 }
 
 /** Edita dados da pessoa e/ou forma de pagamento. Atualiza inscrição e

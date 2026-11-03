@@ -85,6 +85,14 @@ export interface TrabalhoItem {
   acessoLiberado?: boolean;
 }
 
+export interface TeamAvaliacao {
+  nota: number; // 1 a 10
+  posicao?: string;
+  comentario?: string;
+  avaliadorNome?: string;
+  atualizadoEm?: string;
+}
+
 export interface TeamRecord {
   id: string;
   teamName: string;
@@ -179,6 +187,7 @@ export interface TeamRecord {
   trabalhos: TrabalhoItem[];
   createdAt: string;
   rawInscription: api.InscriptionReportItem;
+  avaliacao?: TeamAvaliacao;
 }
 
 type ModalSubTab = "todos" | "integrantes" | "problema" | "solucao" | "escopo" | "prototipo" | "ods" | "entregas";
@@ -194,6 +203,14 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
   const [modalTab, setModalTab] = useState<ModalSubTab>("todos");
   const [copiedToast, setCopiedToast] = useState<string | null>(null);
   const [mainView, setMainView] = useState<"equipes" | "talentos">("equipes");
+
+  // Estado da Avaliação da Ideia / Banca
+  const [evaluatingTeam, setEvaluatingTeam] = useState<TeamRecord | null>(null);
+  const [savingEvaluation, setSavingEvaluation] = useState(false);
+  const [evaluationNota, setEvaluationNota] = useState<number | null>(null);
+  const [evaluationPosicao, setEvaluationPosicao] = useState<string>("");
+  const [evaluationComentario, setEvaluationComentario] = useState<string>("");
+  const [evaluationAvaliadorNome, setEvaluationAvaliadorNome] = useState<string>("");
 
   useEffect(() => {
     loadTeams();
@@ -465,6 +482,19 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       ];
       extraWorks.forEach((ew) => trabalhos.push(ew));
 
+      // ─── Avaliação da Ideia / Banca ───
+      const avaliacaoRaw = payload.avaliacao || parsedNotes?.avaliacao;
+      const avaliacao: TeamAvaliacao | undefined =
+        avaliacaoRaw && typeof avaliacaoRaw.nota === "number"
+          ? {
+              nota: avaliacaoRaw.nota,
+              posicao: avaliacaoRaw.posicao || undefined,
+              comentario: avaliacaoRaw.comentario || undefined,
+              avaliadorNome: avaliacaoRaw.avaliadorNome || undefined,
+              atualizadoEm: avaliacaoRaw.atualizadoEm || undefined,
+            }
+          : undefined;
+
       list.push({
         id: ins.id,
         teamName,
@@ -492,6 +522,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         trabalhos,
         createdAt: ins.createdAt,
         rawInscription: ins,
+        avaliacao,
       });
     }
 
@@ -671,12 +702,133 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       `- **Maior dúvida da equipe para a Maratona:** ${team.fechamento.maior_duvida || "—"}`,
       `- **ODS Vinculadas:** ${team.fechamento.ods.map((o) => `ODS ${o} - ${ODS_MAP[o]?.nome || ""}`).join("; ") || "Nenhuma"}`,
       `- **Aceites Legais:** ${team.fechamento.aceites.join("; ") || "—"}`,
+      ...(team.avaliacao
+        ? [
+            `---`,
+            `## 8. AVALIAÇÃO DA BANCA EXAMINADORA`,
+            `- **Nota da Ideia:** ${team.avaliacao.nota}/10 ⭐`,
+            team.avaliacao.posicao ? `- **Posição / Colocação:** ${team.avaliacao.posicao} 🏆` : "",
+            team.avaliacao.comentario ? `- **Comentário / Parecer:** ${team.avaliacao.comentario}` : "",
+            team.avaliacao.avaliadorNome ? `- **Avaliador(a):** ${team.avaliacao.avaliadorNome}` : "",
+            team.avaliacao.atualizadoEm ? `- **Data da Avaliação:** ${new Date(team.avaliacao.atualizadoEm).toLocaleString("pt-BR")}` : "",
+          ]
+        : []),
     ]
       .filter((l) => l !== "")
       .join("\n");
 
     navigator.clipboard.writeText(md);
     showToast("Ficha Completa em Markdown copiada com sucesso!");
+  }
+
+  function abrirModalAvaliacao(team: TeamRecord) {
+    setEvaluatingTeam(team);
+    setEvaluationNota(team.avaliacao?.nota ?? null);
+    setEvaluationPosicao(team.avaliacao?.posicao ?? "");
+    setEvaluationComentario(team.avaliacao?.comentario ?? "");
+    const storedAvaliador = typeof window !== "undefined" ? localStorage.getItem("inova_avaliador_nome") || "" : "";
+    setEvaluationAvaliadorNome(team.avaliacao?.avaliadorNome ?? storedAvaliador);
+  }
+
+  async function salvarAvaliacao() {
+    if (!evaluatingTeam) return;
+    if (evaluationNota === null || evaluationNota < 1 || evaluationNota > 10) {
+      alert("Por favor, selecione uma nota de 1 a 10 para a ideia da equipe.");
+      return;
+    }
+
+    setSavingEvaluation(true);
+    try {
+      let baseNotesObj: any = {};
+      try {
+        if (evaluatingTeam.rawInscription.notes) {
+          baseNotesObj = JSON.parse(evaluatingTeam.rawInscription.notes);
+        }
+      } catch {
+        baseNotesObj = {};
+      }
+
+      const novaAvaliacao: TeamAvaliacao = {
+        nota: evaluationNota,
+        posicao: evaluationPosicao.trim() || undefined,
+        comentario: evaluationComentario.trim() || undefined,
+        avaliadorNome: evaluationAvaliadorNome.trim() || undefined,
+        atualizadoEm: new Date().toISOString(),
+      };
+
+      baseNotesObj.avaliacao = novaAvaliacao;
+
+      if (evaluationAvaliadorNome.trim() && typeof window !== "undefined") {
+        localStorage.setItem("inova_avaliador_nome", evaluationAvaliadorNome.trim());
+      }
+
+      await api.updateInscription(eventId, evaluatingTeam.id, {
+        notes: JSON.stringify(baseNotesObj),
+      });
+
+      showToast(`Avaliação da equipe "${evaluatingTeam.teamName}" salva com sucesso! ⭐ ${evaluationNota}/10`);
+
+      if (selectedTeam && selectedTeam.id === evaluatingTeam.id) {
+        setSelectedTeam({
+          ...selectedTeam,
+          avaliacao: novaAvaliacao,
+          rawInscription: {
+            ...selectedTeam.rawInscription,
+            notes: JSON.stringify(baseNotesObj),
+          },
+        });
+      }
+
+      setEvaluatingTeam(null);
+      await loadTeams();
+    } catch (err) {
+      alert("Erro ao salvar avaliação: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSavingEvaluation(false);
+    }
+  }
+
+  async function removerAvaliacao() {
+    if (!evaluatingTeam) return;
+    if (!confirm(`Deseja remover a avaliação da equipe "${evaluatingTeam.teamName}"?`)) return;
+
+    setSavingEvaluation(true);
+    try {
+      let baseNotesObj: any = {};
+      try {
+        if (evaluatingTeam.rawInscription.notes) {
+          baseNotesObj = JSON.parse(evaluatingTeam.rawInscription.notes);
+        }
+      } catch {
+        baseNotesObj = {};
+      }
+
+      delete baseNotesObj.avaliacao;
+
+      await api.updateInscription(eventId, evaluatingTeam.id, {
+        notes: JSON.stringify(baseNotesObj),
+      });
+
+      showToast(`Avaliação removida com sucesso.`);
+
+      if (selectedTeam && selectedTeam.id === evaluatingTeam.id) {
+        setSelectedTeam({
+          ...selectedTeam,
+          avaliacao: undefined,
+          rawInscription: {
+            ...selectedTeam.rawInscription,
+            notes: JSON.stringify(baseNotesObj),
+          },
+        });
+      }
+
+      setEvaluatingTeam(null);
+      await loadTeams();
+    } catch (err) {
+      alert("Erro ao remover avaliação: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSavingEvaluation(false);
+    }
   }
 
   function imprimirFicha() {
@@ -1224,6 +1376,80 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 </div>
               </div>
 
+              {/* ─── Avaliação da Ideia & Nota ─── */}
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "10px" }} onClick={(e) => e.stopPropagation()}>
+                {team.avaliacao ? (
+                  <div
+                    style={{
+                      background: "rgba(16, 185, 129, 0.08)",
+                      border: "1px solid rgba(16, 185, 129, 0.25)",
+                      borderRadius: "8px",
+                      padding: "6px 10px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          background:
+                            team.avaliacao.nota >= 9
+                              ? "#10b981"
+                              : team.avaliacao.nota >= 7
+                              ? "#06b6d4"
+                              : team.avaliacao.nota >= 5
+                              ? "#f59e0b"
+                              : "#ef4444",
+                          color: "#ffffff",
+                          fontWeight: 800,
+                          fontSize: "11px",
+                          padding: "2px 7px",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        ⭐ {team.avaliacao.nota}/10
+                      </span>
+                      {team.avaliacao.posicao && (
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#fbbf24" }}>
+                          🏆 {team.avaliacao.posicao}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: "2px 8px", fontSize: "11px", height: "auto" }}
+                      onClick={() => abrirModalAvaliacao(team)}
+                    >
+                      Editar Nota
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      width: "100%",
+                      padding: "5px 10px",
+                      fontSize: "11px",
+                      height: "auto",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      borderColor: "rgba(245, 158, 11, 0.35)",
+                      color: "#fbbf24",
+                      background: "rgba(245, 158, 11, 0.06)",
+                    }}
+                    onClick={() => abrirModalAvaliacao(team)}
+                  >
+                    ⭐ Avaliar Ideia & Nota (1-10)
+                  </button>
+                )}
+              </div>
+
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: "10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
                   Ver ficha completa <ArrowRightIcon size={12} />
@@ -1365,7 +1591,134 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 <LayersIcon size={14} />
                 <span>🖨️ Imprimir Ficha</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => abrirModalAvaliacao(selectedTeam)}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: "#fbbf24",
+                  borderColor: "rgba(245, 158, 11, 0.4)",
+                  background: "rgba(245, 158, 11, 0.1)",
+                }}
+              >
+                <span>
+                  ⭐{" "}
+                  {selectedTeam.avaliacao
+                    ? `Nota: ${selectedTeam.avaliacao.nota}/10 (${selectedTeam.avaliacao.posicao || "Editar"})`
+                    : "Avaliar Ideia da Equipe"}
+                </span>
+              </button>
             </div>
+
+            {/* ──── BANNER DE AVALIAÇÃO DA BANCA ──── */}
+            {selectedTeam.avaliacao ? (
+              <div
+                style={{
+                  marginBottom: "20px",
+                  padding: "16px",
+                  borderRadius: "12px",
+                  background: "rgba(16, 185, 129, 0.08)",
+                  border: "1px solid rgba(16, 185, 129, 0.35)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        background:
+                          selectedTeam.avaliacao.nota >= 9
+                            ? "#10b981"
+                            : selectedTeam.avaliacao.nota >= 7
+                            ? "#06b6d4"
+                            : selectedTeam.avaliacao.nota >= 5
+                            ? "#f59e0b"
+                            : "#ef4444",
+                        color: "#ffffff",
+                        fontWeight: 800,
+                        fontSize: "14px",
+                        padding: "4px 12px",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      ⭐ Nota da Ideia: {selectedTeam.avaliacao.nota}/10
+                    </span>
+                    {selectedTeam.avaliacao.posicao && (
+                      <span style={{ fontSize: "14px", fontWeight: 800, color: "#fbbf24" }}>
+                        🏆 {selectedTeam.avaliacao.posicao}
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm no-print"
+                    onClick={() => abrirModalAvaliacao(selectedTeam)}
+                  >
+                    ✏️ Editar Avaliação
+                  </button>
+                </div>
+
+                {selectedTeam.avaliacao.comentario && (
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      color: "var(--text)",
+                      lineHeight: 1.5,
+                      background: "rgba(0,0,0,0.18)",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      borderLeft: "3px solid #10b981",
+                    }}
+                  >
+                    <strong style={{ color: "#10b981" }}>Parecer do Avaliador:</strong> {selectedTeam.avaliacao.comentario}
+                  </div>
+                )}
+
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", flexWrap: "wrap", gap: "12px" }}>
+                  {selectedTeam.avaliacao.avaliadorNome && (
+                    <span>Avaliador: <strong>{selectedTeam.avaliacao.avaliadorNome}</strong></span>
+                  )}
+                  {selectedTeam.avaliacao.atualizadoEm && (
+                    <span>Avaliado em {new Date(selectedTeam.avaliacao.atualizadoEm).toLocaleString("pt-BR")}</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div
+                className="no-print"
+                style={{
+                  marginBottom: "20px",
+                  padding: "12px 16px",
+                  borderRadius: "10px",
+                  background: "rgba(245, 158, 11, 0.05)",
+                  border: "1px dashed rgba(245, 158, 11, 0.35)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  ⭐ Esta equipe ainda não possui nota atribuída por um avaliador.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ color: "#fbbf24", borderColor: "rgba(245, 158, 11, 0.4)" }}
+                  onClick={() => abrirModalAvaliacao(selectedTeam)}
+                >
+                  ⭐ Avaliar Ideia & Nota
+                </button>
+              </div>
+            )}
 
             {/* ──── NAVEGAÇÃO POR ABAS INTERNAS NO MODAL (OCULTO NA IMPRESSÃO) ──── */}
             <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "22px", background: "rgba(255,255,255,0.04)", padding: "4px", borderRadius: "10px" }}>
@@ -2051,6 +2404,287 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
               >
                 Fechar Ficha
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──── MODAL DE AVALIAÇÃO DA IDEIA (BANCA EXAMINADORA) ──── */}
+      {evaluatingTeam && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.8)",
+            zIndex: 1100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+            backdropFilter: "blur(6px)",
+          }}
+          onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: "580px",
+              width: "100%",
+              maxHeight: "92vh",
+              overflowY: "auto",
+              padding: "24px",
+              position: "relative",
+              boxShadow: "0 25px 50px rgba(0,0,0,0.7)",
+              border: "1px solid var(--border)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "18px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: "12px",
+                borderBottom: "1px solid var(--border)",
+                paddingBottom: "14px",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "#fbbf24",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  ⭐ Banca Examinadora / Avaliador
+                </span>
+                <h2 style={{ margin: "4px 0 2px", fontSize: "20px", fontWeight: 800, color: "var(--text)" }}>
+                  Avaliação da Ideia da Equipe
+                </h2>
+                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                  Equipe: <strong style={{ color: "var(--text)" }}>{evaluatingTeam.teamName}</strong> • Solução:{" "}
+                  <em>{evaluatingTeam.idear.nome_solucao}</em>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text)",
+                  padding: "6px",
+                  borderRadius: "6px",
+                }}
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+
+            {/* 1. SELEÇÃO DA NOTA (1 A 10) */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                <label style={{ fontSize: "13px", fontWeight: 700, color: "var(--text)" }}>
+                  1. Nota da Ideia (Selecione de 1 a 10) *
+                </label>
+                {evaluationNota !== null && (
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      color: "#ffffff",
+                      background:
+                        evaluationNota >= 9
+                          ? "#10b981"
+                          : evaluationNota >= 7
+                          ? "#06b6d4"
+                          : evaluationNota >= 5
+                          ? "#f59e0b"
+                          : "#ef4444",
+                    }}
+                  >
+                    ⭐ {evaluationNota}/10 -{" "}
+                    {evaluationNota >= 9
+                      ? "Excelente / Destaque"
+                      : evaluationNota >= 7
+                      ? "Boa Solução"
+                      : evaluationNota >= 5
+                      ? "Regular"
+                      : "Inicial / Insuficiente"}
+                  </span>
+                )}
+              </div>
+
+              {/* Botões de 1 a 10 */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: "5px" }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+                  const isSelected = evaluationNota === num;
+                  const cor =
+                    num >= 9 ? "#10b981" : num >= 7 ? "#06b6d4" : num >= 5 ? "#f59e0b" : "#ef4444";
+                  return (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setEvaluationNota(num)}
+                      style={{
+                        height: "44px",
+                        borderRadius: "8px",
+                        border: isSelected ? `2px solid ${cor}` : "1px solid var(--border)",
+                        background: isSelected ? cor : "rgba(255,255,255,0.03)",
+                        color: isSelected ? "#ffffff" : "var(--text)",
+                        fontWeight: isSelected ? 800 : 600,
+                        fontSize: "15px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {num}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. POSIÇÃO / COLOCAÇÃO */}
+            <div>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "8px" }}>
+                2. Posição / Classificação da Equipe
+              </label>
+
+              {/* Pílulas rápidas */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                {[
+                  "🥇 1º Lugar",
+                  "🥈 2º Lugar",
+                  "🥉 3º Lugar",
+                  "4º Lugar",
+                  "5º Lugar",
+                  "Finalista",
+                  "Menção Honrosa",
+                  "Destaque Inovação",
+                ].map((pos) => {
+                  const isSelected = evaluationPosicao === pos;
+                  return (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() => setEvaluationPosicao(pos)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: "6px",
+                        fontSize: "11px",
+                        fontWeight: isSelected ? 700 : 500,
+                        border: isSelected ? "1px solid #fbbf24" : "1px solid var(--border)",
+                        background: isSelected ? "rgba(251, 191, 36, 0.2)" : "rgba(255,255,255,0.04)",
+                        color: isSelected ? "#fbbf24" : "var(--text-muted)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {pos}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <input
+                type="text"
+                className="input"
+                placeholder="Ou digite a colocação (ex: 1º Lugar Geral, 2º Lugar Eixo Saúde...)"
+                value={evaluationPosicao}
+                onChange={(e) => setEvaluationPosicao(e.target.value)}
+                style={{ width: "100%", fontSize: "13px" }}
+              />
+            </div>
+
+            {/* 3. COMENTÁRIO SOBRE A NOTA E POSIÇÃO */}
+            <div>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                3. Comentário do Avaliador (Parecer & Justificativa da Nota e Posição)
+              </label>
+              <textarea
+                className="input"
+                rows={4}
+                placeholder="Escreva aqui seu comentário detalhado sobre a ideia da equipe, os pontos fortes, pontos a melhorar e o motivo da nota e da posição alcançada..."
+                value={evaluationComentario}
+                onChange={(e) => setEvaluationComentario(e.target.value)}
+                style={{ width: "100%", fontSize: "13px", resize: "vertical" }}
+              />
+            </div>
+
+            {/* 4. NOME DO AVALIADOR */}
+            <div>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                4. Nome do Avaliador / Integrante da Banca
+              </label>
+              <input
+                type="text"
+                className="input"
+                placeholder="Seu nome ou identificação (ex: Prof. Avaliador / Banca Oficial)"
+                value={evaluationAvaliadorNome}
+                onChange={(e) => setEvaluationAvaliadorNome(e.target.value)}
+                style={{ width: "100%", fontSize: "13px" }}
+              />
+            </div>
+
+            {/* RODAPÉ E AÇÕES */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "10px",
+                borderTop: "1px solid var(--border)",
+                paddingTop: "14px",
+                marginTop: "4px",
+              }}
+            >
+              {evaluatingTeam.avaliacao ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={removerAvaliacao}
+                  disabled={savingEvaluation}
+                  style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                >
+                  🗑️ Remover Nota
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEvaluatingTeam(null)}
+                  disabled={savingEvaluation}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={salvarAvaliacao}
+                  disabled={savingEvaluation || evaluationNota === null}
+                  style={{ minWidth: "140px" }}
+                >
+                  {savingEvaluation ? "Salvando..." : "💾 Salvar Avaliação"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
