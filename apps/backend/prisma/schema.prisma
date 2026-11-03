@@ -225,6 +225,12 @@ model Event {
   language   String          @default("pt-BR")
   visibility EventVisibility @default(PRIVATE)
 
+  /// Credenciamento por DIA: o mesmo QR Code vale em todos os dias do
+  /// evento e cada dia tem a sua presença (CheckIn.dayIndex = 1, 2, 3…).
+  /// Desligado (padrão), o evento tem um check-in só — como sempre foi.
+  /// Ligado apenas no COPOL (ver migration add_multi_day_checkin).
+  multiDayCheckIn Boolean @default(false)
+
   siteContent Json?
 
   // Configuração do certificado/comprovante deste evento — carga horária,
@@ -590,10 +596,16 @@ model CheckIn {
   checkedInAt DateTime
   createdAt   DateTime @default(now())
 
+  // Dia do evento desta presença: 1, 2, 3… em evento com credenciamento por
+  // dia (Event.multiDayCheckIn). 0 em todo evento comum, que tem um
+  // check-in só — assim a regra abaixo continua sendo, para ele, "um por
+  // evento". O dia é calculado no servidor (ver checkins/event-day.ts).
+  dayIndex Int @default(0)
+
   // Garante, no nível do banco, que o mesmo participante não seja
-  // credenciado duas vezes no mesmo evento — mesmo sob concorrência entre
-  // terminais diferentes.
-  @@unique([eventId, participantId])
+  // credenciado duas vezes no mesmo evento NO MESMO DIA — mesmo sob
+  // concorrência entre câmeras/terminais diferentes.
+  @@unique([eventId, participantId, dayIndex])
   @@unique([terminalId, localCheckInId])
   @@index([terminalId])
   @@map("checkins")

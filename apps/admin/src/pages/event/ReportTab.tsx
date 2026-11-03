@@ -93,7 +93,8 @@ export function ReportTab({ eventId }: { eventId: string }) {
         doc.text(truncate(row.participantDocument ?? "—", 14), cols[2] + 2, y + 4);
         doc.text(truncate(row.terminalName ?? "—", 12), cols[3] + 2, y + 4);
         doc.text(row.source === "ONLINE" ? "Online" : "Offline", cols[4] + 2, y + 4);
-        doc.text(`${dateStr} ${timeStr}`, cols[5] + 2, y + 4);
+        // Evento por dia: a mesma pessoa tem uma linha por dia; o prefixo diz qual.
+        doc.text(`${row.dayIndex > 0 ? `D${row.dayIndex} ` : ""}${dateStr} ${timeStr}`, cols[5] + 2, y + 4);
 
         y += 6;
       }
@@ -118,6 +119,9 @@ export function ReportTab({ eventId }: { eventId: string }) {
 
   if (error) return <p className="error-text">{error}</p>;
   if (!report) return <p className="muted">Carregando...</p>;
+
+  // Evento por dia (COPOL): a mesma pessoa aparece uma vez por dia.
+  const hasDays = report.checkIns.some((row) => row.dayIndex > 0);
 
   return (
     <div className="stack">
@@ -147,6 +151,7 @@ export function ReportTab({ eventId }: { eventId: string }) {
             <table>
               <thead>
                 <tr>
+                  {hasDays && <th>Dia</th>}
                   <th>Participante</th>
                   <th>E-mail</th>
                   <th>CPF</th>
@@ -160,6 +165,11 @@ export function ReportTab({ eventId }: { eventId: string }) {
                   const dt = new Date(row.checkedInAt);
                   return (
                     <tr key={i}>
+                      {hasDays && (
+                        <td>
+                          <span className="badge badge-info">Dia {row.dayIndex}</span>
+                        </td>
+                      )}
                       <td>{row.participantName}</td>
                       <td className="muted">{row.participantEmail ?? "—"}</td>
                       <td className="muted">{row.participantDocument ?? "—"}</td>

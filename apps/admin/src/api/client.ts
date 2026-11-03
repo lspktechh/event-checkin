@@ -575,12 +575,29 @@ export function deleteTerminal(eventId: string, terminalId: string) {
 }
 
 // --- Statistics ---
+/** Dia de um evento com credenciamento por dia (o COPOL). */
+export interface CheckInDay {
+  /** 1 = primeiro dia. */
+  index: number;
+  total: number;
+  /** Data local do dia, "YYYY-MM-DD". */
+  date: string;
+}
+
 export interface EventStatistics {
   totalRegistered: number;
+  /** Pessoas com ao menos uma presença (em evento por dia, não conta o mesmo participante duas vezes). */
   totalCheckedIn: number;
   totalAbsent: number;
   attendancePercentage: number;
   checkInsByTerminal: { terminalId: string | null; count: number }[];
+  /** Só existe em evento com credenciamento por dia. */
+  multiDay?: {
+    total: number;
+    /** `null` fora dos dias do evento. */
+    today: { index: number; date: string; checkedIn: number } | null;
+    perDay: { index: number; date: string; checkedIn: number }[];
+  };
 }
 export function getStatistics(eventId: string) {
   return request<EventStatistics>(`/events/${eventId}/statistics`);
@@ -588,6 +605,8 @@ export function getStatistics(eventId: string) {
 
 // --- Report ---
 export interface ReportCheckIn {
+  /** Dia do evento (1, 2, 3); 0 em evento sem credenciamento por dia. */
+  dayIndex: number;
   participantName: string;
   participantEmail: string | null;
   participantPhone: string | null;
@@ -1338,6 +1357,8 @@ export interface AdminCheckInResult {
     document: string | null;
   };
   checkedInAt: string;
+  /** Dia em que a presença foi registrada; `null` em evento comum. */
+  day?: CheckInDay | null;
 }
 
 export function performAdminCheckIn(eventId: string, qrToken: string): Promise<AdminCheckInResult> {

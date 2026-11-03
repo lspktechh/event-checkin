@@ -8,15 +8,18 @@ export interface CreateCheckInParams {
   source: CheckInSource;
   checkedInAt: Date;
   localCheckInId?: string | null;
+  /** Dia do evento (1, 2, 3…); 0 em evento sem credenciamento por dia. */
+  dayIndex: number;
 }
 
 export function createCheckIn(params: CreateCheckInParams) {
   return prisma.checkIn.create({ data: params });
 }
 
-export function findByEventAndParticipant(eventId: string, participantId: string) {
+/** A presença de um participante NAQUELE dia (dayIndex 0 = evento sem dia). */
+export function findByEventParticipantAndDay(eventId: string, participantId: string, dayIndex: number) {
   return prisma.checkIn.findUnique({
-    where: { eventId_participantId: { eventId, participantId } },
+    where: { eventId_participantId_dayIndex: { eventId, participantId, dayIndex } },
   });
 }
 
@@ -26,8 +29,18 @@ export function findByTerminalAndLocalId(terminalId: string, localCheckInId: str
   });
 }
 
-export function countByEvent(eventId: string) {
-  return prisma.checkIn.count({ where: { eventId } });
+/** Quantas PESSOAS têm ao menos uma presença no evento. Em evento por dia
+ * a mesma pessoa tem uma linha por dia; contar linhas daria 3 presentes para
+ * 1 pessoa (e "ausentes" negativo). */
+export async function countPresentParticipants(eventId: string): Promise<number> {
+  const rows = await prisma.checkIn.groupBy({ by: ["participantId"], where: { eventId } });
+  return rows.length;
+}
+
+/** Presenças por dia do evento (dayIndex → quantas pessoas). */
+export async function countByDay(eventId: string): Promise<Map<number, number>> {
+  const rows = await prisma.checkIn.groupBy({ by: ["dayIndex"], where: { eventId }, _count: { _all: true } });
+  return new Map(rows.map((r) => [r.dayIndex, r._count._all]));
 }
 
 export function countByEventAndTerminal(eventId: string) {

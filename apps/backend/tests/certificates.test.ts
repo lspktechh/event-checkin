@@ -648,8 +648,8 @@ describe("liberação manual de certificado (painel do admin)", () => {
     expect(after.statusCode).toBe(200);
     expect(after.headers["content-type"]).toBe("application/pdf");
 
-    const checkIn = await prisma.checkIn.findUnique({
-      where: { eventId_participantId: { eventId: event.id, participantId: participant.id } },
+    const checkIn = await prisma.checkIn.findFirst({
+      where: { eventId: event.id, participantId: participant.id },
     });
     expect(checkIn).toBeNull();
   });

@@ -80,9 +80,10 @@ export const attendeeRepository = {
       prisma.participant.count({
         where: { eventId, status: "ACTIVE" },
       }),
-      prisma.checkIn.count({
-        where: { event: { id: eventId }, participant: { status: "ACTIVE" } },
-      }),
+      // Pessoas, não linhas: em evento por dia há uma presença por dia.
+      prisma.checkIn
+        .groupBy({ by: ["participantId"], where: { eventId, participant: { status: "ACTIVE" } } })
+        .then((rows) => rows.length),
     ]);
 
     return {
