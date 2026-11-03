@@ -65,6 +65,27 @@ export function CredenciamentoPage() {
     initAudio();
 
     try {
+      if (token.startsWith("HO-")) {
+        const res = await api.checkInHandsOn(eventId, token);
+        if (res.alreadyCheckedIn) {
+          playCheckInFeedback("ALREADY_CHECKED_IN");
+          setFeedback({
+            status: "ALREADY_CHECKED_IN",
+            participantName: `${res.registration.name} · Hands On: ${res.registration.title}`,
+            checkedInAt: res.registration.checkedInAt,
+          });
+        } else {
+          playCheckInFeedback("CONFIRMED");
+          setSessionCount((prev) => prev + 1);
+          setFeedback({
+            status: "CONFIRMED",
+            participantName: `${res.registration.name} · Hands On: ${res.registration.title}`,
+            checkedInAt: res.registration.checkedInAt,
+          });
+        }
+        return;
+      }
+
       const outcome = await api.performAdminCheckIn(eventId, token);
 
       if (outcome.status === "CONFIRMED") {
