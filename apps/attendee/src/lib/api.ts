@@ -123,7 +123,8 @@ export interface AttendeeHandsOn {
   email: string;
   document: string;
   status: "PENDING" | "CONFIRMED" | "CANCELLED";
-  qrToken: string;
+  /** `null` quando a inscrição foi cancelada: ela não dá acesso à sala, então o servidor nem envia o token. */
+  qrToken: string | null;
   checkedInAt: string | null;
   checkedInBy?: string | null;
 }

@@ -1,6 +1,6 @@
 import { handsOnRepository, type CreateHandsOnData } from "./hands-on.repository.js";
 import { generateQrToken } from "../../shared/tokens.js";
-import { NotFoundError, ConflictError, BadRequestError } from "../../shared/errors.js";
+import { NotFoundError, ConflictError, BadRequestError, ForbiddenError } from "../../shared/errors.js";
 import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { prisma } from "../../database/prisma.js";
 import { env } from "../../config/env.js";
@@ -8,6 +8,16 @@ import { adminCheckInBus } from "../admin/adminMonitor.events.js";
 import { emailService } from "../../lib/email/email.service.js";
 import { resolveEmailSettings } from "../../lib/email/email-settings.js";
 import type { Prisma } from "@prisma/client";
+
+/**
+ * Inscrição de Hands On CANCELADA não dá acesso à sala, então o QR dela não
+ * pode sair da API: o site o desenharia como um QR válido, e quem o lesse na
+ * porta (ver `checkIn`) entraria sem ter mais a vaga. A inscrição continua
+ * aparecendo na lista, como "cancelada", só sem o token.
+ */
+function semQrSeCancelada<T extends { status: string; qrToken: string }>(reg: T): Omit<T, "qrToken"> & { qrToken: string | null } {
+  return reg.status === "CANCELLED" ? { ...reg, qrToken: null } : reg;
+}
 
 export const HANDS_ON_CAPACITY: Record<string, number> = {
   "clareamento-dental-caseiro": 10,
@@ -702,7 +712,7 @@ export const handsOnService = {
       email: reg.email,
       status: reg.status,
       paidAt: reg.paidAt,
-      qrToken: reg.qrToken,
+      qrToken: semQrSeCancelada(reg).qrToken,
       paymentId: reg.paymentId,
       pixCode: reg.paymentQrCodeContent,
       pixQrCodeBase64: reg.paymentQrCodeBase64,
@@ -748,7 +758,8 @@ export const handsOnService = {
   },
 
   async getAttendeeHandsOn(document: string, email: string, eventId?: string) {
-    return handsOnRepository.findByAttendee(document, email, eventId);
+    const lista = await handsOnRepository.findByAttendee(document, email, eventId);
+    return lista.map(semQrSeCancelada);
   },
 
   async confirmPayment(id: string, notes?: string | null) {
@@ -821,6 +832,13 @@ export const handsOnService = {
       reg = await handsOnRepository.findByQrToken(idOrToken);
     }
     if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
+
+    // Cancelada não entra — e NÃO pode ser reativada pela leitura: o
+    // recordCheckin grava CONFIRMED, então aceitar aqui ressuscitaria a
+    // inscrição de quem perdeu a vaga (workshop lotou, duplicidade, cancelamento).
+    if (reg.status === "CANCELLED") {
+      throw new ForbiddenError("Inscrição de Hands On cancelada: não dá acesso à sala");
+    }
 
     if (reg.checkedInAt) {
       return { registration: reg, alreadyCheckedIn: true };

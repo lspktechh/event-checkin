@@ -508,6 +508,7 @@ export default function CheckInPage() {
                 const isCheckedIn = !!ho.checkedInAt;
                 const isConfirmed = ho.status === "CONFIRMED";
                 const isPending = ho.status === "PENDING";
+                const isCancelled = ho.status === "CANCELLED";
 
                 return (
                   <div
@@ -537,6 +538,10 @@ export default function CheckInPage() {
                       ) : isPending ? (
                         <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
                           <ClockIcon size={11} /> Aguardando Pix
+                        </span>
+                      ) : isCancelled ? (
+                        <span className="shrink-0 rounded-full bg-red-500/15 px-2.5 py-0.5 text-[11px] font-bold text-red-600 dark:text-red-400">
+                          Cancelado
                         </span>
                       ) : (
                         <span className="shrink-0 rounded-full bg-zinc-500/15 px-2.5 py-0.5 text-[11px] font-bold text-zinc-500">
@@ -578,22 +583,35 @@ export default function CheckInPage() {
                       </p>
                     )}
 
-                    {/* QR Code específico do Hands On */}
-                    <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-zinc-200 mt-2">
-                      <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2 tracking-wide">
-                        QR Code de Acesso à Sala
-                      </p>
-                      <QRCodeSVG
-                        value={ho.qrToken}
-                        size={170}
-                        level="M"
-                        includeMargin={false}
-                        className="mx-auto"
-                      />
-                      <span className="mt-2 text-[11px] font-mono font-bold text-zinc-800">
-                        {ho.qrToken}
-                      </span>
-                    </div>
+                    {/* QR Code específico do Hands On. Inscrição cancelada não dá
+                        acesso à sala: o servidor nem envia o token, e aqui só
+                        aparece o aviso. */}
+                    {isCancelled || !ho.qrToken ? (
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 mt-2 text-center">
+                        <p className="text-xs font-bold text-red-600 dark:text-red-400">
+                          Inscrição cancelada
+                        </p>
+                        <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
+                          Este workshop não dá acesso à sala. Em caso de dúvida, procure a organização do evento.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-zinc-200 mt-2">
+                        <p className="text-[10px] uppercase font-bold text-zinc-500 mb-2 tracking-wide">
+                          QR Code de Acesso à Sala
+                        </p>
+                        <QRCodeSVG
+                          value={ho.qrToken}
+                          size={170}
+                          level="M"
+                          includeMargin={false}
+                          className="mx-auto"
+                        />
+                        <span className="mt-2 text-[11px] font-mono font-bold text-zinc-800">
+                          {ho.qrToken}
+                        </span>
+                      </div>
+                    )}
 
                     {isCheckedIn && (
                       <p className="text-center text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-2">
