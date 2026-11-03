@@ -25,6 +25,7 @@ import {
   getWhatsAppInviteUrl,
   parseInscriptionNotes,
 } from "../../utils/inscriptionMarkdown";
+import { copyTextToClipboard, downloadTextAsFile } from "../../utils/clipboard";
 
 interface TeamsTabProps {
   eventId: string;
@@ -211,6 +212,14 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
   const [evaluationPosicao, setEvaluationPosicao] = useState<string>("");
   const [evaluationComentario, setEvaluationComentario] = useState<string>("");
   const [evaluationAvaliadorNome, setEvaluationAvaliadorNome] = useState<string>("");
+
+  // Estado do Modal de Visualização / Exportação de Markdown
+  const [markdownModal, setMarkdownModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    content: string;
+    copied: boolean;
+  } | null>(null);
 
   useEffect(() => {
     loadTeams();
@@ -607,7 +616,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
     setTimeout(() => setCopiedToast(null), 3500);
   }
 
-  function copiarContatosDaEquipe(team: TeamRecord) {
+  async function copiarContatosDaEquipe(team: TeamRecord) {
     const contatos = [
       `EQUIPE: ${team.teamName}`,
       `Eixo: ${team.definir.eixo}`,
@@ -617,11 +626,20 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       ),
     ].join("\n");
 
-    navigator.clipboard.writeText(contatos);
-    showToast("Contatos copiados para a área de transferência!");
+    const success = await copyTextToClipboard(contatos);
+    if (success) {
+      showToast("Contatos copiados para a área de transferência!");
+    } else {
+      setMarkdownModal({
+        isOpen: true,
+        title: `Contatos da Equipe: ${team.teamName}`,
+        content: contatos,
+        copied: false,
+      });
+    }
   }
 
-  function copiarFichaMarkdownCompleta(team: TeamRecord) {
+  function gerarMarkdownDaEquipe(team: TeamRecord): string {
     const md = [
       `# FICHA OFICIAL DA EQUIPE - INOVA SAÚDE 2026`,
       `**Equipe:** ${team.teamName}`,
@@ -717,8 +735,22 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       .filter((l) => l !== "")
       .join("\n");
 
-    navigator.clipboard.writeText(md);
-    showToast("Ficha Completa em Markdown copiada com sucesso!");
+    return md;
+  }
+
+  async function copiarFichaMarkdownCompleta(team: TeamRecord) {
+    const md = gerarMarkdownDaEquipe(team);
+    const success = await copyTextToClipboard(md);
+    if (success) {
+      showToast("Ficha Completa em Markdown copiada com sucesso!");
+    } else {
+      setMarkdownModal({
+        isOpen: true,
+        title: `Ficha Completa - ${team.teamName}`,
+        content: md,
+        copied: false,
+      });
+    }
   }
 
   function abrirModalAvaliacao(team: TeamRecord) {
@@ -1254,8 +1286,17 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                           type="button"
                           onClick={async () => {
                             const md = generateInscriptionMarkdown(ins, "INOVA SAÚDE 2026");
-                            await navigator.clipboard.writeText(md);
-                            showToast(`Ficha completa de ${ins.name} copiada!`);
+                            const ok = await copyTextToClipboard(md);
+                            if (ok) {
+                              showToast(`Ficha completa de ${ins.name} copiada!`);
+                            } else {
+                              setMarkdownModal({
+                                isOpen: true,
+                                title: `Ficha de ${ins.name}`,
+                                content: md,
+                                copied: false,
+                              });
+                            }
                           }}
                           className="btn btn-secondary btn-sm"
                           style={{
@@ -1578,8 +1619,25 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 className="btn btn-secondary btn-sm"
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                <DownloadIcon size={14} />
+                <CopyIcon size={14} />
                 <span>Copiar Ficha Completa (Markdown)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setMarkdownModal({
+                    isOpen: true,
+                    title: `Ficha Oficial da Equipe: ${selectedTeam.teamName}`,
+                    content: gerarMarkdownDaEquipe(selectedTeam),
+                    copied: false,
+                  })
+                }
+                className="btn btn-secondary btn-sm"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <DownloadIcon size={14} />
+                <span>Ver / Baixar Markdown</span>
               </button>
 
               <button
@@ -2683,6 +2741,165 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                   style={{ minWidth: "140px" }}
                 >
                   {savingEvaluation ? "Salvando..." : "💾 Salvar Avaliação"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──── MODAL DE VISUALIZAÇÃO E CÓPIA DE MARKDOWN ──── */}
+      {markdownModal && markdownModal.isOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.8)",
+            zIndex: 1200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+            backdropFilter: "blur(6px)",
+          }}
+          onClick={() => setMarkdownModal(null)}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: "750px",
+              width: "100%",
+              maxHeight: "92vh",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+              padding: "24px",
+              position: "relative",
+              boxShadow: "0 25px 50px rgba(0,0,0,0.7)",
+              border: "1px solid var(--border)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                borderBottom: "1px solid var(--border)",
+                paddingBottom: "12px",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "var(--accent)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Exportação de Ficha Completa (Markdown)
+                </span>
+                <h2 style={{ margin: "2px 0 0", fontSize: "18px", fontWeight: 800, color: "var(--text)" }}>
+                  {markdownModal.title}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMarkdownModal(null)}
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text)",
+                  padding: "6px",
+                  borderRadius: "6px",
+                }}
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+
+            <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)" }}>
+              O texto abaixo está no formato Markdown oficial do evento. Você pode copiar com 1 clique ou baixar como arquivo <code>.md</code>.
+            </p>
+
+            {/* Textarea com o conteúdo */}
+            <textarea
+              readOnly
+              rows={14}
+              value={markdownModal.content}
+              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+              style={{
+                width: "100%",
+                padding: "12px",
+                fontSize: "12px",
+                fontFamily: "var(--font-mono, monospace)",
+                background: "rgba(0,0,0,0.25)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                lineHeight: 1.5,
+                resize: "vertical",
+              }}
+            />
+
+            {/* Ações */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "8px",
+                borderTop: "1px solid var(--border)",
+                paddingTop: "14px",
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => downloadTextAsFile(`ficha-${new Date().getTime()}.md`, markdownModal.content)}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <DownloadIcon size={14} />
+                <span>Baixar arquivo .md</span>
+              </button>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setMarkdownModal(null)}
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={async () => {
+                    const ok = await copyTextToClipboard(markdownModal.content);
+                    if (ok) {
+                      setMarkdownModal({ ...markdownModal, copied: true });
+                      showToast("Ficha em Markdown copiada para a área de transferência!");
+                      setTimeout(() => {
+                        setMarkdownModal((prev) => (prev ? { ...prev, copied: false } : null));
+                      }, 2500);
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    minWidth: "130px",
+                    justifyContent: "center",
+                  }}
+                >
+                  {markdownModal.copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                  <span>{markdownModal.copied ? "Copiado!" : "Copiar Markdown"}</span>
                 </button>
               </div>
             </div>

@@ -9,6 +9,7 @@ import { EditInscriptionModal } from "../../components/EditInscriptionModal";
 import { PhoneWhatsAppPopover } from "../../components/PhoneWhatsAppPopover";
 import { formatPhone, formatDocument, stripEmoji } from "../../utils/formatters";
 import { isParticipantSemEquipe, generateInscriptionMarkdown, parseInscriptionNotes } from "../../utils/inscriptionMarkdown";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { useAuth } from "../../auth/AuthContext";
 
 function BanIcon({ size = 13, color = "currentColor" }: { size?: number; color?: string }) {
@@ -1026,8 +1027,10 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         title="Copiar Ficha Completa em Markdown"
                         onClick={async () => {
                           const md = generateInscriptionMarkdown(item, eventName);
-                          await navigator.clipboard.writeText(md);
-                          setSuccessMessage(`Ficha completa em Markdown de ${item.name} copiada!`);
+                          const ok = await copyTextToClipboard(md);
+                          if (ok) {
+                            setSuccessMessage(`Ficha completa em Markdown de ${item.name} copiada!`);
+                          }
                         }}
                         style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 9px", fontSize: 12 }}
                       >
@@ -1317,8 +1320,10 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   title="Copiar Ficha Completa em Markdown"
                   onClick={async () => {
                     const md = generateInscriptionMarkdown(item, eventName);
-                    await navigator.clipboard.writeText(md);
-                    setSuccessMessage(`Ficha completa em Markdown de ${item.name} copiada!`);
+                    const ok = await copyTextToClipboard(md);
+                    if (ok) {
+                      setSuccessMessage(`Ficha completa em Markdown de ${item.name} copiada!`);
+                    }
                   }}
                   style={{
                     display: "inline-flex",

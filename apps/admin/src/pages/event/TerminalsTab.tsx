@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../../api/client";
+import { copyTextToClipboard } from "../../utils/clipboard";
 
 const STATUS_BADGE: Record<api.TerminalRecord["status"], string> = {
   PENDING: "badge-warning",
@@ -22,9 +23,11 @@ export function TerminalsTab({ eventId }: { eventId: string }) {
 
   function copyCode(terminal: api.TerminalRecord) {
     if (!terminal.activationCode) return;
-    navigator.clipboard.writeText(terminal.activationCode).then(() => {
-      setCopiedId(terminal.id);
-      setTimeout(() => setCopiedId((id) => (id === terminal.id ? null : id)), 1500);
+    copyTextToClipboard(terminal.activationCode).then((ok) => {
+      if (ok) {
+        setCopiedId(terminal.id);
+        setTimeout(() => setCopiedId((id) => (id === terminal.id ? null : id)), 1500);
+      }
     });
   }
 

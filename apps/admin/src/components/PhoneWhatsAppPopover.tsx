@@ -10,6 +10,7 @@ import {
   parseInscriptionNotes,
 } from "../utils/inscriptionMarkdown";
 import { CopyIcon, WhatsAppIcon, XIcon, CheckIcon } from "./Icons";
+import { copyTextToClipboard } from "../utils/clipboard";
 
 interface PhoneWhatsAppPopoverProps {
   item: api.InscriptionReportItem;
@@ -123,10 +124,12 @@ export function PhoneWhatsAppPopover({
   async function handleCopyMessage(e: React.MouseEvent) {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(inviteMessage);
-      setCopiedMsg(true);
-      if (onNotify) onNotify("Mensagem de WhatsApp copiada!");
-      setTimeout(() => setCopiedMsg(false), 2000);
+      const ok = await copyTextToClipboard(inviteMessage);
+      if (ok) {
+        setCopiedMsg(true);
+        if (onNotify) onNotify("Mensagem de WhatsApp copiada!");
+        setTimeout(() => setCopiedMsg(false), 2000);
+      }
     } catch {
       // Falha silenciosa
     }
@@ -136,10 +139,12 @@ export function PhoneWhatsAppPopover({
     e.stopPropagation();
     try {
       const md = generateInscriptionMarkdown(item, eventName);
-      await navigator.clipboard.writeText(md);
-      setCopiedFicha(true);
-      if (onNotify) onNotify(`Ficha completa em Markdown de ${item.name} copiada!`);
-      setTimeout(() => setCopiedFicha(false), 2200);
+      const ok = await copyTextToClipboard(md);
+      if (ok) {
+        setCopiedFicha(true);
+        if (onNotify) onNotify(`Ficha completa em Markdown de ${item.name} copiada!`);
+        setTimeout(() => setCopiedFicha(false), 2200);
+      }
     } catch {
       // Falha silenciosa
     }
