@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import * as api from "../../api/client";
-import { AlertIcon, CardIcon, CheckIcon, EditIcon, IdCardIcon, MailIcon, PhoneIcon, SmartphoneIcon, TrashIcon, UsersIcon, XIcon } from "../../components/Icons";
+import { AlertIcon, CardIcon, CheckIcon, CopyIcon, EditIcon, IdCardIcon, MailIcon, SmartphoneIcon, TrashIcon, UsersIcon, XIcon } from "../../components/Icons";
 import { ConfirmDeleteModal } from "../../components/ConfirmDeleteModal";
 import { ImportCsvModal } from "../../components/ImportCsvModal";
 import { ManualInscriptionModal } from "../../components/ManualInscriptionModal";
 import { EditInscriptionModal } from "../../components/EditInscriptionModal";
+import { PhoneWhatsAppPopover } from "../../components/PhoneWhatsAppPopover";
 import { formatPhone, formatDocument, stripEmoji } from "../../utils/formatters";
+import { isParticipantSemEquipe, generateInscriptionMarkdown, parseInscriptionNotes } from "../../utils/inscriptionMarkdown";
 import { useAuth } from "../../auth/AuthContext";
 
 function BanIcon({ size = 13, color = "currentColor" }: { size?: number; color?: string }) {
@@ -38,7 +40,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "CONFIRMED" | "PENDING" | "DUPLICATES" | "CANCELLED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "CONFIRMED" | "PENDING" | "SEM_EQUIPE" | "DUPLICATES" | "CANCELLED">("ALL");
   const [methodFilter, setMethodFilter] = useState<"ALL" | "PIX" | "CARD">("ALL");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<api.InscriptionReportItem | null>(null);
@@ -165,10 +167,13 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
   }
 
   const duplicatePendingCount = inscriptions.filter(isDuplicatePending).length;
+  const semEquipeCount = inscriptions.filter(isParticipantSemEquipe).length;
 
   // Filtros
   const filtered = inscriptions.filter((item) => {
-    if (statusFilter === "DUPLICATES") {
+    if (statusFilter === "SEM_EQUIPE") {
+      if (!isParticipantSemEquipe(item)) return false;
+    } else if (statusFilter === "DUPLICATES") {
       if (!isDuplicatePending(item)) return false;
     } else if (statusFilter !== "ALL" && item.status !== statusFilter) {
       return false;
@@ -183,6 +188,11 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
     const maskedDoc = formatDocument(item.document).toLowerCase();
     const maskedPhone = formatPhone(item.phone).toLowerCase();
 
+    const notes = parseInscriptionNotes(item);
+    const member = notes?.membros_detalhes?.[0] || notes?.payload_completo?.lider;
+    const curso = (member?.curso || item.institution || "").toLowerCase();
+    const competencias = Array.isArray(member?.competencias) ? member.competencias.join(" ").toLowerCase() : "";
+
     return (
       item.name.toLowerCase().includes(term) ||
       item.email.toLowerCase().includes(term) ||
@@ -193,7 +203,10 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
       maskedPhone.includes(term) ||
       (cleanDigits.length > 0 && phoneDigits.includes(cleanDigits)) ||
       (item.teamName && item.teamName.toLowerCase().includes(term)) ||
-      (item.teamMembers && item.teamMembers.some((m) => m.toLowerCase().includes(term)))
+      (item.teamMembers && item.teamMembers.some((m) => m.toLowerCase().includes(term))) ||
+      curso.includes(term) ||
+      competencias.includes(term) ||
+      (term === "sem equipe" && isParticipantSemEquipe(item))
     );
   });
 
@@ -511,6 +524,13 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
         />
         <MetricCard label="Inscrições Canceladas" value={cancelledCount} highlight="danger" onClick={() => setStatusFilter("CANCELLED")} />
         <MetricCard
+          label="Sem Equipe (Talentos)"
+          value={semEquipeCount}
+          subvalue="Banco individual para equipes"
+          highlight={semEquipeCount > 0 ? "warning" : undefined}
+          onClick={() => setStatusFilter("SEM_EQUIPE")}
+        />
+        <MetricCard
           label="Receita Confirmada (Bruta)"
           value={`R$ ${confirmedRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
           subvalue={`Taxa (-0,99%): - R$ ${confirmedFee.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
@@ -554,6 +574,20 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
             </FilterButton>
             <FilterButton active={statusFilter === "PENDING"} onClick={() => setStatusFilter("PENDING")}>
               Pendentes ({pendingCount})
+            </FilterButton>
+            <FilterButton
+              active={statusFilter === "SEM_EQUIPE"}
+              onClick={() => setStatusFilter("SEM_EQUIPE")}
+              title="Participantes inscritos no Banco de Talentos sem equipe definida"
+              style={
+                statusFilter === "SEM_EQUIPE"
+                  ? { background: "rgba(234, 179, 8, 0.2)", color: "#ffb340", borderColor: "#ffb340" }
+                  : semEquipeCount > 0
+                    ? { color: "#ffb340", borderColor: "rgba(234, 179, 8, 0.35)" }
+                    : undefined
+              }
+            >
+              ⚠️ Sem Equipe ({semEquipeCount})
             </FilterButton>
             <FilterButton
               active={statusFilter === "DUPLICATES"}
@@ -730,6 +764,39 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
         </div>
       )}
 
+      {statusFilter === "SEM_EQUIPE" && (
+        <div
+          style={{
+            background: "rgba(234, 179, 8, 0.12)",
+            border: "1px solid rgba(234, 179, 8, 0.4)",
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: 13,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#ffb340" }}>
+            <span style={{ fontSize: 16 }}><AlertIcon size="1.1em" /></span>
+            <span>
+              Filtrando <strong>{filtered.length}</strong> participante{filtered.length === 1 ? "" : "s"} inscritos pelo <strong>Banco de Talentos (Sem Equipe)</strong>.
+              Passe o mouse sobre o telefone para abrir mensagem de convite no WhatsApp ou copie a ficha em Markdown.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-secondary"
+            onClick={() => setStatusFilter("ALL")}
+            style={{ padding: "5px 10px", fontSize: 12 }}
+          >
+            Ver Todas as Inscrições ({totalCount})
+          </button>
+        </div>
+      )}
+
       {/* Listagem de Inscritos */}
       {loading ? (
         <p className="muted">Carregando inscritos...</p>
@@ -756,6 +823,25 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>{item.name}</span>
+                      {isParticipantSemEquipe(item) && (
+                        <span
+                          className="badge"
+                          style={{
+                            background: "rgba(234, 179, 8, 0.15)",
+                            color: "#ffb340",
+                            borderColor: "rgba(234, 179, 8, 0.4)",
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: 0.3,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                          title="Inscrito individualmente pelo Banco de Talentos (sem equipe definida)"
+                        >
+                          <UsersIcon size="1.1em" /> Sem Equipe (Banco de Talentos)
+                        </span>
+                      )}
                       {isDuplicatePending(item) && (
                         <span
                           className="badge"
@@ -792,7 +878,14 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                       }}
                     >
                       <span title="E-mail"><MailIcon size="1.1em" /> {item.email}</span>
-                      {item.phone && <span title="Telefone"><PhoneIcon size="1.1em" /> {formatPhone(item.phone)}</span>}
+                      {item.phone && (
+                        <PhoneWhatsAppPopover
+                          item={item}
+                          eventName={eventName}
+                          compact
+                          onNotify={(msg) => setSuccessMessage(msg)}
+                        />
+                      )}
                       {item.document && (
                         <span title="CPF" style={{ fontFamily: "monospace" }}>
                           <IdCardIcon size="1.1em" /> {formatDocument(item.document)}
@@ -930,6 +1023,20 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
+                        title="Copiar Ficha Completa em Markdown"
+                        onClick={async () => {
+                          const md = generateInscriptionMarkdown(item, eventName);
+                          await navigator.clipboard.writeText(md);
+                          setSuccessMessage(`Ficha completa em Markdown de ${item.name} copiada!`);
+                        }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 9px", fontSize: 12 }}
+                      >
+                        <CopyIcon size={13} />
+                        Ficha MD
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
                         title="Editar dados e forma de pagamento"
                         disabled={actionLoading === item.id}
                         onClick={() => setEditTarget(item)}
@@ -1017,6 +1124,21 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{item.name}</h4>
+                    {isParticipantSemEquipe(item) && (
+                      <span
+                        className="badge"
+                        style={{
+                          background: "rgba(234, 179, 8, 0.15)",
+                          color: "#ffb340",
+                          borderColor: "rgba(234, 179, 8, 0.4)",
+                          fontSize: 10,
+                          fontWeight: 700,
+                        }}
+                        title="Inscrito individualmente pelo Banco de Talentos (sem equipe)"
+                      >
+                        ⚠️ Sem Equipe
+                      </span>
+                    )}
                     {isDuplicatePending(item) && (
                       <span
                         className="badge"
@@ -1131,9 +1253,13 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   </div>
                 </div>
                 {item.phone && (
-                  <div className="spread">
+                  <div className="spread" style={{ alignItems: "center" }}>
                     <span className="muted">Telefone:</span>
-                    <span>{formatPhone(item.phone)}</span>
+                    <PhoneWhatsAppPopover
+                      item={item}
+                      eventName={eventName}
+                      onNotify={(msg) => setSuccessMessage(msg)}
+                    />
                   </div>
                 )}
                 {item.document && (
@@ -1185,6 +1311,26 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   justifyContent: "flex-end",
                 }}
               >
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  title="Copiar Ficha Completa em Markdown"
+                  onClick={async () => {
+                    const md = generateInscriptionMarkdown(item, eventName);
+                    await navigator.clipboard.writeText(md);
+                    setSuccessMessage(`Ficha completa em Markdown de ${item.name} copiada!`);
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                  }}
+                >
+                  <CopyIcon size={14} />
+                  Ficha MD
+                </button>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"

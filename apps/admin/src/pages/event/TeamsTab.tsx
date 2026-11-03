@@ -14,8 +14,17 @@ import {
   CheckIcon,
   DownloadIcon,
   ArrowRightIcon,
+  CopyIcon,
+  WhatsAppIcon,
 } from "../../components/Icons";
 import { formatPhone, formatDocument } from "../../utils/formatters";
+import { PhoneWhatsAppPopover } from "../../components/PhoneWhatsAppPopover";
+import {
+  isParticipantSemEquipe,
+  generateInscriptionMarkdown,
+  getWhatsAppInviteUrl,
+  parseInscriptionNotes,
+} from "../../utils/inscriptionMarkdown";
 
 interface TeamsTabProps {
   eventId: string;
@@ -184,6 +193,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
   const [selectedTeam, setSelectedTeam] = useState<TeamRecord | null>(null);
   const [modalTab, setModalTab] = useState<ModalSubTab>("todos");
   const [copiedToast, setCopiedToast] = useState<string | null>(null);
+  const [mainView, setMainView] = useState<"equipes" | "talentos">("equipes");
 
   useEffect(() => {
     loadTeams();
@@ -527,6 +537,28 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
     return teams.filter((t) => t.forma.formas.includes("forma_b")).length;
   }, [teams]);
 
+  const bancoDeTalentos = useMemo(() => {
+    return inscriptions.filter((ins) => isParticipantSemEquipe(ins));
+  }, [inscriptions]);
+
+  const filteredTalentos = useMemo(() => {
+    if (!search.trim()) return bancoDeTalentos;
+    const term = search.toLowerCase().trim();
+    return bancoDeTalentos.filter((ins) => {
+      const notes = parseInscriptionNotes(ins);
+      const member = notes?.membros_detalhes?.[0] || notes?.payload_completo?.lider;
+      const curso = (member?.curso || ins.institution || "").toLowerCase();
+      const competencias = Array.isArray(member?.competencias) ? member.competencias.join(" ").toLowerCase() : "";
+      return (
+        ins.name.toLowerCase().includes(term) ||
+        ins.email.toLowerCase().includes(term) ||
+        (ins.phone && ins.phone.includes(term.replace(/\D/g, ""))) ||
+        curso.includes(term) ||
+        competencias.includes(term)
+      );
+    });
+  }, [bancoDeTalentos, search]);
+
   // Ações de Contato e Exportação
   function getWhatsAppUrl(phone?: string, nomeLider?: string) {
     if (!phone) return null;
@@ -769,6 +801,61 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
             <div style={{ fontSize: "24px", fontWeight: 800 }}>{totalComPrototipo3D}</div>
           </div>
         </div>
+
+        <div
+          className="card"
+          onClick={() => setMainView("talentos")}
+          style={{
+            padding: "16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "14px",
+            cursor: "pointer",
+            border: mainView === "talentos" ? "1.5px solid #ffb340" : "1px solid var(--border)",
+            background: mainView === "talentos" ? "rgba(234, 179, 8, 0.08)" : undefined,
+            transition: "all 0.15s ease",
+          }}
+          title="Clique para ver todos os participantes sem equipe"
+        >
+          <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(234, 179, 8, 0.15)", color: "#ffb340", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <UsersIcon size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-muted)", fontWeight: 600 }}>
+              Banco de Talentos (Sem Equipe)
+            </div>
+            <div style={{ fontSize: "24px", fontWeight: 800, color: "#ffb340" }}>{bancoDeTalentos.length}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ──── SELETOR DE VISUALIZAÇÃO: EQUIPES OU BANCO DE TALENTOS ──── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border)", paddingBottom: "10px" }}>
+        <button
+          type="button"
+          onClick={() => setMainView("equipes")}
+          className={`btn btn-sm ${mainView === "equipes" ? "" : "btn-secondary"}`}
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+        >
+          <UsersIcon size={14} />
+          <span>Equipes Formadas ({teams.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainView("talentos")}
+          className={`btn btn-sm ${mainView === "talentos" ? "" : "btn-secondary"}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            background: mainView === "talentos" ? "rgba(234, 179, 8, 0.2)" : undefined,
+            color: mainView === "talentos" ? "#ffb340" : undefined,
+            borderColor: mainView === "talentos" ? "#ffb340" : undefined,
+          }}
+        >
+          <span>⚠️ Banco de Talentos / Sem Equipe ({bancoDeTalentos.length})</span>
+        </button>
       </div>
 
       {/* ──── FILTROS E BUSCA ──── */}
@@ -832,8 +919,216 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         </div>
       )}
 
-      {/* ──── GRADE DE EQUIPES ──── */}
-      {!loading && filteredTeams.length === 0 ? (
+      {/* ──── GRADE DE EQUIPES OU BANCO DE TALENTOS ──── */}
+      {mainView === "talentos" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div
+            style={{
+              background: "rgba(234, 179, 8, 0.12)",
+              border: "1px solid rgba(234, 179, 8, 0.4)",
+              borderRadius: "10px",
+              padding: "14px 18px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 24 }}>⚠️</span>
+              <div>
+                <strong style={{ color: "#ffb340", fontSize: 14 }}>
+                  Banco de Talentos Individual ({filteredTalentos.length} participantes sem equipe)
+                </strong>
+                <p style={{ margin: "2px 0 0", color: "var(--text-muted)", fontSize: 12 }}>
+                  Estes participantes se inscreveram no evento individualmente. Utilize as ações de WhatsApp para chamá-los ou copie a ficha em Markdown para alocá-los nas equipes.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {!loading && filteredTalentos.length === 0 ? (
+            <div className="card" style={{ padding: "48px", textAlign: "center", color: "var(--text-muted)" }}>
+              <UsersIcon size={44} style={{ opacity: 0.4, marginBottom: "8px" }} />
+              <h3 style={{ margin: "0 0 6px", fontSize: "16px", color: "var(--text)" }}>Nenhum participante sem equipe encontrado</h3>
+              <p style={{ margin: 0, fontSize: "13px" }}>Nenhum participante do Banco de Talentos corresponde à busca informada.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px" }}>
+              {filteredTalentos.map((ins) => {
+                const notes = parseInscriptionNotes(ins);
+                const member = notes?.membros_detalhes?.[0] || notes?.payload_completo?.lider || {};
+                const ficha = notes?.ficha_prototipo || notes?.payload_completo?.ficha_prototipo || {};
+                const curso = member.curso?.trim() || ins.institution?.trim();
+                const vinculo = member.vinculo?.trim();
+                const papel = member.papel?.trim();
+                const competencias = Array.isArray(member.competencias) ? member.competencias : [];
+                const faltaNaEquipe = Array.isArray(ficha.falta_na_equipe) ? ficha.falta_na_equipe : [];
+                const inviteUrl = getWhatsAppInviteUrl(ins, "INOVA SAÚDE 2026");
+
+                return (
+                  <div
+                    key={ins.id}
+                    className="card"
+                    style={{
+                      padding: "20px",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      gap: "14px",
+                      border: "1px solid rgba(234, 179, 8, 0.35)",
+                      background: "rgba(28, 28, 30, 0.65)",
+                    }}
+                  >
+                    <div>
+                      {/* Topo do Card */}
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--text)" }}>
+                            {ins.name}
+                          </h3>
+                          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                            {ins.email}
+                          </div>
+                        </div>
+                        <span className={`badge ${ins.status === "CONFIRMED" ? "badge-success" : "badge-warning"}`}>
+                          {ins.status === "CONFIRMED" ? "Confirmado" : "Pendente"}
+                        </span>
+                      </div>
+
+                      {/* Informações de Curso e Vínculo */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "12px" }}>
+                        <span className="badge" style={{ background: "rgba(234, 179, 8, 0.2)", color: "#ffb340", borderColor: "rgba(234, 179, 8, 0.4)", fontSize: "11px", fontWeight: 700 }}>
+                          Banco de Talentos
+                        </span>
+                        {curso && (
+                          <span className="badge badge-purple" style={{ fontSize: "11px" }}>
+                            🎓 {curso}
+                          </span>
+                        )}
+                        {vinculo && (
+                          <span className="badge" style={{ fontSize: "11px" }}>
+                            💼 {vinculo}
+                          </span>
+                        )}
+                        {papel && papel !== "Ainda nao sei" && (
+                          <span className="badge badge-cyan" style={{ fontSize: "11px" }}>
+                            ⚡ {papel}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Telefone com Popover */}
+                      <div style={{ marginBottom: "12px", display: "flex", alignItems: "center", gap: 6 }}>
+                        <span className="muted" style={{ fontSize: 12 }}>Telefone:</span>
+                        <PhoneWhatsAppPopover
+                          item={ins}
+                          eventName="INOVA SAÚDE 2026"
+                          onNotify={(msg) => showToast(msg)}
+                        />
+                      </div>
+
+                      {/* Competências Declaradas */}
+                      {competencias.length > 0 && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", marginBottom: "4px" }}>
+                            Competências & Habilidades ({competencias.length}):
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                            {competencias.map((c: string) => (
+                              <span
+                                key={c}
+                                style={{
+                                  fontSize: "10px",
+                                  padding: "2px 6px",
+                                  borderRadius: "4px",
+                                  background: "rgba(255, 255, 255, 0.08)",
+                                  color: "var(--text)",
+                                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                                }}
+                              >
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Eixo de Preferência */}
+                      {(ficha.eixo || notes?.definir?.eixo) && (
+                        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
+                          <strong style={{ color: "var(--text)" }}>Eixo de Interesse:</strong> {ficha.eixo || notes?.definir?.eixo}
+                        </div>
+                      )}
+
+                      {/* O que busca em equipe */}
+                      {faltaNaEquipe.length > 0 && (
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                          <strong style={{ color: "var(--text)" }}>Busca em equipe:</strong> {faltaNaEquipe.join(", ")}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Barra de Ações Rápidas */}
+                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        {inviteUrl && (
+                          <a
+                            href={inviteUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-sm"
+                            style={{
+                              flex: 1,
+                              background: "#25D366",
+                              color: "#000",
+                              fontWeight: 700,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "6px",
+                              fontSize: "12px",
+                              textDecoration: "none",
+                              padding: "6px 10px",
+                            }}
+                          >
+                            <WhatsAppIcon size={14} color="#000" />
+                            <span>Convidar no WhatsApp</span>
+                          </a>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const md = generateInscriptionMarkdown(ins, "INOVA SAÚDE 2026");
+                            await navigator.clipboard.writeText(md);
+                            showToast(`Ficha completa de ${ins.name} copiada!`);
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            fontSize: "12px",
+                            padding: "6px 10px",
+                          }}
+                          title="Copiar Ficha Completa em Markdown"
+                        >
+                          <CopyIcon size={13} />
+                          <span>Ficha MD</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+      /* ──── GRADE DE EQUIPES ──── */
+      !loading && filteredTeams.length === 0 ? (
         <div className="card" style={{ padding: "48px", textAlign: "center", color: "var(--text-muted)" }}>
           <UsersIcon size={44} style={{ opacity: 0.4, marginBottom: "8px" }} />
           <h3 style={{ margin: "0 0 6px", fontSize: "16px", color: "var(--text)" }}>Nenhuma equipe encontrada</h3>
@@ -940,7 +1235,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
             </div>
           ))}
         </div>
-      )}
+      ))}
 
       {/* ──── MODAL DE DETALHES COMPLETOS DA EQUIPE ──── */}
       {selectedTeam && (
