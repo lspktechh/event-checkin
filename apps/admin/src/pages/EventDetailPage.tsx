@@ -395,8 +395,8 @@ export function EventDetailPage() {
       ) : null}
 
       {activeTab === "credenciamento" ? <CredenciamentoTab eventId={eventId} /> : null}
-      {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} /> : null}
-      {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} /> : null}
+      {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} isCopol={isCopol} /> : null}
+      {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} isCopol={isCopol} /> : null}
       {activeTab === "teams" && eventId ? <TeamsTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "handson" && eventId ? <HandsOnTab eventId={eventId} /> : null}
       {activeTab === "batches" ? <BatchesTab eventId={eventId} /> : null}

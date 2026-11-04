@@ -1,12 +1,40 @@
 import { prisma } from "../../database/prisma.js";
-import { ConflictError, NotFoundError } from "../../shared/errors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors.js";
+import { eventIsCopol } from "../../shared/copol.js";
 import { generateQrToken } from "../../shared/tokens.js";
+import { createManualInscriptionSchema } from "../inscriptions/inscriptions.schema.js";
+import { createManualInscription, importInscriptions } from "../inscriptions/inscriptions.manual.js";
 import * as participantsRepository from "./participants.repository.js";
 import { isAlreadyInEvent, normalizeEmail, onlyDigits } from "./participants.identity.js";
 import { analyzeImport, type ImportReport } from "./participants.import.js";
 import type { CreateParticipantInput, UpdateParticipantInput } from "./participants.schema.js";
 
+/**
+ * COPOL: cortesia lançada na aba Participantes entra pelo MESMO caminho da
+ * cortesia da aba Inscritos — inscrição confirmada de valor zero (ocupa vaga
+ * do lote) + participante com QR. Assim ela aparece nas duas abas e no
+ * relatório de Inscritos, que lê das inscrições. A inscrição exige e-mail e
+ * CPF, então aqui eles também são obrigatórios.
+ */
+async function createCopolCourtesy(eventId: string, input: CreateParticipantInput) {
+  const dados = createManualInscriptionSchema.safeParse({
+    name: input.name,
+    email: input.email ?? "",
+    document: input.document ?? "",
+    phone: input.phone || null,
+    cortesia: true,
+  });
+  if (!dados.success) {
+    throw new ValidationError(
+      `No COPOL a cortesia também entra em Inscritos: ${dados.error.issues[0]?.message ?? "dados inválidos"}`,
+    );
+  }
+  const inscricao = await createManualInscription(eventId, dados.data);
+  return getParticipantOrThrow(eventId, inscricao.participantId!);
+}
+
 export async function createParticipant(eventId: string, input: CreateParticipantInput) {
+  if (input.cortesia && (await eventIsCopol(eventId))) return createCopolCourtesy(eventId, input);
   return participantsRepository.createParticipant({
     eventId,
     name: input.name,
@@ -105,6 +133,12 @@ export async function importParticipants(
   confirm: boolean,
   cortesia = false,
 ): Promise<ImportReport & { imported: number }> {
+  // COPOL + cortesia: cada linha vira inscrição (e participante com QR), como
+  // na importação da aba Inscritos — com e-mail/CPF obrigatórios e vaga no lote.
+  if (cortesia && (await eventIsCopol(eventId))) {
+    return importInscriptions(eventId, csv, confirm, true);
+  }
+
   const report = await analyzeImport(eventId, csv);
 
   if (!confirm) {

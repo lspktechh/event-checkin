@@ -134,6 +134,22 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
     }
   );
 
+  // Admin — COPOL: gerar o QR das cortesias que ficaram pendentes
+  app.post(
+    "/events/:eventId/inscriptions/confirm-courtesies",
+    { preHandler: requirePermission("participants.edit") },
+    async (request) => {
+      const { eventId } = eventIdParams.parse(request.params);
+      const result = await inscriptionsManual.confirmPendingCourtesies(eventId);
+      await recordAudit(request, "inscription.confirm_courtesies", "Inscription", null, {
+        eventId,
+        confirmed: result.confirmed,
+        skipped: result.skipped.length,
+      });
+      return ok(result);
+    }
+  );
+
   // Admin — Importar inscritos por CSV (preview com confirm=false)
   app.post(
     "/events/:eventId/inscriptions/import",

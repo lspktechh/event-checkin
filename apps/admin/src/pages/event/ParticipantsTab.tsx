@@ -20,7 +20,16 @@ const CERT_BADGE_CLASS: Record<api.CertificateRowStatus, string> = {
   REVOKED: "badge badge-danger",
 };
 
-export function ParticipantsTab({ eventId, eventName }: { eventId: string; eventName?: string }) {
+export function ParticipantsTab({
+  eventId,
+  eventName,
+  isCopol = false,
+}: {
+  eventId: string;
+  eventName?: string;
+  /** Evento do COPOL: a cortesia daqui também entra em Inscritos (e-mail e CPF obrigatórios). */
+  isCopol?: boolean;
+}) {
   const { hasPermission } = useAuth();
   const canIssue = hasPermission("certificates.issue");
   // Botão que o perfil não pode usar não aparece — antes aparecia e dava
@@ -179,6 +188,7 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
       {showForm ? (
         <CreateParticipantForm
           eventId={eventId}
+          isCopol={isCopol}
           onCreated={() => {
             setShowForm(false);
             reload();
@@ -291,7 +301,11 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
               Colunas esperadas: <code>nome,email,telefone,documento</code>
             </>
           }
-          courtesyHint="Marca todos os participantes do arquivo como convidados da organização."
+          courtesyHint={
+            isCopol
+              ? "Cortesia do COPOL: cada pessoa também entra em Inscritos, ocupa uma vaga do lote e recebe QR. E-mail e CPF passam a ser obrigatórios."
+              : "Marca todos os participantes do arquivo como convidados da organização."
+          }
           run={(csv, confirm, cortesia) => api.importParticipants(eventId, csv, confirm, cortesia)}
           onClose={() => setShowImport(false)}
           onImported={() => {
@@ -364,7 +378,15 @@ function CertificateCell({
   );
 }
 
-function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCreated: () => void }) {
+function CreateParticipantForm({
+  eventId,
+  isCopol,
+  onCreated,
+}: {
+  eventId: string;
+  isCopol: boolean;
+  onCreated: () => void;
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -372,6 +394,8 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
   const [cortesia, setCortesia] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // No COPOL a cortesia vira inscrição, e a inscrição exige e-mail e CPF.
+  const exigeContato = isCopol && cortesia;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -407,7 +431,7 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
         </div>
         <div className="field" style={{ flex: 2 }}>
           <label htmlFor="p-email">E-mail</label>
-          <input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required={exigeContato} />
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label htmlFor="p-phone">Telefone</label>
@@ -415,13 +439,17 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label htmlFor="p-doc">Documento</label>
-          <input id="p-doc" value={document} onChange={(e) => setDocument(e.target.value)} />
+          <input id="p-doc" value={document} onChange={(e) => setDocument(e.target.value)} required={exigeContato} />
         </div>
       </div>
       <label className="switch-row" style={{ margin: "12px 0" }}>
         <span className="switch-text">
           <strong>Cortesia</strong>
-          <small>Convidado da organização, sem pagamento. Fica marcado na lista.</small>
+          <small>
+            {isCopol
+              ? "Convidado da organização, sem pagamento. Entra também em Inscritos, ocupa uma vaga do lote e recebe QR (e-mail e CPF obrigatórios)."
+              : "Convidado da organização, sem pagamento. Fica marcado na lista."}
+          </small>
         </span>
         <input
           type="checkbox"

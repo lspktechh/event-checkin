@@ -110,10 +110,32 @@ describe("quem está como cortesia também é credenciado — COPOL", () => {
     }
   });
 
-  it("participante marcado como cortesia na aba Participantes (sem inscrição) é credenciado", async () => {
+  it("cortesia lançada na aba Participantes: também vira inscrição e é credenciada", async () => {
+    // No COPOL a cortesia da aba Participantes entra como inscrição (e-mail e
+    // CPF obrigatórios), para aparecer também em Inscritos.
+    // Pega: a cortesia ficar de fora da contagem/credenciamento por ter vindo
+    // dessa aba.
+    const event = await copolNoDia2();
+    const admin = await loginAsAdmin();
+    const criado = await app.inject({
+      method: "POST",
+      url: `/events/${event.id}/participants`,
+      headers: { authorization: `Bearer ${admin}` },
+      payload: { ...pessoa(5), cortesia: true },
+    });
+    expect(criado.json().data.isCourtesy).toBe(true);
+    expect(await prisma.inscription.count({ where: { eventId: event.id } })).toBe(1);
+
+    const leitura = await credenciar(event.id, admin, criado.json().data.qrToken);
+
+    expect(leitura.statusCode).toBe(201);
+    expect(leitura.json().data.status).toBe("CONFIRMED");
+  });
+
+  it("outros eventos: participante marcado como cortesia na aba Participantes (sem inscrição) continua sendo credenciado", async () => {
     // Pega: tratar "cortesia" como motivo para não credenciar quem não veio
     // de uma inscrição.
-    const event = await copolNoDia2();
+    const event = await createTestEvent({ name: "Congresso de Odontologia" });
     const admin = await loginAsAdmin();
     const criado = await app.inject({
       method: "POST",

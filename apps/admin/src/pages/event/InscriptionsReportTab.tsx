@@ -24,9 +24,11 @@ function BanIcon({ size = 13, color = "currentColor" }: { size?: number; color?:
 interface InscriptionsReportTabProps {
   eventId: string;
   eventName?: string;
+  /** Evento do COPOL: ganha o botão que gera o QR das cortesias pendentes. */
+  isCopol?: boolean;
 }
 
-export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReportTabProps) {
+export function InscriptionsReportTab({ eventId, eventName, isCopol = false }: InscriptionsReportTabProps) {
   // Confirmar/cancelar/excluir/sortear exigem participants.edit no backend;
   // conta só de leitura não vê esses botões (antes via e dava 403).
   const { hasPermission } = useAuth();
@@ -100,6 +102,41 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
   }
 
   const [sorteando, setSorteando] = useState(false);
+  const [gerandoQr, setGerandoQr] = useState(false);
+
+  // Cortesia (valor zero) que ficou "pendente" não tem participante, então
+  // não tem QR e não dá para credenciar. Só no COPOL.
+  const cortesiasPendentes = isCopol
+    ? inscriptions.filter((i) => i.status === "PENDING" && i.amount === 0 && !i.participantId).length
+    : 0;
+
+  async function handleGerarQrCortesias() {
+    if (
+      !window.confirm(
+        `Gerar o QR de ${cortesiasPendentes} cortesia(s) pendente(s)?\n\nCada uma vira inscrição confirmada, ganha ingresso e QR e passa a poder ser credenciada. Quem vai pagar (Aguardando Pix) não é alterado.`,
+      )
+    ) {
+      return;
+    }
+    setGerandoQr(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const resultado = await api.confirmPendingCourtesies(eventId);
+      const puladas = resultado.skipped.length;
+      setSuccessMessage(
+        `${resultado.confirmed} cortesia(s) confirmada(s) com QR gerado.` +
+          (puladas > 0
+            ? ` ${puladas} não foi(ram) alterada(s): ${resultado.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}.`
+            : ""),
+      );
+      await loadInscriptions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao gerar o QR das cortesias");
+    } finally {
+      setGerandoQr(false);
+    }
+  }
 
   async function handleSortearEquipes() {
     setSorteando(true);
@@ -414,6 +451,16 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                 + Nova inscrição
               </button>
             </>
+          )}
+          {canEdit && cortesiasPendentes > 0 && (
+            <button
+              className="btn btn-sm"
+              onClick={handleGerarQrCortesias}
+              disabled={gerandoQr}
+              title="Cortesias que ficaram pendentes ainda não têm QR. Isto confirma cada uma e gera o ingresso."
+            >
+              {gerandoQr ? "Gerando..." : `Gerar QR das cortesias pendentes (${cortesiasPendentes})`}
+            </button>
           )}
           {canEdit && (
             <button

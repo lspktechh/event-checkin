@@ -43,7 +43,7 @@ Resposta: `{ token, user: { id, name, email, role } }`
 
 | Método | Path | Descrição |
 |---|---|---|
-| POST | `/events/:eventId/participants` | Cria participante. Body: `name, email?, phone?, document?, cortesia?` (`cortesia: true` só marca o participante como convidado da organização; participante não tem valor) |
+| POST | `/events/:eventId/participants` | Cria participante. Body: `name, email?, phone?, document?, cortesia?` (`cortesia: true` só marca o participante como convidado da organização; participante não tem valor). **No COPOL**, `cortesia: true` cria uma inscrição de cortesia (ver "Cortesia no COPOL" abaixo) |
 | GET | `/events/:eventId/participants` | Lista participantes do evento |
 | PATCH | `/events/:eventId/participants/:participantId` | Atualiza dados/status (`ACTIVE`\|`CANCELLED`) |
 | POST | `/events/:eventId/participants/:participantId/rotate-qr-token` | Revoga o QR atual e gera um novo |
@@ -56,7 +56,8 @@ Colunas esperadas (cabeçalho, case-insensitive): `nome,email,telefone,documento
 
 Body: `{ "csv": "<conteúdo do arquivo>", "confirm": boolean, "cortesia"?: boolean }`
 (`cortesia: true` marca todos os participantes gravados como convidados da
-organização).
+organização. **No COPOL**, `cortesia: true` grava cada linha como inscrição de
+cortesia — ver "Cortesia no COPOL" abaixo).
 
 - `confirm: false` (ou omitido) → **modo preview**: valida, normaliza e
   detecta duplicados (dentro do próprio arquivo e contra participantes já
@@ -89,6 +90,7 @@ organização).
 |---|---|---|
 | POST | `/events/:eventId/inscriptions/manual` | Lança uma inscrição já **confirmada**, com participante, QR e comprovante por e-mail. Body: `name, email, document, phone?, institution?, notes?, cortesia?` |
 | POST | `/events/:eventId/inscriptions/import` | Importa inscritos por CSV (mesmas colunas e modo preview/confirm da importação de participantes). Body: `csv, confirm?, cortesia?` |
+| POST | `/events/:eventId/inscriptions/confirm-courtesies` | **Só COPOL** (`participants.edit`). Gera o QR das cortesias que ficaram **pendentes** (ver abaixo) |
 
 Ambas usam o **lote ativo** do evento e ocupam uma vaga dele:
 
@@ -277,3 +279,26 @@ devolve o mesmo resultado, sem duplicar.
   um novo terminal.
 - Rate limit é global (100 req/min por IP, `@fastify/rate-limit`), não
   diferenciado por endpoint.
+
+### Cortesia no COPOL
+
+Regras que valem **só para o evento do COPOL** (nome ou slug com "copol", ou
+credenciamento por dia ligado). Os demais eventos seguem como antes.
+
+- **Toda cortesia é credenciável e entra em Inscritos.** Cortesia lançada pela
+  aba Participantes (`POST /participants` ou `/participants/import` com
+  `cortesia: true`) passa pelo mesmo caminho da cortesia de Inscritos: cria a
+  inscrição confirmada (valor zero, ocupa vaga do lote) **e** o participante
+  com QR. Por isso exige e-mail e CPF (`422` no cadastro; `invalid` no preview
+  da importação), recusa quem já está no evento (`409 JA_INSCRITO`) e respeita
+  o teto do lote. Sem `cortesia`, o participante continua sendo criado solto.
+- **`POST /inscriptions/confirm-courtesies`** confirma, pelo mesmo caminho do
+  pagamento aprovado (participante + QR + comprovante por e-mail), as
+  inscrições `PENDING` de **valor zero** sem participante, marcando-as como
+  cortesia. Não toca em quem vai pagar (valor > 0), cancelados nem já
+  confirmados; pula quem já é participante ativo (e-mail/CPF) e pode rodar de
+  novo sem efeito. Resposta: `{ confirmed, skipped: [{ id, name, reason }] }`.
+  Em evento que não é do COPOL: `409 SO_COPOL`.
+- **QR de acesso (site de credenciamento e porta)**: "Aguardando Pix" (valor
+  maior que zero) continua **sem** QR. Hands On pendente de **valor zero**
+  (cortesia/gratuito) tem QR e entra na porta.

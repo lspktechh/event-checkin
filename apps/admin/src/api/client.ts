@@ -1328,6 +1328,15 @@ export function importInscriptions(eventId: string, csv: string, confirm: boolea
   });
 }
 
+/** COPOL: confirma as cortesias (valor zero) que ficaram pendentes, gerando
+ * o participante e o QR de cada uma. Quem já está no evento vem em `skipped`. */
+export function confirmPendingCourtesies(eventId: string) {
+  return request<{ confirmed: number; skipped: { id: string; name: string; reason: string }[] }>(
+    `/events/${eventId}/inscriptions/confirm-courtesies`,
+    { method: "POST" }
+  );
+}
+
 export function confirmInscription(eventId: string, id: string): Promise<any> {
   return request<any>(`/events/${eventId}/inscriptions/${id}/confirm`, {
     method: "POST",
