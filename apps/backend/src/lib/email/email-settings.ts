@@ -104,7 +104,7 @@ export function resolveEmailSettings(stored: unknown): ResolvedEmailSettings {
   const ambiente = remetenteDoAmbiente();
 
   return {
-    fromName: c.fromName || ambiente.nome || "LSPk Eventos",
+    fromName: c.fromName || ambiente.nome || "LSPK Eventos",
     fromEmail: c.fromEmail || ambiente.endereco || "lspkeventos@gmail.com",
     replyTo: c.replyTo || null,
     primaryColor: c.primaryColor || "#0E3634",
