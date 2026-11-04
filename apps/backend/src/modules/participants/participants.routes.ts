@@ -34,6 +34,22 @@ export async function participantsRoutes(app: FastifyInstance) {
     }
   );
 
+  // COPOL: cortesias que só existem como participante passam a constar em Inscritos
+  app.post(
+    "/events/:eventId/participants/courtesies-to-inscriptions",
+    { preHandler: requirePermission("participants.create") },
+    async (request) => {
+      const { eventId } = eventIdParamsSchema.parse(request.params);
+      const result = await participantsService.linkCourtesiesToInscriptions(eventId);
+      await recordAudit(request, "participant.link_courtesies", "Participant", null, {
+        eventId,
+        linked: result.linked,
+        skipped: result.skipped.length,
+      });
+      return ok(result);
+    }
+  );
+
   app.post(
     "/events/:eventId/participants/import",
     { preHandler: requirePermission("participants.create") },

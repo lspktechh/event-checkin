@@ -112,6 +112,100 @@ export async function updateParticipant(eventId: string, participantId: string, 
   );
 }
 
+export interface LinkCourtesiesResult {
+  linked: number;
+  /** Cortesias que ficaram de fora, com o motivo. */
+  skipped: { id: string; name: string; reason: string }[];
+}
+
+/**
+ * COPOL: traz para a lista de Inscritos as cortesias que só existem como
+ * participante.
+ *
+ * Antes, a aba Participantes gravava a cortesia só como participante, sem
+ * inscrição — e o relatório de Inscritos lê das inscrições, então ela nunca
+ * aparecia lá. Isto cria, para cada uma, a inscrição de cortesia (valor
+ * zero, confirmada) LIGADA ao mesmo participante: o QR que a pessoa já tem
+ * continua o mesmo.
+ *
+ * Não ocupa vaga do lote (batchId vazio): são pessoas que já estavam no
+ * evento, e fazê-las contar agora poderia esgotar o lote e fechar as vendas.
+ * As cortesias novas, lançadas depois, ocupam vaga normalmente.
+ *
+ * A inscrição exige e-mail e CPF; quem não tem os dois é pulado e avisado
+ * (complete em "Editar" e rode de novo). Só pega participante ATIVO,
+ * cortesia e sem inscrição; quem já consta no evento por outra inscrição
+ * ou participante é pulado, para não haver duas linhas da mesma pessoa.
+ * Pode rodar de novo sem efeito.
+ */
+export async function linkCourtesiesToInscriptions(eventId: string): Promise<LinkCourtesiesResult> {
+  if (!(await eventIsCopol(eventId))) {
+    throw new ConflictError("SO_COPOL", "Esta ação só existe para o evento do COPOL");
+  }
+
+  const [candidatos, inscritos, inscricoes] = await Promise.all([
+    prisma.participant.findMany({
+      where: { eventId, isCourtesy: true, status: "ACTIVE" },
+      orderBy: { createdAt: "asc" },
+    }),
+    participantsRepository.listInscribedParticipantIds(eventId),
+    // Inscrição viva (não cancelada) que ainda não tem participante, p.ex. a
+    // pendente de Pix: se for da mesma pessoa, a cortesia não pode duplicá-la.
+    prisma.inscription.findMany({
+      where: { eventId, status: { not: "CANCELLED" } },
+      select: { email: true, document: true, participantId: true },
+    }),
+  ]);
+  const emailsInscritos = new Set(inscricoes.map((i) => normalizeEmail(i.email)).filter(Boolean));
+  const documentosInscritos = new Set(inscricoes.map((i) => onlyDigits(i.document)).filter(Boolean));
+
+  const result: LinkCourtesiesResult = { linked: 0, skipped: [] };
+  for (const p of candidatos) {
+    if (inscritos.has(p.id)) continue;
+
+    const email = p.email?.trim() ?? "";
+    const document = p.document?.trim() ?? "";
+    if (!email || !document) {
+      result.skipped.push({
+        id: p.id,
+        name: p.name,
+        reason: "Sem e-mail ou CPF: complete em Editar e tente de novo",
+      });
+      continue;
+    }
+
+    const outroParticipante = await isAlreadyInEvent(prisma, eventId, { email, document }, { ignoreParticipantId: p.id });
+    if (outroParticipante || emailsInscritos.has(normalizeEmail(email)) || documentosInscritos.has(onlyDigits(document))) {
+      result.skipped.push({ id: p.id, name: p.name, reason: "Já consta no evento com outra inscrição" });
+      continue;
+    }
+
+    const criou = await prisma.$transaction(async (tx) => {
+      // Trava o participante: dois cliques juntos não criam duas inscrições.
+      await tx.$queryRaw`SELECT id FROM participants WHERE id = ${p.id} FOR UPDATE`;
+      if (await tx.inscription.findFirst({ where: { participantId: p.id }, select: { id: true } })) return false;
+      await tx.inscription.create({
+        data: {
+          eventId,
+          participantId: p.id,
+          name: p.name,
+          email,
+          document,
+          phone: p.phone,
+          category: "Cortesia",
+          amount: 0,
+          status: "CONFIRMED",
+          isCourtesy: true,
+          paymentProvider: null,
+        },
+      });
+      return true;
+    });
+    if (criou) result.linked += 1;
+  }
+  return result;
+}
+
 export async function deleteParticipant(eventId: string, participantId: string) {
   await getParticipantOrThrow(eventId, participantId);
   await participantsRepository.deleteParticipant(participantId);

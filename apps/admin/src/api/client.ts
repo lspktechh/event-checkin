@@ -495,6 +495,15 @@ export interface ParticipantRecord {
   createdAt: string;
   updatedAt: string;
 }
+/** COPOL: cria, para cada cortesia que só existe como participante, a inscrição
+ * de cortesia ligada a ele — assim ela passa a constar também em Inscritos. */
+export function linkCourtesiesToInscriptions(eventId: string) {
+  return request<{ linked: number; skipped: { id: string; name: string; reason: string }[] }>(
+    `/events/${eventId}/participants/courtesies-to-inscriptions`,
+    { method: "POST" }
+  );
+}
+
 export function listParticipants(eventId: string) {
   return request<ParticipantRecord[]>(`/events/${eventId}/participants`);
 }

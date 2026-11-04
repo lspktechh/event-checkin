@@ -49,6 +49,7 @@ Resposta: `{ token, user: { id, name, email, role } }`
 | POST | `/events/:eventId/participants/:participantId/rotate-qr-token` | Revoga o QR atual e gera um novo |
 | DELETE | `/events/:eventId/participants/:participantId` | Exclui o participante (204). Diferente de excluir terminal, aqui o histórico de check-ins dele é apagado junto (cascade) — não tem como preservar, o dono do registro deixou de existir |
 | POST | `/events/:eventId/participants/import` | Importação em lote via CSV (ver abaixo) |
+| POST | `/events/:eventId/participants/courtesies-to-inscriptions` | **Só COPOL** (`participants.create`). Inclui em Inscritos as cortesias que só existem como participante (ver "Cortesia no COPOL") |
 
 ### Importação CSV
 
@@ -299,6 +300,17 @@ credenciamento por dia ligado). Os demais eventos seguem como antes.
   confirmados; pula quem já é participante ativo (e-mail/CPF) e pode rodar de
   novo sem efeito. Resposta: `{ confirmed, skipped: [{ id, name, reason }] }`.
   Em evento que não é do COPOL: `409 SO_COPOL`.
+- **`POST /participants/courtesies-to-inscriptions`** traz para Inscritos as
+  cortesias que só existem como participante (criadas quando a aba
+  Participantes não gerava inscrição). Cria, para cada participante `ACTIVE`
+  com `isCourtesy` e sem inscrição, uma inscrição `CONFIRMED` de valor zero
+  (`category: "Cortesia"`) **ligada ao mesmo participante** — o QR continua o
+  mesmo. **Não ocupa vaga do lote** (`batchId` vazio): são pessoas que já
+  estavam no evento e contá-las agora poderia esgotar o lote e fechar as
+  vendas. Exige e-mail e CPF; quem não tem, ou já consta no evento por outra
+  inscrição/participante, vem em `skipped` com o motivo. Idempotente.
+  Resposta: `{ linked, skipped: [{ id, name, reason }] }`. Fora do COPOL:
+  `409 SO_COPOL`.
 - **QR de acesso (site de credenciamento e porta)**: "Aguardando Pix" (valor
   maior que zero) continua **sem** QR. Hands On pendente de **valor zero**
   (cortesia/gratuito) tem QR e entra na porta.

@@ -47,6 +47,14 @@ export function ParticipantsTab({
   const [qrTarget, setQrTarget] = useState<api.ParticipantRecord | null>(null);
   const [editTarget, setEditTarget] = useState<api.ParticipantRecord | null>(null);
   const [busyCertId, setBusyCertId] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // COPOL: cortesia que só existe como participante (criada quando esta aba
+  // não gerava inscrição) não aparece em Inscritos.
+  const cortesiasForaDeInscritos = isCopol
+    ? (participants ?? []).filter((p) => p.isCourtesy && !p.hasInscription && p.status === "ACTIVE").length
+    : 0;
 
   function reload() {
     api
@@ -114,6 +122,32 @@ export function ParticipantsTab({
     }
   }
 
+  async function handleLinkCourtesies() {
+    if (
+      !window.confirm(
+        `Incluir ${cortesiasForaDeInscritos} cortesia(s) na lista de Inscritos?\n\nO QR de cada pessoa continua o mesmo. Elas aparecem em Inscritos como cortesia, sem ocupar vaga do lote. Quem não tem e-mail e CPF é avisado para completar.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setLinking(true);
+    try {
+      const result = await api.linkCourtesiesToInscriptions(eventId);
+      const puladas = result.skipped.length;
+      setNotice(
+        `${result.linked} cortesia(s) incluída(s) em Inscritos.` +
+          (puladas > 0 ? ` ${puladas} não incluída(s): ${result.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}.` : ""),
+      );
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao incluir as cortesias em Inscritos");
+    } finally {
+      setLinking(false);
+    }
+  }
+
   async function handleToggleStatus(participant: api.ParticipantRecord) {
     setError(null);
     try {
@@ -172,6 +206,16 @@ export function ParticipantsTab({
           >
             Baixar PDF
           </button>
+          {canCreate && cortesiasForaDeInscritos > 0 ? (
+            <button
+              className="btn"
+              onClick={handleLinkCourtesies}
+              disabled={linking}
+              title="Estas cortesias só existem como participante. Isto as inclui também na lista de Inscritos."
+            >
+              {linking ? "Incluindo..." : `Incluir cortesias em Inscritos (${cortesiasForaDeInscritos})`}
+            </button>
+          ) : null}
           {canCreate ? (
             <>
               <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
@@ -197,6 +241,21 @@ export function ParticipantsTab({
       ) : null}
 
       {error ? <p className="error-text">{error}</p> : null}
+      {notice ? (
+        <p
+          role="status"
+          style={{
+            background: "rgba(34, 197, 94, 0.15)",
+            border: "1px solid var(--success)",
+            borderRadius: "var(--radius)",
+            padding: "10px 14px",
+            margin: 0,
+            fontSize: 13,
+          }}
+        >
+          {notice}
+        </p>
+      ) : null}
 
       {participants && participants.length > 0 ? (
         <div className="card" style={{ padding: 0 }}>
