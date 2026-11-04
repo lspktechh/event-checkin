@@ -79,7 +79,7 @@ export function montarEmail({ settings, eventName, eyebrow, subtitle, body }: La
 
 /** Botão que leva ao site do evento. */
 export function botao(settings: ResolvedEmailSettings, url: string, texto: string): string {
-  const fallback = settings.siteUrl || "https://copol2026.com.br";
+  const fallback = settings.siteUrl || "https://superinteligencia.tec.br";
   const destino = (url && url.trim().length > 0) ? url.trim() : fallback;
 
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">

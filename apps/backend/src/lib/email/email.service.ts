@@ -152,10 +152,14 @@ export class EmailService {
         const fromAddress = s.fromName ? `"${s.fromName}" <${env.SMTP_USER}>` : env.SMTP_USER;
         const mailOptions: SendMailOptions = {
           from: fromAddress,
+          sender: fromAddress,
           to: payload.to,
           ...(s.replyTo ? { replyTo: s.replyTo } : {}),
           subject: payload.subject,
           html: payload.html,
+          headers: {
+            "X-Entity-Ref-ID": randomUUID(),
+          },
           attachments: anexos.map((a) => ({
             filename: a.filename,
             content: a.content,
@@ -637,7 +641,7 @@ export class EmailService {
       s,
       {
         to: params.to,
-        subject: `[INOVA SAÚDE 2026] ${tituloAssunto} da Equipe: ${params.teamName}`,
+        subject: `[LSPK Eventos] ${tituloAssunto} da Equipe: ${params.teamName}`,
         html: montarEmail({
           settings: s,
           eventName: evento.name,

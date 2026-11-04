@@ -73,7 +73,7 @@ const envSchema = z.object({
 
   // Envio de e-mails via Resend
   RESEND_API_KEY: z.string().optional().default(""),
-  EMAIL_FROM: z.string().default("COPOL 2026 <contato@copol2026.com.br>"),
+  EMAIL_FROM: z.string().default("LSPK Eventos <lspkeventos@gmail.com>"),
 
   // Envio de e-mails via SMTP (Gmail, etc.)
   SMTP_HOST: z.string().optional().default("smtp.gmail.com"),
