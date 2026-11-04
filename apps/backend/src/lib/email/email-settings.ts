@@ -98,13 +98,13 @@ function remetenteDoAmbiente(): { nome: string; endereco: string } {
   return { nome: "", endereco: bruto };
 }
 
-export function resolveEmailSettings(stored: unknown): ResolvedEmailSettings {
+export function resolveEmailSettings(stored: unknown, defaultEventName?: string): ResolvedEmailSettings {
   const parsed = emailSettingsSchema.safeParse(stored ?? {});
   const c = parsed.success ? parsed.data : {};
   const ambiente = remetenteDoAmbiente();
 
   return {
-    fromName: c.fromName || ambiente.nome,
+    fromName: c.fromName || defaultEventName || ambiente.nome,
     fromEmail: c.fromEmail || ambiente.endereco,
     replyTo: c.replyTo || null,
     primaryColor: c.primaryColor || "#0E3634",

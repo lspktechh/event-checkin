@@ -599,7 +599,10 @@ export class EmailService {
       verificationUrl: string;
     }
   ): Promise<ResultadoDoEnvio> {
-    const s = resolveEmailSettings(evento.emailSettings);
+    const s = resolveEmailSettings(evento.emailSettings, evento.name);
+    if (!s.fromName || s.fromName.includes("COPOL")) {
+      s.fromName = evento.name || "INOVA SAÚDE 2026";
+    }
     const corpo = `
       <p style="font-size: 16px; line-height: 1.6; color: #1E293B; margin-top: 0;">
         Olá, <strong>${escaparHtml(params.leaderName)}</strong>!
