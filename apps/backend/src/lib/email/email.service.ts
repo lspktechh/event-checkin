@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { env } from "../../config/env.js";
 import { botao, escaparHtml, montarEmail } from "./email-layout.js";
 import { formatarRemetente, resolveEmailSettings, type ResolvedEmailSettings } from "./email-settings.js";
+import { verifyEmail } from "../../shared/email-verifier.js";
 
 /**
  * O evento, do ponto de vista do e-mail.
@@ -138,6 +139,18 @@ export class EmailService {
     },
     idempotencyKey: string,
   ): Promise<ResultadoDoEnvio> {
+    // 0. Validação de entregabilidade e existência do e-mail do destinatário
+    const emailCheck = await verifyEmail(payload.to);
+    if (!emailCheck.valid) {
+      console.warn(
+        `[EmailService] Envio abortado para destinatário inválido "${payload.to}": ${emailCheck.reason}`
+      );
+      return {
+        success: false,
+        erro: `Destinatário inválido (${payload.to}): ${emailCheck.reason || "Domínio ou endereço inexistente."}`,
+      };
+    }
+
     const anexos = payload.attachments ?? [];
     const total = anexos.reduce((soma, a) => soma + a.content.length, 0);
     if (total > LIMITE_ANEXO_BYTES) {

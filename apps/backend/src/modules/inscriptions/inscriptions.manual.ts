@@ -1,8 +1,9 @@
 import { prisma } from "../../database/prisma.js";
 import { AppError, ConflictError, ForbiddenError } from "../../shared/errors.js";
+import { assertValidEmail, verifyEmail } from "../../shared/email-verifier.js";
 import { getEventOrThrow } from "../events/events.service.js";
 import * as batchesService from "../batches/batches.service.js";
-import { EMAIL_REGEX, parseCsvRows, type ImportReport, type ImportRowResult } from "../participants/participants.import.js";
+import { parseCsvRows, type ImportReport, type ImportRowResult } from "../participants/participants.import.js";
 import { isAlreadyInEvent, normalizeEmail, onlyDigits } from "../participants/participants.identity.js";
 import * as inscriptionsRepository from "./inscriptions.repository.js";
 import { confirmInscriptionPayment } from "./inscriptions.service.js";
@@ -25,6 +26,7 @@ import type { CreateManualInscriptionInput } from "./inscriptions.schema.js";
  */
 export async function createManualInscription(eventId: string, input: CreateManualInscriptionInput) {
   await getEventOrThrow(eventId);
+  input.email = await assertValidEmail(input.email, { fieldName: "E-mail de inscrição" });
 
   const { activeBatch, currentBatch } = await batchesService.resolveActiveBatch(eventId);
   if (!activeBatch) {
@@ -123,10 +125,12 @@ async function analyzeInscriptionImport(eventId: string, csvContent: string): Pr
       rows.push({ ...c, status: "invalid", reason: "E-mail é obrigatório" });
       continue;
     }
-    if (!EMAIL_REGEX.test(c.email)) {
-      rows.push({ ...c, status: "invalid", reason: "E-mail inválido" });
+    const emailCheck = await verifyEmail(c.email);
+    if (!emailCheck.valid) {
+      rows.push({ ...c, status: "invalid", reason: emailCheck.reason ?? "E-mail inválido" });
       continue;
     }
+    c.email = emailCheck.normalized;
     if (!c.document) {
       rows.push({ ...c, status: "invalid", reason: "CPF é obrigatório" });
       continue;

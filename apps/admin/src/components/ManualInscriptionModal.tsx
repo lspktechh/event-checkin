@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import * as api from "../api/client";
+import { EmailFieldWithFeedback } from "./EmailFieldWithFeedback";
 
 interface Props {
   eventId: string;
@@ -86,8 +87,13 @@ export function ManualInscriptionModal({ eventId, onClose, onCreated }: Props) {
         </div>
         <div className="row">
           <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="mi-email">E-mail *</label>
-            <input id="mi-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <EmailFieldWithFeedback
+              id="mi-email"
+              label="E-mail"
+              value={email}
+              onChange={setEmail}
+              required
+            />
           </div>
           <div className="field" style={{ flex: 1 }}>
             <label htmlFor="mi-doc">CPF *</label>

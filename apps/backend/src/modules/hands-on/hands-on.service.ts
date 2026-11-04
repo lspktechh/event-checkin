@@ -1,5 +1,6 @@
 import { handsOnRepository, type CreateHandsOnData } from "./hands-on.repository.js";
 import { generateQrToken } from "../../shared/tokens.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import { NotFoundError, ConflictError, BadRequestError, ForbiddenError } from "../../shared/errors.js";
 import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { prisma } from "../../database/prisma.js";
@@ -227,7 +228,8 @@ export const handsOnService = {
       );
     }
 
-    // 3. Verifica se a pessoa já possui inscrição neste workshop
+    // 3. Valida e-mail de entrega e registros de duplicação
+    input.email = await assertValidEmail(input.email, { fieldName: "E-mail do participante" });
     const cleanDoc = input.document.replace(/\D/g, "");
     const relatedIds = getRelatedHandsOnIds(input.handsOnId);
 
@@ -900,10 +902,12 @@ export const handsOnService = {
     eventId: string,
     input: Omit<CreateHandsOnData, "eventId" | "qrToken">
   ) {
+    const validatedEmail = await assertValidEmail(input.email, { fieldName: "E-mail do participante" });
     const qrToken = `HO-${generateQrToken()}`;
     const status = input.status || "CONFIRMED";
     const created = await handsOnRepository.create({
       ...input,
+      email: validatedEmail,
       eventId,
       qrToken,
       status,

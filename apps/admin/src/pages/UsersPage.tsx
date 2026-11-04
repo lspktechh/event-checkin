@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { EmailFieldWithFeedback } from "../components/EmailFieldWithFeedback";
 
 export function UsersPage() {
   const { user: currentUser, hasPermission } = useAuth();
@@ -413,12 +414,11 @@ function UserForm({
           </div>
 
           <div className="field">
-            <label htmlFor="user-email">E-mail</label>
-            <input
+            <EmailFieldWithFeedback
               id="user-email"
-              type="email"
+              label="E-mail"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={setEmail}
               placeholder="ana.silva@exemplo.com"
               required
             />

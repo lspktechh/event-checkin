@@ -4,6 +4,7 @@ import * as api from "../api/client";
 import { formatPhone } from "../utils/formatters";
 import {
   isParticipantSemEquipe,
+  isTeamEvent,
   getWhatsAppInviteMessage,
   getWhatsAppInviteUrl,
   generateInscriptionMarkdown,
@@ -15,6 +16,7 @@ import { copyTextToClipboard } from "../utils/clipboard";
 interface PhoneWhatsAppPopoverProps {
   item: api.InscriptionReportItem;
   eventName?: string;
+  isTeamEvent?: boolean;
   onNotify?: (message: string) => void;
   /** Variante compacta para células de tabela */
   compact?: boolean;
@@ -23,6 +25,7 @@ interface PhoneWhatsAppPopoverProps {
 export function PhoneWhatsAppPopover({
   item,
   eventName = "INOVA SAÚDE 2026",
+  isTeamEvent: isTeamProp,
   onNotify,
   compact = false,
 }: PhoneWhatsAppPopoverProps) {
@@ -35,7 +38,8 @@ export function PhoneWhatsAppPopover({
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isSemEquipe = isParticipantSemEquipe(item);
+  const isTeam = isTeamProp ?? isTeamEvent(eventName);
+  const isSemEquipe = isTeam && isParticipantSemEquipe(item, eventName);
   const notes = parseInscriptionNotes(item);
   const member = notes?.membros_detalhes?.[0] || notes?.payload_completo?.lider;
   const curso = member?.curso?.trim() || item.institution?.trim();
@@ -300,30 +304,32 @@ export function PhoneWhatsAppPopover({
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
                 <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text)" }}>{item.name}</span>
-                {isSemEquipe ? (
-                  <span
-                    className="badge"
-                    style={{
-                      background: "rgba(234, 179, 8, 0.2)",
-                      color: "#ffb340",
-                      borderColor: "rgba(234, 179, 8, 0.4)",
-                      fontSize: 10,
-                      fontWeight: 700,
-                    }}
-                  >
-                    Banco de Talentos
-                  </span>
-                ) : (
-                  <span className="badge badge-success" style={{ fontSize: 10 }}>
-                    {item.teamName || "Com Equipe"}
-                  </span>
-                )}
+                {isTeam ? (
+                  isSemEquipe ? (
+                    <span
+                      className="badge"
+                      style={{
+                        background: "rgba(234, 179, 8, 0.2)",
+                        color: "#ffb340",
+                        borderColor: "rgba(234, 179, 8, 0.4)",
+                        fontSize: 10,
+                        fontWeight: 700,
+                      }}
+                    >
+                      Banco de Talentos
+                    </span>
+                  ) : (
+                    <span className="badge badge-success" style={{ fontSize: 10 }}>
+                      {item.teamName || "Com Equipe"}
+                    </span>
+                  )
+                ) : null}
               </div>
 
               <div style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <span>📱 {formattedPhone}</span>
                 {curso && <span>🎓 {curso}</span>}
-                {vinculo && <span>💼 {vinculo}</span>}
+                {isTeam && vinculo && <span>💼 {vinculo}</span>}
               </div>
             </div>
 

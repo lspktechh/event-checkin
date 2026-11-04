@@ -1,5 +1,6 @@
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "../../shared/errors.js";
 import { generateQrToken } from "../../shared/tokens.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../database/prisma.js";
 import { getEventOrThrow } from "../events/events.service.js";
@@ -29,6 +30,17 @@ export async function createInscription(
 
   if (!event.registrationsOpen) {
     throw new ForbiddenError("As inscrições para este evento estão encerradas");
+  }
+
+  input.email = await assertValidEmail(input.email, { fieldName: "E-mail de inscrição" });
+  if (input.teamMembers && Array.isArray(input.teamMembers)) {
+    for (const member of input.teamMembers as any[]) {
+      if (typeof member === "object" && member && member.email) {
+        member.email = await assertValidEmail(member.email, {
+          fieldName: `E-mail do integrante (${member.name || "equipe"})`,
+        });
+      }
+    }
   }
 
   // Inscrição em equipe: só quando o evento pede (Event.siteContent.equipe).

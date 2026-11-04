@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../database/prisma.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import { isAlreadyInEvent, normalizeEmail, onlyDigits } from "../participants/participants.identity.js";
 import type { UpdateInscriptionInput } from "./inscriptions.schema.js";
 
@@ -74,6 +75,12 @@ export async function updateInscription(eventId: string, id: string, input: Upda
   const atual = await prisma.inscription.findUnique({ where: { id }, include: { batch: true } });
   if (!atual || atual.eventId !== eventId) {
     throw new NotFoundError("Inscrição não encontrada");
+  }
+
+  let validatedEmail = input.email;
+  if (validatedEmail !== undefined && validatedEmail !== null && validatedEmail !== "") {
+    validatedEmail = await assertValidEmail(validatedEmail, { fieldName: "E-mail de inscrição" });
+    input.email = validatedEmail;
   }
 
   const pagamento = input.pagamento ? resolverPagamento(atual, input.pagamento) : null;

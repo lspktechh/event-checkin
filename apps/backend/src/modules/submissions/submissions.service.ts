@@ -5,6 +5,7 @@ import {
   submissionFileKey,
 } from "../certificates/certificate-storage.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import { isModuleEnabled } from "../event-config/event-config.service.js";
 import {
   mercadoPagoClient,
@@ -318,6 +319,12 @@ export async function createSubmission(eventId: string, input: CreateSubmissionI
   const apresentadores = input.authors.filter((a) => a.isPresenter);
   if (apresentadores.length > 1) {
     throw new ValidationError("Marque apenas um autor como apresentador");
+  }
+
+  for (const a of input.authors) {
+    a.email = await assertValidEmail(a.email, {
+      fieldName: `E-mail do autor (${a.name || "autor"})`,
+    });
   }
 
   const code = await gerarCodigo(eventId, event.name);
@@ -1406,6 +1413,11 @@ export async function resubmitPublicSubmission(
   }
 
   // Atualiza autores
+  for (const a of input.authors) {
+    a.email = await assertValidEmail(a.email, {
+      fieldName: `E-mail do autor (${a.name || "autor"})`,
+    });
+  }
   await prisma.submissionAuthor.deleteMany({ where: { submissionId: s.id } });
   const temApresentador = input.authors.some((a) => a.isPresenter);
   await prisma.submissionAuthor.createMany({
@@ -1526,6 +1538,12 @@ export async function adminEditSubmission(
 
   if (!input.authors || input.authors.length === 0) {
     throw new ValidationError("O trabalho deve conter pelo menos um autor/integrante.");
+  }
+
+  for (const a of input.authors) {
+    a.email = await assertValidEmail(a.email, {
+      fieldName: `E-mail do autor (${a.name || "autor"})`,
+    });
   }
 
   // Garante que há exatamente um apresentador

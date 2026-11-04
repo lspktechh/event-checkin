@@ -1,6 +1,7 @@
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../shared/errors.js";
 import { PERMISSION_KEYS } from "../../shared/permissions.js";
 import { hashPassword } from "../../shared/passwords.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import * as rolesRepository from "../roles/roles.repository.js";
 import * as usersRepository from "./users.repository.js";
 import type { CreateUserInput, UpdateUserInput } from "./users.schema.js";
@@ -63,8 +64,9 @@ export async function getUserOrThrow(userId: string) {
 }
 
 export async function createUser(input: CreateUserInput) {
+  const normalizedEmail = await assertValidEmail(input.email, { fieldName: "E-mail de usuário" });
   await assertRoleExists(input.roleId);
-  await assertEmailAvailable(input.email);
+  await assertEmailAvailable(normalizedEmail);
 
   if (input.customPermissions) {
     const invalid = input.customPermissions.filter((k) => !PERMISSION_KEYS.has(k));
@@ -76,7 +78,7 @@ export async function createUser(input: CreateUserInput) {
   const passwordHash = await hashPassword(input.password);
   const user = await usersRepository.createUser({
     name: input.name,
-    email: input.email,
+    email: normalizedEmail,
     passwordHash,
     roleId: input.roleId,
     allowedEventIds: input.allowedEventIds ?? [],
@@ -90,7 +92,11 @@ export async function createUser(input: CreateUserInput) {
 export async function updateUser(userId: string, input: UpdateUserInput) {
   const current = await getUserOrThrow(userId);
 
-  if (input.email) await assertEmailAvailable(input.email, userId);
+  let normalizedEmail = input.email;
+  if (input.email !== undefined) {
+    normalizedEmail = await assertValidEmail(input.email, { fieldName: "E-mail de usuário" });
+    await assertEmailAvailable(normalizedEmail, userId);
+  }
   if (input.roleId && input.roleId !== current.roleId) {
     await assertRoleExists(input.roleId);
     await assertNotLastSystemUser(current);
@@ -106,7 +112,7 @@ export async function updateUser(userId: string, input: UpdateUserInput) {
   const passwordHash = input.password ? await hashPassword(input.password) : undefined;
   const updated = await usersRepository.updateUser(userId, {
     name: input.name,
-    email: input.email,
+    email: normalizedEmail,
     roleId: input.roleId,
     passwordHash,
     allowedEventIds: input.allowedEventIds,

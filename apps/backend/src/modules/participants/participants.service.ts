@@ -1,16 +1,22 @@
 import { prisma } from "../../database/prisma.js";
 import { ConflictError, NotFoundError } from "../../shared/errors.js";
 import { generateQrToken } from "../../shared/tokens.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import * as participantsRepository from "./participants.repository.js";
 import { isAlreadyInEvent, normalizeEmail, onlyDigits } from "./participants.identity.js";
 import { analyzeImport, type ImportReport } from "./participants.import.js";
 import type { CreateParticipantInput, UpdateParticipantInput } from "./participants.schema.js";
 
 export async function createParticipant(eventId: string, input: CreateParticipantInput) {
+  let normalizedEmail = input.email;
+  if (normalizedEmail) {
+    normalizedEmail = await assertValidEmail(normalizedEmail, { fieldName: "E-mail do participante" });
+  }
+
   return participantsRepository.createParticipant({
     eventId,
     name: input.name,
-    email: input.email,
+    email: normalizedEmail,
     phone: input.phone,
     document: input.document,
     qrToken: generateQrToken(),
@@ -59,6 +65,10 @@ export async function updateParticipant(eventId: string, participantId: string, 
       "CORTESIA_PELA_INSCRICAO",
       "Este participante veio de uma inscrição: altere a forma de pagamento na aba Inscritos"
     );
+  }
+
+  if (dados.email !== undefined && dados.email !== null && dados.email !== "") {
+    dados.email = await assertValidEmail(dados.email, { fieldName: "E-mail do participante" });
   }
 
   // Só confere o que mudou — duplicado antigo não impede corrigir um telefone.
