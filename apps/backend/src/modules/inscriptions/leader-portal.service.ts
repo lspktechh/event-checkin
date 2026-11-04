@@ -3,6 +3,7 @@ import { prisma } from "../../database/prisma.js";
 import { BadRequestError, NotFoundError, UnauthorizedError } from "../../shared/errors.js";
 import { hashPassword, verifyPassword } from "../../shared/passwords.js";
 import { emailService } from "../../lib/email/email.service.js";
+import { certificateStorage } from "../certificates/certificate-storage.js";
 
 /**
  * Resolução do evento por slug ou id
@@ -478,6 +479,154 @@ export async function updateTeamData(
       { ...inscription, teamName: newTeamName },
       updatedNotes
     ),
+  };
+}
+
+export async function uploadLeaderWorkFile(
+  slugOrId: string,
+  email: string,
+  sessionToken: string,
+  fileName: string,
+  dataBase64: string,
+  meta: { ip: string; userAgent?: string }
+) {
+  const event = await getEventBySlugOrId(slugOrId);
+  const inscription = await findLeaderInscription(event.id, email);
+
+  if (!inscription) {
+    throw new NotFoundError("Inscrição não encontrada.");
+  }
+
+  let notes: any = {};
+  try {
+    notes = JSON.parse(inscription.notes || "{}");
+  } catch {
+    notes = {};
+  }
+
+  const auth = notes.leader_auth || {};
+  if (!auth.sessionToken || auth.sessionToken !== sessionToken) {
+    throw new UnauthorizedError("Sessão inválida. Por favor, faça login novamente.");
+  }
+
+  if (auth.sessionExpiresAt && new Date(auth.sessionExpiresAt) < new Date()) {
+    throw new UnauthorizedError("Sessão expirada. Por favor, faça login novamente.");
+  }
+
+  // 1. Validação de formato: apenas PDF ou DOCX
+  const extMatch = fileName.toLowerCase().match(/\.([a-z0-9]+)$/);
+  const ext = extMatch ? extMatch[1] : "";
+  if (ext !== "pdf" && ext !== "docx") {
+    throw new BadRequestError("Formato de arquivo não suportado. Apenas arquivos PDF (.pdf) ou Word (.docx) são permitidos.");
+  }
+
+  // 2. Validação de tamanho: no máximo 10MB
+  const buffer = Buffer.from(dataBase64, "base64");
+  if (buffer.length === 0) {
+    throw new BadRequestError("O arquivo enviado está vazio.");
+  }
+  const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+  if (buffer.length > MAX_BYTES) {
+    throw new BadRequestError(
+      `O arquivo excede o limite máximo permitido de 10 MB (tamanho: ${(buffer.length / (1024 * 1024)).toFixed(2)} MB).`
+    );
+  }
+
+  // 3. Salva no storage persistente
+  const baseClean = fileName
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .substring(0, 50);
+  const safeName = `${baseClean}_${Date.now()}.${ext}`;
+  const fileKey = `team-works/${event.id}/${inscription.id}/${safeName}`;
+
+  await certificateStorage.save(fileKey, buffer);
+
+  const publicBase = process.env.PUBLIC_API_URL || "https://137-131-233-254.sslip.io";
+  const downloadUrl = `${publicBase}/inscriptions/${inscription.id}/work-file?file=${encodeURIComponent(safeName)}`;
+
+  const novoArtefato = {
+    tipo: ext.toUpperCase(), // "PDF" ou "DOCX"
+    titulo: fileName,
+    arquivoNome: safeName,
+    originalName: fileName,
+    linkUrl: downloadUrl,
+    tamanhoBytes: buffer.length,
+    enviadoEm: new Date().toISOString(),
+  };
+
+  // 4. Atualiza os artefatos nos notes da equipe
+  let trabalhoEntregue = notes.trabalho_entregue || notes.payload_completo?.trabalho_entregue || {};
+  const artefatos = Array.isArray(trabalhoEntregue.artefatos_adicionais)
+    ? [...trabalhoEntregue.artefatos_adicionais]
+    : [];
+
+  artefatos.push(novoArtefato);
+
+  trabalhoEntregue = {
+    ...trabalhoEntregue,
+    artefatos_adicionais: artefatos,
+    enviado_em: trabalhoEntregue.enviado_em || new Date().toISOString(),
+    acesso_liberado: true,
+  };
+
+  const historico = notes.historico_edicoes || [];
+  historico.unshift({
+    timestamp: new Date().toISOString(),
+    ip: meta.ip,
+    userAgent: meta.userAgent || "Browser",
+    autor: email,
+    alteracoes: [
+      `Upload de arquivo entregue: ${fileName} (${ext.toUpperCase()}, ${(buffer.length / (1024 * 1024)).toFixed(2)} MB)`,
+    ],
+  });
+
+  const updatedNotes: any = {
+    ...notes,
+    trabalho_entregue: trabalhoEntregue,
+    historico_edicoes: historico,
+    ultima_edicao_em: new Date().toISOString(),
+  };
+
+  if (updatedNotes.payload_completo) {
+    updatedNotes.payload_completo = {
+      ...updatedNotes.payload_completo,
+      trabalho_entregue: trabalhoEntregue,
+    };
+  }
+
+  await prisma.inscription.update({
+    where: { id: inscription.id },
+    data: { notes: JSON.stringify(updatedNotes) },
+  });
+
+  // Grava auditoria
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actorEmail: email,
+        action: "leader.upload_work_file",
+        entityType: "Inscription",
+        entityId: inscription.id,
+        metadata: {
+          teamName: inscription.teamName,
+          fileName: safeName,
+          originalName: fileName,
+          size: buffer.length,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+      },
+    });
+  } catch (errAudit) {
+    console.warn("Aviso ao salvar AuditLog de upload:", errAudit);
+  }
+
+  return {
+    success: true,
+    message: "Arquivo enviado com sucesso!",
+    artefato: novoArtefato,
+    artefatos_adicionais: artefatos,
   };
 }
 

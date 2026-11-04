@@ -9,6 +9,7 @@ import {
   setLeaderPassword,
   getTeamDataBySession,
   updateTeamData,
+  uploadLeaderWorkFile,
 } from "./leader-portal.service.js";
 
 const slugOrIdParamsSchema = z.object({
@@ -33,6 +34,13 @@ const setPasswordSchema = z.object({
   email: z.string().email("E-mail inválido"),
   token: z.string().min(1, "Token de verificação obrigatório"),
   password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
+});
+
+const uploadWorkFileSchema = z.object({
+  email: z.string().email("E-mail inválido"),
+  sessionToken: z.string().optional(),
+  fileName: z.string().min(1, "Nome do arquivo obrigatório"),
+  dataBase64: z.string().min(1, "Conteúdo do arquivo obrigatório"),
 });
 
 export async function leaderPortalRoutes(app: FastifyInstance) {
@@ -130,4 +138,39 @@ export async function leaderPortalRoutes(app: FastifyInstance) {
 
     return ok(result);
   });
+
+  // 7. Upload de arquivo de trabalho (PDF ou DOCX, até 10MB)
+  app.post(
+    "/public/events/:slugOrId/leader/upload-work-file",
+    {
+      bodyLimit: 15 * 1024 * 1024,
+    },
+    async (request) => {
+      const { slugOrId } = slugOrIdParamsSchema.parse(request.params);
+      const authHeader = request.headers.authorization;
+      const { email, sessionToken: bodyToken, fileName, dataBase64 } = uploadWorkFileSchema.parse(request.body);
+
+      const sessionToken = bodyToken || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined);
+      if (!sessionToken) {
+        return ok({
+          error: "UNAUTHORIZED",
+          message: "Token de sessão obrigatório",
+        });
+      }
+
+      const result = await uploadLeaderWorkFile(
+        slugOrId,
+        email,
+        sessionToken,
+        fileName,
+        dataBase64,
+        {
+          ip: request.ip,
+          userAgent: request.headers["user-agent"],
+        }
+      );
+
+      return ok(result);
+    }
+  );
 }
