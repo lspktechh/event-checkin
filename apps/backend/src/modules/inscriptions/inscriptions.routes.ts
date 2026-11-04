@@ -9,6 +9,7 @@ import * as inscriptionsService from "./inscriptions.service.js";
 import * as inscriptionsManual from "./inscriptions.manual.js";
 import * as inscriptionsEdit from "./inscriptions.edit.js";
 import { certificateStorage } from "../certificates/certificate-storage.js";
+import { env } from "../../config/env.js";
 import {
   createInscriptionSchema,
   createManualInscriptionSchema,
@@ -309,8 +310,63 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
       throw new NotFoundError("Inscrição não encontrada");
     }
 
-    const fileKey = `team-works/${ins.eventId}/${id}/${safeFile}`;
-    const exists = await certificateStorage.exists(fileKey);
+    let fileKey = `team-works/${ins.eventId}/${id}/${safeFile}`;
+    let exists = await certificateStorage.exists(fileKey);
+
+    if (!exists) {
+      fileKey = `trabalhos/${safeFile}`;
+      exists = await certificateStorage.exists(fileKey);
+    }
+
+    if (!exists) {
+      fileKey = safeFile;
+      exists = await certificateStorage.exists(fileKey);
+    }
+
+    if (!exists) {
+      // Tenta achar com busca recursiva no STORAGE_DIR
+      try {
+        const { readdir, readFile } = await import("node:fs/promises");
+        const { join } = await import("node:path");
+        const searchDir = async (dir: string): Promise<string | null> => {
+          const entries = await readdir(dir, { withFileTypes: true });
+          for (const ent of entries) {
+            const fullPath = join(dir, ent.name);
+            if (ent.isDirectory()) {
+              const found = await searchDir(fullPath);
+              if (found) return found;
+            } else if (ent.name === safeFile) {
+              return fullPath;
+            }
+          }
+          return null;
+        };
+        const found = await searchDir(env.STORAGE_DIR);
+        if (found) {
+          const buffer = await readFile(found);
+          let contentType = "application/octet-stream";
+          if (safeFile.endsWith(".pdf")) contentType = "application/pdf";
+          else if (safeFile.endsWith(".png")) contentType = "image/png";
+          else if (safeFile.endsWith(".jpg") || safeFile.endsWith(".jpeg")) contentType = "image/jpeg";
+          else if (safeFile.endsWith(".docx"))
+            contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          else if (safeFile.endsWith(".pptx"))
+            contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+          else if (safeFile.endsWith(".zip")) contentType = "application/zip";
+
+          return reply
+            .header("Content-Type", contentType)
+            .header(
+              "Content-Disposition",
+              `${contentType === "application/pdf" || contentType.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(safeFile)}"`
+            )
+            .send(buffer);
+        }
+      } catch (err) {
+        console.warn("[work-file] Erro ao buscar arquivo recursivo:", err);
+      }
+    }
+
     if (!exists) {
       throw new NotFoundError("Arquivo não encontrado");
     }
@@ -335,7 +391,98 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
       .send(buffer);
   };
 
+  // Suporte a downloads diretos legados ou via /uploads/trabalhos/:fileName
+  const handleDirectUploadDownload = async (request: any, reply: any) => {
+    const params = request.params as { fileName?: string; "*": string };
+    const fileName = params.fileName || params["*"] || "";
+    const safeFile = fileName.replace(/[^a-zA-Z0-9_.-]/g, "");
+    if (!safeFile) {
+      throw new BadRequestError("Parâmetro de arquivo inválido");
+    }
+
+    // 1. Tenta achar em storage/trabalhos/:safeFile
+    let fileKey = `trabalhos/${safeFile}`;
+    let exists = await certificateStorage.exists(fileKey);
+
+    // 2. Se não achar, tenta achar na pasta raiz do storage
+    if (!exists) {
+      fileKey = safeFile;
+      exists = await certificateStorage.exists(fileKey);
+    }
+
+    // 3. Se não achar, busca recursivamente nos subdiretórios de team-works
+    if (!exists) {
+      try {
+        const { readdir, readFile } = await import("node:fs/promises");
+        const { join } = await import("node:path");
+        const searchDir = async (dir: string): Promise<string | null> => {
+          const entries = await readdir(dir, { withFileTypes: true });
+          for (const ent of entries) {
+            const fullPath = join(dir, ent.name);
+            if (ent.isDirectory()) {
+              const found = await searchDir(fullPath);
+              if (found) return found;
+            } else if (ent.name === safeFile) {
+              return fullPath;
+            }
+          }
+          return null;
+        };
+        const found = await searchDir(env.STORAGE_DIR);
+        if (found) {
+          const buffer = await readFile(found);
+          let contentType = "application/octet-stream";
+          if (safeFile.endsWith(".pdf")) contentType = "application/pdf";
+          else if (safeFile.endsWith(".png")) contentType = "image/png";
+          else if (safeFile.endsWith(".jpg") || safeFile.endsWith(".jpeg")) contentType = "image/jpeg";
+          else if (safeFile.endsWith(".docx"))
+            contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          else if (safeFile.endsWith(".pptx"))
+            contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+          else if (safeFile.endsWith(".zip")) contentType = "application/zip";
+
+          return reply
+            .header("Content-Type", contentType)
+            .header(
+              "Content-Disposition",
+              `${contentType === "application/pdf" || contentType.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(safeFile)}"`
+            )
+            .send(buffer);
+        }
+      } catch (err) {
+        console.warn("[direct-upload] Erro ao buscar arquivo recursivo:", err);
+      }
+    }
+
+    if (!exists) {
+      throw new NotFoundError("Arquivo não encontrado no servidor");
+    }
+
+    const buffer = await certificateStorage.read(fileKey);
+    let contentType = "application/octet-stream";
+    if (safeFile.endsWith(".pdf")) contentType = "application/pdf";
+    else if (safeFile.endsWith(".png")) contentType = "image/png";
+    else if (safeFile.endsWith(".jpg") || safeFile.endsWith(".jpeg")) contentType = "image/jpeg";
+    else if (safeFile.endsWith(".docx"))
+      contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    else if (safeFile.endsWith(".pptx"))
+      contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    else if (safeFile.endsWith(".zip")) contentType = "application/zip";
+
+    return reply
+      .header("Content-Type", contentType)
+      .header(
+        "Content-Disposition",
+        `${contentType === "application/pdf" || contentType.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(safeFile)}"`
+      )
+      .send(buffer);
+  };
+
   app.get("/inscriptions/:id/work-file", handleWorkFileDownload);
   app.get("/api/inscriptions/:id/work-file", handleWorkFileDownload);
+  app.get("/uploads/trabalhos/:fileName", handleDirectUploadDownload);
+  app.get("/uploads/:fileName", handleDirectUploadDownload);
+  app.get("/api/uploads/trabalhos/:fileName", handleDirectUploadDownload);
+  app.get("/api/uploads/:fileName", handleDirectUploadDownload);
 }
 

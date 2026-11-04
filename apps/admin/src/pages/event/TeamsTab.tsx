@@ -91,7 +91,12 @@ export function getValidExternalUrl(url?: string): string {
     return "";
   }
   // Se for caminho relativo para o backend
-  if (trimmed.startsWith("/api/") || trimmed.startsWith("/inscriptions/")) {
+  if (
+    trimmed.startsWith("/api/") ||
+    trimmed.startsWith("/inscriptions/") ||
+    trimmed.startsWith("/uploads/") ||
+    trimmed.startsWith("/trabalhos/")
+  ) {
     const apiBase = (import.meta.env.VITE_API_URL ?? "https://137-131-233-254.sslip.io").replace(/\/$/, "");
     return `${apiBase}${trimmed}`;
   }
