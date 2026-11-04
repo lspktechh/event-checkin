@@ -586,6 +586,67 @@ export class EmailService {
       chaveDeIdempotencia("sub_receipt", `${params.submissionId}:${params.to}`, opcoes.reenvio),
     );
   }
+
+  /**
+   * Envia e-mail de verificação e link de acesso / definição de senha para o líder da equipe
+   */
+  async sendLeaderVerificationEmail(
+    evento: EventoParaEmail,
+    params: {
+      to: string;
+      leaderName: string;
+      teamName: string;
+      verificationUrl: string;
+    }
+  ): Promise<ResultadoDoEnvio> {
+    const s = resolveEmailSettings(evento.emailSettings);
+    const corpo = `
+      <p style="font-size: 16px; line-height: 1.6; color: #1E293B; margin-top: 0;">
+        Olá, <strong>${escaparHtml(params.leaderName)}</strong>!
+      </p>
+      <p style="font-size: 15px; line-height: 1.6; color: #334155;">
+        Recebemos uma solicitação de acesso para gerenciar e editar as informações da equipe 
+        <strong>${escaparHtml(params.teamName)}</strong> no <strong>INOVA SAÚDE 2026</strong>.
+      </p>
+      <p style="font-size: 15px; line-height: 1.6; color: #334155;">
+        Para garantir a segurança dos dados da sua equipe, clique no botão abaixo para verificar sua identidade e definir sua senha de acesso:
+      </p>
+      <div style="margin: 28px 0;">
+        ${botao(s, params.verificationUrl, "Acessar e Definir Minha Senha")}
+      </div>
+      <p style="font-size: 13px; line-height: 1.6; color: #64748B;">
+        Se você não conseguir clicar no botão acima, copie e cole o seguinte link no seu navegador:<br>
+        <a href="${escaparHtml(params.verificationUrl)}" style="color: ${s.primaryColor}; word-break: break-all;">
+          ${escaparHtml(params.verificationUrl)}
+        </a>
+      </p>
+      <div style="background-color: #F8FAFC; border-left: 4px solid #0B8161; padding: 14px 16px; border-radius: 4px; margin-top: 24px;">
+        <p style="margin: 0; font-size: 13px; color: #334155; line-height: 1.5;">
+          <strong>Segurança da Equipe:</strong> Este link é exclusivo do líder e expira em 24 horas. Após criar sua senha, você poderá acessar o portal a qualquer momento utilizando apenas seu e-mail e a senha cadastrada.
+        </p>
+      </div>
+    `;
+
+    return this.enviar(
+      s,
+      {
+        to: params.to,
+        subject: `[INOVA SAÚDE 2026] Acesso e Senha da Equipe: ${params.teamName}`,
+        html: montarEmail({
+          settings: s,
+          eventName: evento.name,
+          eyebrow: "PORTAL DA EQUIPE · INOVA SAÚDE",
+          subtitle: `Gerenciamento da Equipe: ${params.teamName}`,
+          body: corpo,
+        }),
+        tags: [
+          { name: "tipo", value: "verificacao-lider" },
+          { name: "evento", value: tagSegura(evento.id) },
+        ],
+      },
+      chaveDeIdempotencia("leader_verify", `${params.to}:${Date.now()}`, true)
+    );
+  }
 }
 
 /**

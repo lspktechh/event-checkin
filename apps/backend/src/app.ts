@@ -17,6 +17,7 @@ import { checkinsRoutes } from "./modules/checkins/checkins.routes.js";
 import { synchronizationRoutes } from "./modules/synchronization/synchronization.routes.js";
 import { attendeeRoutes } from "./modules/attendee/attendee.routes.js";
 import { inscriptionsRoutes } from "./modules/inscriptions/inscriptions.routes.js";
+import { leaderPortalRoutes } from "./modules/inscriptions/leader-portal.routes.js";
 import { rolesRoutes } from "./modules/roles/roles.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
@@ -108,6 +109,7 @@ export function buildApp() {
   app.register(synchronizationRoutes);
   app.register(attendeeRoutes);
   app.register(inscriptionsRoutes);
+  app.register(leaderPortalRoutes);
   app.register(rolesRoutes);
   app.register(usersRoutes);
   app.register(auditRoutes);
