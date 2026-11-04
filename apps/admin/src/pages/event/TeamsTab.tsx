@@ -26,6 +26,10 @@ import {
   parseInscriptionNotes,
 } from "../../utils/inscriptionMarkdown";
 import { copyTextToClipboard, downloadTextAsFile } from "../../utils/clipboard";
+import {
+  exportTeamsEvaluationZip,
+  generateAnonymousTeamPdf,
+} from "../../utils/teamAnonymousPdf";
 
 interface TeamsTabProps {
   eventId: string;
@@ -193,7 +197,7 @@ export interface TeamRecord {
 
 type ModalSubTab = "todos" | "integrantes" | "problema" | "solucao" | "escopo" | "prototipo" | "ods" | "entregas";
 
-export function TeamsTab({ eventId }: TeamsTabProps) {
+export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabProps) {
   const [inscriptions, setInscriptions] = useState<api.InscriptionReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +208,10 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
   const [modalTab, setModalTab] = useState<ModalSubTab>("todos");
   const [copiedToast, setCopiedToast] = useState<string | null>(null);
   const [mainView, setMainView] = useState<"equipes" | "talentos">("equipes");
+
+  // Estado de Exportação de ZIP Anônimo para a Banca
+  const [exportingZip, setExportingZip] = useState(false);
+  const [exportProgress, setExportProgress] = useState("");
 
   // Estado da Avaliação da Ideia / Banca
   const [evaluatingTeam, setEvaluatingTeam] = useState<TeamRecord | null>(null);
@@ -629,6 +637,83 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
   function showToast(msg: string) {
     setCopiedToast(msg);
     setTimeout(() => setCopiedToast(null), 3500);
+  }
+
+  /**
+   * Empacota todas as equipes da maratona em um único arquivo ZIP com os PDFs
+   * de avaliação anônimos (sem dados de contato ou nomes pessoais).
+   */
+  async function handleExportZipAvaliadores() {
+    if (teams.length === 0) {
+      alert("Nenhuma equipe encontrada para exportar.");
+      return;
+    }
+
+    try {
+      setExportingZip(true);
+      setExportProgress("Iniciando geração dos PDFs...");
+
+      const blob = await exportTeamsEvaluationZip(
+        teams,
+        eventName || "INOVA SAÚDE 2026",
+        (_curr, _total, msg) => {
+          setExportProgress(msg);
+        }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const cleanEventName = (eventName || "inova-saude")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-");
+      const dateStr = new Date().toISOString().split("T")[0];
+      link.download = `equipes_${cleanEventName}_avaliacoes_sigilo_${dateStr}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`ZIP gerado com sucesso contendo ${teams.length} equipes para avaliação com sigilo! 📦`);
+    } catch (err: any) {
+      console.error("Erro ao gerar ZIP de avaliações:", err);
+      alert("Erro ao gerar arquivo ZIP: " + (err.message || String(err)));
+    } finally {
+      setExportingZip(false);
+      setExportProgress("");
+    }
+  }
+
+  /**
+   * Baixa a ficha técnica anônima de uma equipe individual em PDF
+   */
+  function handleDownloadSingleTeamPdf(team: TeamRecord) {
+    try {
+      const idx = teams.findIndex((t) => t.id === team.id);
+      const teamIdx = idx >= 0 ? idx : 0;
+      const pdfBytes = generateAnonymousTeamPdf(team, teamIdx, eventName || "INOVA SAÚDE 2026");
+      const blob = new Blob([pdfBytes as unknown as BlobPart], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const projCode = `Projeto_${String(teamIdx + 1).padStart(2, "0")}`;
+      const safeName = (team.idear?.nome_solucao || team.teamName || "Equipe")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9_-]/g, "_");
+      link.download = `${projCode}_${safeName}_Avaliacao_Sigilo.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`PDF anônimo da equipe "${team.teamName}" baixado com sucesso! 📄`);
+    } catch (err: any) {
+      console.error("Erro ao gerar PDF individual:", err);
+      alert("Erro ao gerar PDF da equipe: " + (err.message || String(err)));
+    }
   }
 
   async function copiarContatosDaEquipe(team: TeamRecord) {
@@ -1274,33 +1359,67 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         </div>
       </div>
 
-      {/* ──── SELETOR DE VISUALIZAÇÃO: EQUIPES OU BANCO DE TALENTOS ──── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border)", paddingBottom: "10px" }}>
-        <button
-          type="button"
-          onClick={() => setMainView("equipes")}
-          className={`btn btn-sm ${mainView === "equipes" ? "" : "btn-secondary"}`}
-          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-        >
-          <UsersIcon size={14} />
-          <span>Equipes Formadas ({teams.length})</span>
-        </button>
+      {/* ──── SELETOR DE VISUALIZAÇÃO: EQUIPES OU BANCO DE TALENTOS & AÇÕES DE EXPORTAÇÃO ──── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setMainView("equipes")}
+            className={`btn btn-sm ${mainView === "equipes" ? "" : "btn-secondary"}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <UsersIcon size={14} />
+            <span>Equipes Formadas ({teams.length})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setMainView("talentos")}
-          className={`btn btn-sm ${mainView === "talentos" ? "" : "btn-secondary"}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            background: mainView === "talentos" ? "rgba(234, 179, 8, 0.2)" : undefined,
-            color: mainView === "talentos" ? "#ffb340" : undefined,
-            borderColor: mainView === "talentos" ? "#ffb340" : undefined,
-          }}
-        >
-          <span>⚠️ Banco de Talentos / Sem Equipe ({bancoDeTalentos.length})</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setMainView("talentos")}
+            className={`btn btn-sm ${mainView === "talentos" ? "" : "btn-secondary"}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: mainView === "talentos" ? "rgba(234, 179, 8, 0.2)" : undefined,
+              color: mainView === "talentos" ? "#ffb340" : undefined,
+              borderColor: mainView === "talentos" ? "#ffb340" : undefined,
+            }}
+          >
+            <span>⚠️ Banco de Talentos / Sem Equipe ({bancoDeTalentos.length})</span>
+          </button>
+        </div>
+
+        {/* ──── BOTÃO BAIXAR ZIP COM TODAS AS EQUIPES PARA OS AVALIADORES (SIGILO) ──── */}
+        <div>
+          <button
+            type="button"
+            onClick={handleExportZipAvaliadores}
+            disabled={exportingZip || teams.length === 0}
+            className="btn btn-sm"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              background: "linear-gradient(135deg, #0E3634 0%, #165b57 100%)",
+              color: "#ffffff",
+              border: "1px solid #C8A261",
+              fontWeight: 700,
+              padding: "7px 14px",
+              borderRadius: "8px",
+              boxShadow: "0 2px 6px rgba(14, 54, 52, 0.25)",
+              cursor: exportingZip || teams.length === 0 ? "not-allowed" : "pointer",
+              opacity: exportingZip || teams.length === 0 ? 0.7 : 1,
+            }}
+            title="Compacta todas as equipes em um único arquivo ZIP com os PDFs de avaliação anônimos (sem nomes e contatos pessoais)."
+          >
+            <DownloadIcon size={15} />
+            <span>
+              {exportingZip
+                ? (exportProgress || "Gerando ZIP com Sigilo...")
+                : `Baixar ZIP das Equipes para Avaliadores (Com Sigilo) [${teams.length}]`}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ──── FILTROS E BUSCA ──── */}
@@ -1916,6 +2035,25 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
               >
                 <DownloadIcon size={14} />
                 <span>Ver / Baixar Markdown</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDownloadSingleTeamPdf(selectedTeam)}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: "#0E3634",
+                  borderColor: "#C8A261",
+                  fontWeight: 600,
+                  backgroundColor: "rgba(200, 162, 97, 0.12)",
+                }}
+                title="Gera o PDF formatado desta equipe para os avaliadores, com todas as informações técnicas e artefatos, mantendo o sigilo de dados pessoais e de contato."
+              >
+                <DownloadIcon size={14} />
+                <span>PDF de Avaliação (Com Sigilo)</span>
               </button>
 
               <button
