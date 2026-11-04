@@ -108,6 +108,7 @@ export async function updateInscription(eventId: string, id: string, input: Upda
       data: {
         ...dadosDaPessoa,
         institution: input.institution,
+        ...(input.teamName !== undefined ? { teamName: input.teamName } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(pagamento?.inscricao ?? {}),
       },

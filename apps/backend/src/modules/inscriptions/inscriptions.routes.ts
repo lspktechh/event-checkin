@@ -8,6 +8,7 @@ import { recordAudit } from "../audit/audit.service.js";
 import * as inscriptionsService from "./inscriptions.service.js";
 import * as inscriptionsManual from "./inscriptions.manual.js";
 import * as inscriptionsEdit from "./inscriptions.edit.js";
+import { certificateStorage } from "../certificates/certificate-storage.js";
 import {
   createInscriptionSchema,
   createManualInscriptionSchema,
@@ -15,6 +16,7 @@ import {
   importInscriptionsSchema,
   inscriptionEventParamsSchema,
   updateInscriptionSchema,
+  uploadTeamWorkFileSchema,
   picPayWebhookSchema,
 } from "./inscriptions.schema.js";
 
@@ -246,5 +248,91 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
       return ok(resultado);
     }
   );
+
+  // Admin — Upload de arquivo de trabalho / protótipo para a equipe
+  app.post(
+    "/events/:eventId/inscriptions/:id/work-file",
+    {
+      preHandler: requirePermission("participants.edit"),
+      bodyLimit: 20 * 1024 * 1024,
+    },
+    async (request, reply) => {
+      const { eventId, id } = eventInscriptionParamsSchema.parse(request.params);
+      const { fileName, dataBase64 } = uploadTeamWorkFileSchema.parse(request.body);
+
+      const buffer = Buffer.from(dataBase64, "base64");
+      if (buffer.length === 0) {
+        throw new BadRequestError("Arquivo vazio");
+      }
+
+      const extMatch = fileName.match(/\.([a-zA-Z0-9]+)$/);
+      const ext = extMatch ? extMatch[1].toLowerCase() : "bin";
+      const baseClean = fileName
+        .replace(/\.[^/.]+$/, "")
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+        .substring(0, 50);
+      const safeName = `${baseClean}_${Date.now()}.${ext}`;
+      const fileKey = `team-works/${eventId}/${id}/${safeName}`;
+
+      await certificateStorage.save(fileKey, buffer);
+
+      const url = `/api/inscriptions/${id}/work-file?file=${encodeURIComponent(safeName)}`;
+
+      await recordAudit(request, "team_work.upload_file", "Inscription", id, {
+        eventId,
+        fileName: safeName,
+        size: buffer.length,
+      });
+
+      return reply.status(201).send(
+        ok({
+          url,
+          fileName: safeName,
+          originalName: fileName,
+          size: buffer.length,
+        })
+      );
+    }
+  );
+
+  // Download / visualização pública ou autenticada do arquivo de trabalho entregue
+  app.get("/inscriptions/:id/work-file", async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const { file } = (request.query || {}) as { file?: string };
+    if (!file) {
+      throw new BadRequestError("Parâmetro 'file' obrigatório");
+    }
+
+    const safeFile = file.replace(/[^a-zA-Z0-9_.-]/g, "");
+    const ins = await inscriptionsService.getInscription(id);
+    if (!ins) {
+      throw new NotFoundError("Inscrição não encontrada");
+    }
+
+    const fileKey = `team-works/${ins.eventId}/${id}/${safeFile}`;
+    const exists = await certificateStorage.exists(fileKey);
+    if (!exists) {
+      throw new NotFoundError("Arquivo não encontrado");
+    }
+
+    const buffer = await certificateStorage.read(fileKey);
+    let contentType = "application/octet-stream";
+    if (safeFile.endsWith(".pdf")) contentType = "application/pdf";
+    else if (safeFile.endsWith(".png")) contentType = "image/png";
+    else if (safeFile.endsWith(".jpg") || safeFile.endsWith(".jpeg")) contentType = "image/jpeg";
+    else if (safeFile.endsWith(".docx"))
+      contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    else if (safeFile.endsWith(".pptx"))
+      contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    else if (safeFile.endsWith(".zip")) contentType = "application/zip";
+
+    return reply
+      .header("Content-Type", contentType)
+      .header(
+        "Content-Disposition",
+        `${contentType === "application/pdf" || contentType.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(safeFile)}"`
+      )
+      .send(buffer);
+  });
 }
 

@@ -1295,6 +1295,7 @@ export interface UpdateInscriptionInput {
   document?: string;
   phone?: string | null;
   institution?: string | null;
+  teamName?: string | null;
   pagamento?: { forma: PaymentForm; valor?: number };
   notes?: string | null;
 }
@@ -1306,6 +1307,22 @@ export function updateInscription(eventId: string, id: string, input: UpdateInsc
     method: "PATCH",
     body: input,
   });
+}
+
+/** Upload de arquivo de trabalho entregue pela equipe (PDF, slides, docx, zip). */
+export function uploadTeamWorkFile(
+  eventId: string,
+  inscriptionId: string,
+  fileName: string,
+  dataBase64: string
+) {
+  return request<{ url: string; fileName: string; originalName: string; size: number }>(
+    `/events/${eventId}/inscriptions/${inscriptionId}/work-file`,
+    {
+      method: "POST",
+      body: { fileName, dataBase64 },
+    }
+  );
 }
 
 export function importInscriptions(eventId: string, csv: string, confirm: boolean, cortesia = false) {

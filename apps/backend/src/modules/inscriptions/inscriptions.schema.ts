@@ -62,6 +62,7 @@ export const updateInscriptionSchema = z
     document: z.string().trim().min(1, "CPF é obrigatório").max(20).optional(),
     phone: z.string().trim().max(20).nullable().optional(),
     institution: z.string().trim().max(200).nullable().optional(),
+    teamName: z.string().trim().max(200).nullable().optional(),
     notes: z.string().trim().max(100000).nullable().optional(),
     pagamento: z
       .object({
@@ -77,6 +78,13 @@ export const updateInscriptionSchema = z
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Nenhum campo para atualizar" });
 
 export type UpdateInscriptionInput = z.infer<typeof updateInscriptionSchema>;
+
+export const uploadTeamWorkFileSchema = z.object({
+  fileName: z.string().min(1, "Nome do arquivo é obrigatório").max(255),
+  dataBase64: z.string().min(1, "Conteúdo do arquivo é obrigatório"),
+});
+
+export type UploadTeamWorkFileInput = z.infer<typeof uploadTeamWorkFileSchema>;
 
 export const importInscriptionsSchema = z.object({
   csv: z.string().min(1, "Conteúdo CSV vazio"),

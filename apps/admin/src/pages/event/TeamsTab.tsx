@@ -213,6 +213,21 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
   const [evaluationComentario, setEvaluationComentario] = useState<string>("");
   const [evaluationAvaliadorNome, setEvaluationAvaliadorNome] = useState<string>("");
 
+  // Estado do Modal de Adição/Edição de Trabalho da Equipe
+  const [editingWorkTeam, setEditingWorkTeam] = useState<TeamRecord | null>(null);
+  const [workTitulo, setWorkTitulo] = useState("");
+  const [workTeamName, setWorkTeamName] = useState("");
+  const [workPrototipoUrl, setWorkPrototipoUrl] = useState("");
+  const [workVideoUrl, setWorkVideoUrl] = useState("");
+  const [workObservacoes, setWorkObservacoes] = useState("");
+  const [workAcessoLiberado, setWorkAcessoLiberado] = useState(true);
+  const [workArtefatos, setWorkArtefatos] = useState<
+    Array<{ tipo: string; titulo: string; linkUrl: string }>
+  >([]);
+  const [savingWork, setSavingWork] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   // Estado do Modal de Visualização / Exportação de Markdown
   const [markdownModal, setMarkdownModal] = useState<{
     isOpen: boolean;
@@ -731,6 +746,24 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
             team.avaliacao.atualizadoEm ? `- **Data da Avaliação:** ${new Date(team.avaliacao.atualizadoEm).toLocaleString("pt-BR")}` : "",
           ]
         : []),
+      ...(team.trabalhos.length > 0
+        ? [
+            `---`,
+            `## 9. ENTREGAS E LINKS DO PROTÓTIPO`,
+            `- **Total de Entregas Cadastradas:** ${team.trabalhos.length}`,
+            ...team.trabalhos.flatMap((t, idx) => [
+              `### 📦 Entrega ${idx + 1} (${t.origem === "inscricao" ? "Inscrição" : "Envio Posterior"})`,
+              t.data ? `- **Data de Envio:** ${new Date(t.data).toLocaleString("pt-BR")}` : "",
+              t.videoUrl ? `- **Vídeo Pitch:** ${t.videoUrl}` : "",
+              t.prototipoUrl ? `- **Protótipo / Apresentação:** ${t.prototipoUrl}` : "",
+              t.observacoes ? `- **Observações:** ${t.observacoes}` : "",
+              t.itens && t.itens.length > 0
+                ? `- **Artefatos Complementares:**\n${t.itens.map((it) => `  - [${it.tipo}] ${it.titulo}: ${it.linkUrl}`).join("\n")}`
+                : "",
+              "",
+            ]),
+          ]
+        : []),
     ]
       .filter((l) => l !== "")
       .join("\n");
@@ -860,6 +893,234 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       alert("Erro ao remover avaliação: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setSavingEvaluation(false);
+    }
+  }
+
+  // ──── FUNÇÕES DE GERENCIAMENTO DE TRABALHO ENTREGUE ────
+  function abrirModalTrabalho(team: TeamRecord) {
+    setEditingWorkTeam(team);
+    setWorkTeamName(team.teamName);
+
+    const existing = team.trabalhos[0];
+    let tituloExistente = "";
+    try {
+      const parsed = JSON.parse(team.rawInscription.notes || "{}");
+      tituloExistente =
+        parsed.trabalho_entregue?.titulo ||
+        parsed.payload_completo?.trabalho_entregue?.titulo ||
+        "";
+    } catch {}
+
+    setWorkTitulo(tituloExistente || team.idear.nome_solucao || team.teamName);
+    setWorkPrototipoUrl(existing?.prototipoUrl || "");
+    setWorkVideoUrl(existing?.videoUrl || "");
+    setWorkObservacoes(existing?.observacoes || "");
+    setWorkAcessoLiberado(existing?.acessoLiberado !== false);
+    setWorkArtefatos(
+      Array.isArray(existing?.itens)
+        ? existing.itens.map((it) => ({
+            tipo: it.tipo || "Arquivo",
+            titulo: it.titulo || "",
+            linkUrl: it.linkUrl || "",
+          }))
+        : []
+    );
+    setUploadError(null);
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !editingWorkTeam) return;
+
+    if (file.size > 20 * 1024 * 1024) {
+      setUploadError("O arquivo excede o limite máximo de 20 MB.");
+      return;
+    }
+
+    setUploadingFile(true);
+    setUploadError(null);
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const res = reader.result as string;
+          const base64 = res.split(",")[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(file);
+      const dataBase64 = await base64Promise;
+
+      const res = await api.uploadTeamWorkFile(
+        eventId,
+        editingWorkTeam.id,
+        file.name,
+        dataBase64
+      );
+
+      // Se o campo do protótipo estiver vazio ou for link de PDF anterior, define a URL enviada
+      if (!workPrototipoUrl.trim() || workPrototipoUrl.toLowerCase().endsWith(".pdf")) {
+        setWorkPrototipoUrl(res.url);
+      }
+
+      // Adiciona como artefato complementar na lista
+      const ext = file.name.split(".").pop()?.toUpperCase() || "PDF";
+      setWorkArtefatos((prev) => [
+        ...prev,
+        {
+          tipo: ext,
+          titulo: file.name,
+          linkUrl: res.url,
+        },
+      ]);
+
+      showToast(`Arquivo "${file.name}" anexado com sucesso! 📄`);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Erro ao enviar arquivo");
+    } finally {
+      setUploadingFile(false);
+      e.target.value = "";
+    }
+  }
+
+  async function salvarTrabalhoEquipe() {
+    if (!editingWorkTeam) return;
+
+    if (!workPrototipoUrl.trim() && !workVideoUrl.trim() && workArtefatos.length === 0) {
+      alert(
+        "Por favor, informe ao menos um link (Protótipo/Apresentação/Figma, Vídeo Pitch ou Arquivo anexado)."
+      );
+      return;
+    }
+
+    setSavingWork(true);
+    try {
+      let baseNotesObj: any = {};
+      try {
+        if (editingWorkTeam.rawInscription.notes) {
+          baseNotesObj = JSON.parse(editingWorkTeam.rawInscription.notes);
+        }
+      } catch {
+        baseNotesObj = {};
+      }
+
+      const novoTrabalho = {
+        titulo: workTitulo.trim() || editingWorkTeam.teamName,
+        prototipo_url: workPrototipoUrl.trim() || undefined,
+        video_url: workVideoUrl.trim() || undefined,
+        observacoes: workObservacoes.trim() || undefined,
+        acesso_liberado: workAcessoLiberado,
+        artefatos_adicionais: workArtefatos
+          .filter((a) => a.linkUrl.trim())
+          .map((a) => ({
+            tipo: a.tipo.trim() || "Link",
+            titulo: a.titulo.trim() || a.linkUrl.trim(),
+            linkUrl: a.linkUrl.trim(),
+          })),
+        enviado_em: new Date().toISOString(),
+      };
+
+      baseNotesObj.trabalho_entregue = novoTrabalho;
+      if (baseNotesObj.payload_completo) {
+        baseNotesObj.payload_completo.trabalho_entregue = novoTrabalho;
+      }
+
+      const novoNomeEquipe = workTeamName.trim() || editingWorkTeam.teamName;
+      if (novoNomeEquipe !== editingWorkTeam.teamName) {
+        baseNotesObj.equipeNome = novoNomeEquipe;
+        if (baseNotesObj.payload_completo) {
+          baseNotesObj.payload_completo.equipeNome = novoNomeEquipe;
+        }
+      }
+
+      await api.updateInscription(eventId, editingWorkTeam.id, {
+        teamName: novoNomeEquipe,
+        notes: JSON.stringify(baseNotesObj),
+      });
+
+      showToast(`Trabalho da equipe "${novoNomeEquipe}" salvo com sucesso! 📦`);
+
+      setEditingWorkTeam(null);
+      await loadTeams();
+
+      if (selectedTeam && selectedTeam.id === editingWorkTeam.id) {
+        setSelectedTeam((prev) =>
+          prev
+            ? {
+                ...prev,
+                teamName: novoNomeEquipe,
+                trabalhos: [
+                  {
+                    origem: "inscricao",
+                    data: novoTrabalho.enviado_em,
+                    videoUrl: novoTrabalho.video_url,
+                    prototipoUrl: novoTrabalho.prototipo_url,
+                    observacoes: novoTrabalho.observacoes,
+                    acessoLiberado: novoTrabalho.acesso_liberado,
+                    itens: novoTrabalho.artefatos_adicionais,
+                  },
+                ],
+              }
+            : null
+        );
+      }
+    } catch (err) {
+      alert("Erro ao salvar trabalho: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSavingWork(false);
+    }
+  }
+
+  async function removerTrabalhoEquipe() {
+    if (!editingWorkTeam) return;
+    if (
+      !confirm(
+        `Deseja realmente remover o trabalho entregue da equipe "${editingWorkTeam.teamName}"?`
+      )
+    ) {
+      return;
+    }
+
+    setSavingWork(true);
+    try {
+      let baseNotesObj: any = {};
+      try {
+        if (editingWorkTeam.rawInscription.notes) {
+          baseNotesObj = JSON.parse(editingWorkTeam.rawInscription.notes);
+        }
+      } catch {
+        baseNotesObj = {};
+      }
+
+      delete baseNotesObj.trabalho_entregue;
+      if (baseNotesObj.payload_completo) {
+        delete baseNotesObj.payload_completo.trabalho_entregue;
+      }
+
+      await api.updateInscription(eventId, editingWorkTeam.id, {
+        notes: JSON.stringify(baseNotesObj),
+      });
+
+      showToast(`Trabalho entregue da equipe "${editingWorkTeam.teamName}" removido.`);
+      setEditingWorkTeam(null);
+      await loadTeams();
+
+      if (selectedTeam && selectedTeam.id === editingWorkTeam.id) {
+        setSelectedTeam((prev) =>
+          prev
+            ? {
+                ...prev,
+                trabalhos: [],
+              }
+            : null
+        );
+      }
+    } catch (err) {
+      alert("Erro ao remover trabalho: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSavingWork(false);
     }
   }
 
@@ -1363,6 +1624,23 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                   <span className="badge badge-cyan" style={{ fontSize: "11px" }}>
                     👥 {team.totalIntegrantes} integrante(s)
                   </span>
+                  {team.trabalhos.length > 0 ? (
+                    <span
+                      className="badge badge-success"
+                      style={{ fontSize: "11px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                      title="Esta equipe já possui trabalho/protótipo entregue"
+                    >
+                      📦 Trabalho Entregue ({team.trabalhos.length})
+                    </span>
+                  ) : (
+                    <span
+                      className="badge badge-muted"
+                      style={{ fontSize: "11px", opacity: 0.75 }}
+                      title="Aguardando envio do trabalho ou protótipo"
+                    >
+                      ⏳ Sem Trabalho
+                    </span>
+                  )}
                   {team.forma.formas.map((f) => (
                     <span
                       key={f}
@@ -1648,6 +1926,33 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
               >
                 <LayersIcon size={14} />
                 <span>🖨️ Imprimir Ficha</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => abrirModalTrabalho(selectedTeam)}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: selectedTeam.trabalhos.length > 0 ? "#10b981" : "#38bdf8",
+                  borderColor:
+                    selectedTeam.trabalhos.length > 0
+                      ? "rgba(16, 185, 129, 0.4)"
+                      : "rgba(56, 189, 248, 0.4)",
+                  background:
+                    selectedTeam.trabalhos.length > 0
+                      ? "rgba(16, 185, 129, 0.08)"
+                      : "rgba(56, 189, 248, 0.08)",
+                }}
+              >
+                <span>
+                  📦{" "}
+                  {selectedTeam.trabalhos.length > 0
+                    ? `Trabalho Entregue (${selectedTeam.trabalhos.length})`
+                    : "Adicionar Trabalho Entregue"}
+                </span>
               </button>
 
               <button
@@ -2372,9 +2677,26 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
             {/* 6. SEÇÃO DE ENTREGAS & TRABALHOS */}
             {(modalTab === "todos" || modalTab === "entregas") && (
               <div className="print-card" style={{ marginBottom: "24px", borderTop: "1px solid var(--border)", paddingTop: "18px" }}>
-                <h3 style={{ fontSize: "14px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--accent)", margin: "0 0 14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                  📦 6. Entregas e Links do Protótipo ({selectedTeam.trabalhos.length})
-                </h3>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
+                  <h3 style={{ fontSize: "14px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--accent)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                    📦 6. Entregas e Links do Protótipo ({selectedTeam.trabalhos.length})
+                  </h3>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm no-print"
+                    onClick={() => abrirModalTrabalho(selectedTeam)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      color: selectedTeam.trabalhos.length > 0 ? "var(--accent)" : "#38bdf8",
+                      borderColor: selectedTeam.trabalhos.length > 0 ? "var(--accent)" : "rgba(56, 189, 248, 0.4)",
+                      background: selectedTeam.trabalhos.length > 0 ? "rgba(45, 212, 191, 0.08)" : "rgba(56, 189, 248, 0.08)",
+                    }}
+                  >
+                    <span>{selectedTeam.trabalhos.length > 0 ? "✏️ Editar Trabalho / Links" : "+ Adicionar Trabalho / Anexo"}</span>
+                  </button>
+                </div>
 
                 {selectedTeam.trabalhos.length === 0 ? (
                   <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px" }}>
@@ -2741,6 +3063,367 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                   style={{ minWidth: "140px" }}
                 >
                   {savingEvaluation ? "Salvando..." : "💾 Salvar Avaliação"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──── MODAL DE GERENCIAMENTO DE TRABALHO ENTREGUE ──── */}
+      {editingWorkTeam && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            zIndex: 1100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onClick={() => {
+            if (!savingWork && !uploadingFile) setEditingWorkTeam(null);
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: "650px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: "24px",
+              position: "relative",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+              border: "1px solid var(--border)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Fechar */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!savingWork && !uploadingFile) setEditingWorkTeam(null);
+              }}
+              style={{
+                position: "absolute",
+                right: "16px",
+                top: "16px",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                padding: "6px",
+                borderRadius: "6px",
+              }}
+            >
+              <XIcon size={18} />
+            </button>
+
+            {/* Cabeçalho */}
+            <div style={{ marginBottom: "18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                <span style={{ fontSize: "20px" }}>📦</span>
+                <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "var(--text)" }}>
+                  Trabalho Entregue da Equipe
+                </h2>
+              </div>
+              <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)" }}>
+                Cadastre ou atualize a apresentação, links do protótipo, vídeo pitch ou faça upload de PDF/slides para <strong>{editingWorkTeam.teamName}</strong>.
+              </p>
+            </div>
+
+            {/* Formulário */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Nome da Equipe e Título */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
+                    Nome da Equipe:
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={workTeamName}
+                    onChange={(e) => setWorkTeamName(e.target.value)}
+                    placeholder="Ex: Dose Certa"
+                    style={{ width: "100%", fontSize: "13px" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
+                    Título do Trabalho / Solução:
+                  </label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={workTitulo}
+                    onChange={(e) => setWorkTitulo(e.target.value)}
+                    placeholder="Ex: Dose Certa - O Assistente de Medicação"
+                    style={{ width: "100%", fontSize: "13px" }}
+                  />
+                </div>
+              </div>
+
+              {/* Upload de Arquivo Direto */}
+              <div
+                style={{
+                  background: "rgba(45, 212, 191, 0.05)",
+                  border: "1px dashed rgba(45, 212, 191, 0.35)",
+                  borderRadius: "10px",
+                  padding: "14px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px", flexWrap: "wrap", gap: "8px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+                    <DownloadIcon size={14} /> Upload de Arquivo (PDF, Slides, DOCX, ZIP até 20MB):
+                  </label>
+                  {uploadingFile && (
+                    <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 600 }}>
+                      ⏳ Enviando arquivo...
+                    </span>
+                  )}
+                </div>
+
+                <p style={{ margin: "0 0 10px", fontSize: "11px", color: "var(--text-muted)" }}>
+                  Selecione o arquivo da apresentação em PDF ou slides do seu computador. O sistema irá armazená-lo e gerar o link acessível automaticamente.
+                </p>
+
+                <input
+                  type="file"
+                  accept=".pdf,.pptx,.ppt,.docx,.doc,.png,.jpg,.jpeg,.zip"
+                  onChange={handleFileUpload}
+                  disabled={uploadingFile || savingWork}
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--text)",
+                    width: "100%",
+                  }}
+                />
+
+                {uploadError && (
+                  <div style={{ marginTop: "8px", fontSize: "11px", color: "#ef4444" }}>
+                    ⚠️ {uploadError}
+                  </div>
+                )}
+              </div>
+
+              {/* URL do Protótipo / Apresentação / PDF */}
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
+                  Link do Protótipo / Apresentação (URL do PDF, Slides, Figma ou Drive):
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    className="input"
+                    value={workPrototipoUrl}
+                    onChange={(e) => setWorkPrototipoUrl(e.target.value)}
+                    placeholder="https://... ou caminho gerado no upload"
+                    style={{ flex: 1, fontSize: "13px" }}
+                  />
+                  {workPrototipoUrl.trim() && (
+                    <a
+                      href={workPrototipoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: "0 10px", display: "inline-flex", alignItems: "center", fontSize: "11px" }}
+                    >
+                      🔗 Abrir
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* URL do Vídeo Pitch */}
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
+                  Link do Vídeo Pitch (YouTube, Vimeo, Google Drive ou Loom):
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    className="input"
+                    value={workVideoUrl}
+                    onChange={(e) => setWorkVideoUrl(e.target.value)}
+                    placeholder="https://youtube.com/watch?v=... ou similar"
+                    style={{ flex: 1, fontSize: "13px" }}
+                  />
+                  {workVideoUrl.trim() && (
+                    <a
+                      href={workVideoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: "0 10px", display: "inline-flex", alignItems: "center", fontSize: "11px" }}
+                    >
+                      ▶️ Assistir
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Observações da Equipe / Descrição da Solução */}
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text)", marginBottom: "4px" }}>
+                  Observações / Resumo da Solução:
+                </label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={workObservacoes}
+                  onChange={(e) => setWorkObservacoes(e.target.value)}
+                  placeholder="Descreva brevemente a solução, tecnologias utilizadas, detalhes do hardware ou protótipo..."
+                  style={{ width: "100%", fontSize: "12px", resize: "vertical" }}
+                />
+              </div>
+
+              {/* Acesso Liberado para Banca */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <input
+                  type="checkbox"
+                  id="workAcessoLiberado"
+                  checked={workAcessoLiberado}
+                  onChange={(e) => setWorkAcessoLiberado(e.target.checked)}
+                  style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                />
+                <label htmlFor="workAcessoLiberado" style={{ fontSize: "12px", color: "var(--text)", cursor: "pointer", userSelect: "none" }}>
+                  Acesso liberado para a banca examinadora e jurados
+                </label>
+              </div>
+
+              {/* Artefatos Complementares Adicionais */}
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", margin: 0 }}>
+                    Artefatos e Links Complementares ({workArtefatos.length}):
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() =>
+                      setWorkArtefatos((prev) => [
+                        ...prev,
+                        { tipo: "Link", titulo: "", linkUrl: "" },
+                      ])
+                    }
+                    style={{ fontSize: "11px", padding: "2px 8px" }}
+                  >
+                    + Adicionar Link
+                  </button>
+                </div>
+
+                {workArtefatos.length === 0 ? (
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", fontStyle: "italic" }}>
+                    Nenhum artefato adicional. Você pode adicionar repositório Git, documentação técnica, etc.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {workArtefatos.map((art, aIdx) => (
+                      <div key={aIdx} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr auto", gap: "6px", alignItems: "center" }}>
+                        <input
+                          type="text"
+                          className="input"
+                          value={art.tipo}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setWorkArtefatos((prev) =>
+                              prev.map((item, i) => (i === aIdx ? { ...item, tipo: val } : item))
+                            );
+                          }}
+                          placeholder="Tipo"
+                          style={{ fontSize: "11px", padding: "4px 8px" }}
+                        />
+                        <input
+                          type="text"
+                          className="input"
+                          value={art.titulo}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setWorkArtefatos((prev) =>
+                              prev.map((item, i) => (i === aIdx ? { ...item, titulo: val } : item))
+                            );
+                          }}
+                          placeholder="Título do artefato"
+                          style={{ fontSize: "11px", padding: "4px 8px" }}
+                        />
+                        <input
+                          type="text"
+                          className="input"
+                          value={art.linkUrl}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setWorkArtefatos((prev) =>
+                              prev.map((item, i) => (i === aIdx ? { ...item, linkUrl: val } : item))
+                            );
+                          }}
+                          placeholder="URL / Link"
+                          style={{ fontSize: "11px", padding: "4px 8px" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setWorkArtefatos((prev) => prev.filter((_, i) => i !== aIdx))}
+                          style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", padding: "4px" }}
+                          title="Remover artefato"
+                        >
+                          <XIcon size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ações do Rodapé */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "8px",
+                borderTop: "1px solid var(--border)",
+                paddingTop: "16px",
+                marginTop: "18px",
+              }}
+            >
+              {editingWorkTeam.trabalhos.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={removerTrabalhoEquipe}
+                  disabled={savingWork || uploadingFile}
+                  style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                >
+                  🗑️ Remover Trabalho
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditingWorkTeam(null)}
+                  disabled={savingWork || uploadingFile}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={salvarTrabalhoEquipe}
+                  disabled={savingWork || uploadingFile}
+                  style={{ minWidth: "150px" }}
+                >
+                  {savingWork ? "Salvando..." : "💾 Salvar Trabalho Entregue"}
                 </button>
               </div>
             </div>
