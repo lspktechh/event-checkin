@@ -50,6 +50,29 @@ function InscriptionContent() {
   // pessoa, e' a condicao para enviar. O que vai ao servidor e' a
   // versao do termo, nao um "true" solto.
   const [aceitou, setAceitou] = useState(false);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  async function handleEmailBlur() {
+    const trimmed = form.email.trim();
+    if (!trimmed) {
+      setEmailSuggestion(null);
+      setEmailError(null);
+      return;
+    }
+    try {
+      const res = await verifyEmail(trimmed);
+      if (!res.valid) {
+        setEmailSuggestion(res.suggestion || null);
+        setEmailError(res.reason || "E-mail inválido ou inexistente.");
+      } else {
+        setEmailSuggestion(null);
+        setEmailError(null);
+      }
+    } catch {
+      // Ignora falhas de rede no blur
+    }
+  }
 
 const FALLBACK_EVENT_ID = "f1b36d08-e85d-459b-8606-69119ab05a78";
 
@@ -415,11 +438,67 @@ const FALLBACK_EVENT: EventData = {
               <input
                 type="email"
                 value={form.email}
-                onChange={(e) => updateField("email", e.target.value)}
+                onChange={(e) => {
+                  updateField("email", e.target.value);
+                  if (emailError || emailSuggestion) {
+                    setEmailError(null);
+                    setEmailSuggestion(null);
+                  }
+                }}
+                onBlur={handleEmailBlur}
                 placeholder="seu@email.com"
                 required
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  borderColor: emailError ? "var(--destructive, #ef4444)" : undefined,
+                }}
               />
+              {emailSuggestion && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "6px 10px",
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    color: "#92400e",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>
+                    Você quis dizer <strong>{emailSuggestion}</strong>?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateField("email", emailSuggestion);
+                      setEmailSuggestion(null);
+                      setEmailError(null);
+                    }}
+                    style={{
+                      marginLeft: 8,
+                      padding: "4px 8px",
+                      background: "#d97706",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      fontSize: 12,
+                    }}
+                  >
+                    Corrigir
+                  </button>
+                </div>
+              )}
+              {emailError && !emailSuggestion && (
+                <span style={{ color: "#ef4444", fontSize: 12, marginTop: 4, display: "block" }}>
+                  {emailError}
+                </span>
+              )}
             </Field>
 
             <Field label="CPF *">

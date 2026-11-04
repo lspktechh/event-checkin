@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { verifyEmail } from "@/lib/api";
 import {
   HANDS_ON_LIST,
   getHandsOnById,
@@ -57,7 +58,30 @@ function HandsOnInscricaoContent() {
 
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [documento, setDocumento] = useState("");
+
+  async function handleEmailBlur() {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailSuggestion(null);
+      setEmailError(null);
+      return;
+    }
+    try {
+      const res = await verifyEmail(trimmed);
+      if (!res.valid) {
+        setEmailSuggestion(res.suggestion || null);
+        setEmailError(res.reason || "E-mail inválido ou inexistente.");
+      } else {
+        setEmailSuggestion(null);
+        setEmailError(null);
+      }
+    } catch {
+      // Ignora erro de rede no blur
+    }
+  }
   const [telefone, setTelefone] = useState("");
   const [categoria, setCategoria] = useState("Aluno da Universidade Positivo");
   const [instituicao, setInstituicao] = useState("");
@@ -494,14 +518,70 @@ function HandsOnInscricaoContent() {
               <input
                 type="email"
                 required
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  borderColor: emailError ? "var(--destructive, #ef4444)" : undefined,
+                }}
                 placeholder="seuemail@exemplo.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError || emailSuggestion) {
+                    setEmailError(null);
+                    setEmailSuggestion(null);
+                  }
+                }}
+                onBlur={handleEmailBlur}
               />
               <small style={{ fontWeight: 400, color: "var(--muted-foreground)" }}>
                 Usaremos este e-mail para enviar a confirmação da sua vaga.
               </small>
+              {emailSuggestion && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "6px 10px",
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    color: "#92400e",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>
+                    Você quis dizer <strong>{emailSuggestion}</strong>?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail(emailSuggestion);
+                      setEmailSuggestion(null);
+                      setEmailError(null);
+                    }}
+                    style={{
+                      marginLeft: 8,
+                      padding: "4px 8px",
+                      background: "#d97706",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      fontSize: 12,
+                    }}
+                  >
+                    Corrigir
+                  </button>
+                </div>
+              )}
+              {emailError && !emailSuggestion && (
+                <span style={{ color: "#ef4444", fontSize: 12, marginTop: 4, display: "block" }}>
+                  {emailError}
+                </span>
+              )}
             </label>
 
             {/* CPF e Telefone (Grid 2 colunas) */}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   createPublicSubmission,
   getSubmissionConfig,
+  verifyEmail,
   type SubmissionPublicConfig,
 } from "@/lib/api";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -87,6 +88,29 @@ export default function TrabalhosPage() {
   const [modalidade, setModalidade] = useState("");
   const [area, setArea] = useState("");
   const [autores, setAutores] = useState<Autor[]>([autorVazio()]);
+  const [autorSugestoes, setAutorSugestoes] = useState<Record<number, string | null>>({});
+  const [autorErros, setAutorErros] = useState<Record<number, string | null>>({});
+
+  async function handleAutorEmailBlur(i: number) {
+    const mail = autores[i]?.email?.trim();
+    if (!mail) {
+      setAutorSugestoes((prev) => ({ ...prev, [i]: null }));
+      setAutorErros((prev) => ({ ...prev, [i]: null }));
+      return;
+    }
+    try {
+      const res = await verifyEmail(mail);
+      if (!res.valid) {
+        setAutorSugestoes((prev) => ({ ...prev, [i]: res.suggestion || null }));
+        setAutorErros((prev) => ({ ...prev, [i]: res.reason || "E-mail inválido ou inexistente." }));
+      } else {
+        setAutorSugestoes((prev) => ({ ...prev, [i]: null }));
+        setAutorErros((prev) => ({ ...prev, [i]: null }));
+      }
+    } catch {
+      // Ignora erro de rede no blur
+    }
+  }
   const [apresentador, setApresentador] = useState(0);
   const [arquivos, setArquivos] = useState<File[]>([]);
 
@@ -370,14 +394,72 @@ export default function TrabalhosPage() {
                           required
                           minLength={2}
                         />
-                        <input
-                          style={inputStyle}
-                          type="email"
-                          placeholder="E-mail *"
-                          value={a.email}
-                          onChange={(e) => atualizarAutor(i, "email", e.target.value)}
-                          required
-                        />
+                        <div>
+                          <input
+                            style={{
+                              ...inputStyle,
+                              borderColor: autorErros[i] ? "var(--destructive, #ef4444)" : undefined,
+                            }}
+                            type="email"
+                            placeholder="E-mail *"
+                            value={a.email}
+                            onChange={(e) => {
+                              atualizarAutor(i, "email", e.target.value);
+                              if (autorErros[i] || autorSugestoes[i]) {
+                                setAutorErros((prev) => ({ ...prev, [i]: null }));
+                                setAutorSugestoes((prev) => ({ ...prev, [i]: null }));
+                              }
+                            }}
+                            onBlur={() => handleAutorEmailBlur(i)}
+                            required
+                          />
+                          {autorSugestoes[i] && (
+                            <div
+                              style={{
+                                marginTop: 4,
+                                padding: "4px 8px",
+                                background: "#fef3c7",
+                                border: "1px solid #fde68a",
+                                borderRadius: 6,
+                                fontSize: 12,
+                                color: "#92400e",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                              }}
+                            >
+                              <span>
+                                Sugestão: <strong>{autorSugestoes[i]}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  atualizarAutor(i, "email", autorSugestoes[i]!);
+                                  setAutorSugestoes((prev) => ({ ...prev, [i]: null }));
+                                  setAutorErros((prev) => ({ ...prev, [i]: null }));
+                                }}
+                                style={{
+                                  marginLeft: 6,
+                                  padding: "2px 6px",
+                                  background: "#d97706",
+                                  color: "#fff",
+                                  border: "none",
+                                  borderRadius: 4,
+                                  cursor: "pointer",
+                                  fontWeight: 600,
+                                  fontSize: 11,
+                                }}
+                              >
+                                Usar
+                              </button>
+                            </div>
+                          )}
+                          {autorErros[i] && !autorSugestoes[i] && (
+                            <span style={{ color: "#ef4444", fontSize: 11, marginTop: 2, display: "block" }}>
+                              {autorErros[i]}
+                            </span>
+                          )}
+                        </div>
                         <input
                           style={inputStyle}
                           placeholder="Instituição"
