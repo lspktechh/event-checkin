@@ -296,7 +296,7 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
   );
 
   // Download / visualização pública ou autenticada do arquivo de trabalho entregue
-  app.get("/inscriptions/:id/work-file", async (request, reply) => {
+  const handleWorkFileDownload = async (request: any, reply: any) => {
     const { id } = idParams.parse(request.params);
     const { file } = (request.query || {}) as { file?: string };
     if (!file) {
@@ -333,6 +333,9 @@ export async function inscriptionsRoutes(app: FastifyInstance) {
         `${contentType === "application/pdf" || contentType.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(safeFile)}"`
       )
       .send(buffer);
-  });
+  };
+
+  app.get("/inscriptions/:id/work-file", handleWorkFileDownload);
+  app.get("/api/inscriptions/:id/work-file", handleWorkFileDownload);
 }
 

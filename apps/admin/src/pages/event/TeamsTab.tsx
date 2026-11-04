@@ -79,13 +79,37 @@ export interface TeamMemberDetail {
   isLeader?: boolean;
 }
 
+export function getValidExternalUrl(url?: string): string {
+  if (!url) return "";
+  const trimmed = String(url).trim();
+  if (
+    !trimmed ||
+    trimmed === "#" ||
+    trimmed.toLowerCase() === "undefined" ||
+    trimmed.toLowerCase() === "null"
+  ) {
+    return "";
+  }
+  // Se for caminho relativo para o backend
+  if (trimmed.startsWith("/api/") || trimmed.startsWith("/inscriptions/")) {
+    const apiBase = (import.meta.env.VITE_API_URL ?? "https://137-131-233-254.sslip.io").replace(/\/$/, "");
+    return `${apiBase}${trimmed}`;
+  }
+  // Se já tiver protocolo http/https
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  // Se for domínio sem protocolo (ex: drive.google.com, figma.com, youtube.com)
+  return `https://${trimmed}`;
+}
+
 export interface TrabalhoItem {
   origem: "inscricao" | "submissao_posterior";
   data: string;
   protocoloEnvio?: string;
   videoUrl?: string;
   prototipoUrl?: string;
-  itens?: Array<{ tipo: string; titulo: string; linkUrl?: string; arquivoNome?: string }>;
+  itens?: Array<{ tipo: string; titulo: string; linkUrl?: string; url?: string; arquivoNome?: string }>;
   observacoes?: string;
   acessoLiberado?: boolean;
 }
@@ -286,7 +310,15 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
           origem: "submissao_posterior",
           data: parsedNotes?.data_envio || ins.createdAt,
           protocoloEnvio: parsedNotes?.protocolo_envio,
-          itens: parsedNotes?.itens || [],
+          itens: Array.isArray(parsedNotes?.itens)
+            ? parsedNotes.itens.map((it: any) => ({
+                tipo: it.tipo || "link",
+                titulo: it.titulo || "Artefato Complementar",
+                linkUrl: it.linkUrl || it.url || it.link || "",
+                url: it.url || it.linkUrl || it.link || "",
+                arquivoNome: it.arquivoNome || it.name || "",
+              }))
+            : [],
           observacoes: parsedNotes?.observacoes,
           acessoLiberado: parsedNotes?.acesso_liberado,
         };
@@ -501,7 +533,15 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
           data: payload.trabalho_entregue.enviado_em || ins.createdAt,
           videoUrl: payload.trabalho_entregue.video_url,
           prototipoUrl: payload.trabalho_entregue.prototipo_url,
-          itens: payload.trabalho_entregue.artefatos_adicionais || [],
+          itens: Array.isArray(payload.trabalho_entregue.artefatos_adicionais)
+            ? payload.trabalho_entregue.artefatos_adicionais.map((it: any) => ({
+                tipo: it.tipo || "link",
+                titulo: it.titulo || "Artefato / Documento Complementar",
+                linkUrl: it.linkUrl || it.url || it.link || "",
+                url: it.url || it.linkUrl || it.link || "",
+                arquivoNome: it.arquivoNome || it.name || "",
+              }))
+            : [],
           observacoes: payload.trabalho_entregue.observacoes,
           acessoLiberado: payload.trabalho_entregue.acesso_liberado,
         });
@@ -843,7 +883,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
               t.prototipoUrl ? `- **Protótipo / Apresentação:** ${t.prototipoUrl}` : "",
               t.observacoes ? `- **Observações:** ${t.observacoes}` : "",
               t.itens && t.itens.length > 0
-                ? `- **Artefatos Complementares:**\n${t.itens.map((it) => `  - [${it.tipo}] ${it.titulo}: ${it.linkUrl}`).join("\n")}`
+                ? `- **Artefatos Complementares:**\n${t.itens.map((it: any) => `  - [${it.tipo}] ${it.titulo}: ${getValidExternalUrl(it.linkUrl || it.url || it.link)}`).join("\n")}`
                 : "",
               "",
             ]),
@@ -1003,10 +1043,10 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
     setWorkAcessoLiberado(existing?.acessoLiberado !== false);
     setWorkArtefatos(
       Array.isArray(existing?.itens)
-        ? existing.itens.map((it) => ({
+        ? existing.itens.map((it: any) => ({
             tipo: it.tipo || "Arquivo",
             titulo: it.titulo || "",
-            linkUrl: it.linkUrl || "",
+            linkUrl: it.linkUrl || it.url || it.link || "",
           }))
         : []
     );
@@ -1103,6 +1143,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
             tipo: a.tipo.trim() || "Link",
             titulo: a.titulo.trim() || a.linkUrl.trim(),
             linkUrl: a.linkUrl.trim(),
+            url: a.linkUrl.trim(),
           })),
         enviado_em: new Date().toISOString(),
       };
@@ -2862,43 +2903,84 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                         </div>
 
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "6px" }}>
-                          {trab.videoUrl && (
-                            <a
-                              href={trab.videoUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="btn btn-secondary btn-sm"
-                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                            >
-                              ▶️ Assistir Vídeo Pitch
-                            </a>
-                          )}
-
-                          {trab.prototipoUrl && (
-                            <a
-                              href={trab.prototipoUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="btn btn-secondary btn-sm"
-                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                            >
-                              🔗 Abrir Protótipo / Figma
-                            </a>
-                          )}
-
-                          {trab.itens &&
-                            trab.itens.map((it, iIdx) => (
+                          {trab.videoUrl && (() => {
+                            const validUrl = getValidExternalUrl(trab.videoUrl);
+                            return validUrl ? (
                               <a
-                                key={iIdx}
-                                href={it.linkUrl || "#"}
+                                href={validUrl}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="btn btn-secondary btn-sm"
                                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                📄 {it.titulo || "Artefato Complementar"}
+                                ▶️ Assistir Vídeo Pitch
                               </a>
-                            ))}
+                            ) : null;
+                          })()}
+
+                          {trab.prototipoUrl && (() => {
+                            const validUrl = getValidExternalUrl(trab.prototipoUrl);
+                            return validUrl ? (
+                              <a
+                                href={validUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-secondary btn-sm"
+                                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                🔗 Abrir Protótipo / Figma
+                              </a>
+                            ) : null;
+                          })()}
+
+                          {trab.itens &&
+                            trab.itens.map((it: any, iIdx) => {
+                              const rawUrl = it.linkUrl || it.url || it.link || "";
+                              const validUrl = getValidExternalUrl(rawUrl);
+
+                              if (!validUrl) {
+                                return (
+                                  <button
+                                    key={iIdx}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      alert(
+                                        `O artefato "${it.titulo || "Artefato / Documento Complementar"}" não possui um link cadastrado pela equipe.`
+                                      );
+                                    }}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      opacity: 0.75,
+                                      cursor: "not-allowed",
+                                    }}
+                                    title="Link não informado pela equipe"
+                                  >
+                                    📄 {it.titulo || "Artefato / Documento Complementar"} (Sem link)
+                                  </button>
+                                );
+                              }
+
+                              return (
+                                <a
+                                  key={iIdx}
+                                  href={validUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  📄 {it.titulo || "Artefato / Documento Complementar"}
+                                </a>
+                              );
+                            })}
                         </div>
 
                         {trab.observacoes && (
