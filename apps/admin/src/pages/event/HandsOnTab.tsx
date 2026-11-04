@@ -2702,8 +2702,7 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
                   onChange={(e) => setParticipantSearch(e.target.value)}
                   style={{ width: 230, padding: "7px 12px", borderRadius: 6, fontSize: 13 }}
                 />
-
-                </div>
+              </div>
             </div>
 
             {classificationFilter === "EXCEEDED" && (
