@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok } from "../../shared/response.js";
 import {
   checkLeaderLogin,
+  requestMagicLink,
   loginWithPassword,
   verifyMagicLink,
   setLeaderPassword,
@@ -41,6 +42,15 @@ export async function leaderPortalRoutes(app: FastifyInstance) {
     const { email } = checkLoginSchema.parse(request.body);
 
     const result = await checkLeaderLogin(slugOrId, email);
+    return ok(result);
+  });
+
+  // 1b. Solicitar novo link mágico (ex: esqueceu a senha)
+  app.post("/public/events/:slugOrId/leader/request-magic-link", async (request) => {
+    const { slugOrId } = slugOrIdParamsSchema.parse(request.params);
+    const { email } = checkLoginSchema.parse(request.body);
+
+    const result = await requestMagicLink(slugOrId, email);
     return ok(result);
   });
 

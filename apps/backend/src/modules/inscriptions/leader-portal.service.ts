@@ -140,6 +140,55 @@ export async function checkLeaderLogin(slugOrId: string, email: string) {
   };
 }
 
+export async function requestMagicLink(slugOrId: string, email: string) {
+  const event = await getEventBySlugOrId(slugOrId);
+  const inscription = await findLeaderInscription(event.id, email);
+
+  if (!inscription) {
+    throw new NotFoundError("Nenhuma equipe encontrada com este e-mail.");
+  }
+
+  let notes: any = {};
+  try {
+    notes = JSON.parse(inscription.notes || "{}");
+  } catch {
+    notes = {};
+  }
+
+  const token = crypto.randomBytes(24).toString("hex");
+  const tokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  notes.leader_auth = {
+    ...(notes.leader_auth || {}),
+    verifyToken: token,
+    tokenExpiresAt,
+    requestedAt: new Date().toISOString(),
+  };
+
+  await prisma.inscription.update({
+    where: { id: inscription.id },
+    data: { notes: JSON.stringify(notes) },
+  });
+
+  const baseUrl = process.env.PUBLIC_SITE_URL || "https://superinteligencia.tec.br";
+  const verificationUrl = `${baseUrl}/editar-inscricao?token=${token}&email=${encodeURIComponent(inscription.email)}`;
+
+  const sendResult = await emailService.sendLeaderVerificationEmail(event, {
+    to: inscription.email,
+    leaderName: inscription.name,
+    teamName: inscription.teamName || "Sua Equipe",
+    verificationUrl,
+  });
+
+  return {
+    success: true,
+    emailSent: sendResult.success,
+    teamName: inscription.teamName,
+    email: inscription.email,
+    message: "Enviamos um novo link de acesso para o seu e-mail.",
+  };
+}
+
 export async function loginWithPassword(slugOrId: string, email: string, passwordPlain: string) {
   const event = await getEventBySlugOrId(slugOrId);
   const inscription = await findLeaderInscription(event.id, email);
