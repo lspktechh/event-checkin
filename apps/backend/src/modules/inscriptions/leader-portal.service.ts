@@ -118,13 +118,14 @@ export async function checkLeaderLogin(slugOrId: string, email: string) {
 
   // Monta link de verificação
   const baseUrl = process.env.PUBLIC_SITE_URL || "https://superinteligencia.tec.br";
-  const verificationUrl = `${baseUrl}/editar-inscricao?token=${token}&email=${encodeURIComponent(inscription.email)}`;
+  const verificationUrl = `${baseUrl}/editar-inscricao/?token=${token}&email=${encodeURIComponent(inscription.email)}`;
 
   const sendResult = await emailService.sendLeaderVerificationEmail(event, {
     to: inscription.email,
     leaderName: inscription.name,
     teamName: inscription.teamName || "Sua Equipe",
     verificationUrl,
+    isReset: false,
   });
 
   return {
@@ -135,8 +136,8 @@ export async function checkLeaderLogin(slugOrId: string, email: string) {
     email: inscription.email,
     name: inscription.name,
     message: sendResult.success
-      ? "Enviamos um link de verificação para o seu e-mail com instruções para criar sua senha."
-      : "Link de verificação gerado. Se o e-mail não chegar em instantes, entre em contato com a organização.",
+      ? "Enviamos um link para o seu e-mail com instruções para cadastrar sua senha."
+      : "Link gerado. Se o e-mail não chegar em instantes, entre em contato com a organização.",
   };
 }
 
@@ -171,13 +172,14 @@ export async function requestMagicLink(slugOrId: string, email: string) {
   });
 
   const baseUrl = process.env.PUBLIC_SITE_URL || "https://superinteligencia.tec.br";
-  const verificationUrl = `${baseUrl}/editar-inscricao?token=${token}&email=${encodeURIComponent(inscription.email)}`;
+  const verificationUrl = `${baseUrl}/editar-inscricao/?token=${token}&email=${encodeURIComponent(inscription.email)}`;
 
   const sendResult = await emailService.sendLeaderVerificationEmail(event, {
     to: inscription.email,
     leaderName: inscription.name,
     teamName: inscription.teamName || "Sua Equipe",
     verificationUrl,
+    isReset: true,
   });
 
   return {
@@ -185,7 +187,7 @@ export async function requestMagicLink(slugOrId: string, email: string) {
     emailSent: sendResult.success,
     teamName: inscription.teamName,
     email: inscription.email,
-    message: "Enviamos um novo link de acesso para o seu e-mail.",
+    message: "Enviamos um link para o seu e-mail com um botão para cadastrar sua nova senha.",
   };
 }
 
