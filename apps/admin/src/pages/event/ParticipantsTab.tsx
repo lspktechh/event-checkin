@@ -5,7 +5,6 @@ import { QrCodeModal } from "../../components/QrCodeModal";
 import { ImportCsvModal } from "../../components/ImportCsvModal";
 import { EditParticipantModal } from "../../components/EditParticipantModal";
 import { downloadParticipantsCsv, downloadParticipantsPdf } from "../../utils/participantsReport";
-import { printInscriptionsReport } from "../../utils/printReport";
 
 const CERT_LABEL: Record<api.CertificateRowStatus, string> = {
   LOCKED: "Bloqueado",
@@ -39,19 +38,6 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
   const [qrTarget, setQrTarget] = useState<api.ParticipantRecord | null>(null);
   const [editTarget, setEditTarget] = useState<api.ParticipantRecord | null>(null);
   const [busyCertId, setBusyCertId] = useState<string | null>(null);
-  const [printing, setPrinting] = useState(false);
-
-  async function handlePrintInscriptions() {
-    setPrinting(true);
-    try {
-      const list = await api.getInscriptionsReport(eventId);
-      printInscriptionsReport({ eventName: eventName || "3º COPOL", inscriptions: list });
-    } catch (err) {
-      alert("Erro ao carregar lista de inscritos para impressão: " + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setPrinting(false);
-    }
-  }
 
   function reload() {
     api
@@ -176,16 +162,6 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
             disabled={!participants || participants.length === 0}
           >
             Baixar PDF
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handlePrintInscriptions}
-            disabled={printing}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, background: "#1e293b", borderColor: "#334155" }}
-            title="Abre a tela de impressão em formato horizontal (deitado) com dados de inscrição, confirmação de pagamento e aptidão de entrada"
-          >
-            🖨️ {printing ? "Carregando..." : "Imprimir Lista (Deitado)"}
           </button>
           {canCreate ? (
             <>

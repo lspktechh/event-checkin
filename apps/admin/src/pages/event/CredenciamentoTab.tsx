@@ -7,7 +7,6 @@ import { initAudio, playCheckInFeedback } from "../../utils/audioFeedback";
 import { SmartphoneIcon } from "../../components/Icons";
 import { DayBanner } from "../../components/scanner/DayBanner";
 import { useCheckInStats } from "../../hooks/useCheckInStats";
-import { printInscriptionsReport } from "../../utils/printReport";
 
 const FEEDBACK_DURATION_MS = 1800;
 
@@ -17,22 +16,8 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [sessionCount, setSessionCount] = useState(0);
   const { stats, refresh: refreshStats } = useCheckInStats(eventId);
-  const [printing, setPrinting] = useState(false);
-
   const processingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  async function handlePrintList() {
-    setPrinting(true);
-    try {
-      const list = await api.getInscriptionsReport(eventId);
-      printInscriptionsReport({ eventName: "3º COPOL", inscriptions: list });
-    } catch (err) {
-      alert("Erro ao carregar lista de inscritos para impressão: " + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setPrinting(false);
-    }
-  }
 
   async function handleScan(token: string) {
     if (processingRef.current || !eventId) return;
@@ -165,22 +150,6 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
               {sessionCount} confirmado(s) nesta sessão
             </span>
           )}
-          <button
-            type="button"
-            onClick={handlePrintList}
-            disabled={printing}
-            className="btn btn-secondary"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 14,
-              fontWeight: 600,
-            }}
-            title="Abre a tela de impressão em formato horizontal (deitado) com todos os inscritos e controle de aptidão"
-          >
-            🖨️ {printing ? "Carregando..." : "Imprimir Lista de Entrada (Deitado)"}
-          </button>
           <Link
             to={`/eventos/${eventId}/credenciamento`}
             className="btn"

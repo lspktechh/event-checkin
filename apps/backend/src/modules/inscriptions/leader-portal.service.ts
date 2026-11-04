@@ -237,7 +237,7 @@ export async function loginWithPassword(slugOrId: string, email: string, passwor
     teamName: inscription.teamName,
     email: inscription.email,
     name: inscription.name,
-    data: formatTeamData(inscription, notes),
+    data: await formatTeamData(event.id, inscription, notes),
   };
 }
 
@@ -328,7 +328,7 @@ export async function setLeaderPassword(slugOrId: string, email: string, token: 
     teamName: inscription.teamName,
     email: inscription.email,
     name: inscription.name,
-    data: formatTeamData(inscription, notes),
+    data: await formatTeamData(event.id, inscription, notes),
   };
 }
 
@@ -356,7 +356,7 @@ export async function getTeamDataBySession(slugOrId: string, email: string, sess
     throw new UnauthorizedError("Sessão expirada. Por favor, faça login novamente.");
   }
 
-  return formatTeamData(inscription, notes);
+  return await formatTeamData(event.id, inscription, notes);
 }
 
 export async function updateTeamData(
@@ -409,7 +409,7 @@ export async function updateTeamData(
   historico.unshift(logItem);
 
   // Mescla dados atualizados
-  const updatedNotes = {
+  const updatedNotes: any = {
     ...notes,
     ...(newData.empatizar ? { empatizar: newData.empatizar } : {}),
     ...(newData.definir ? { definir: newData.definir } : {}),
@@ -421,6 +421,21 @@ export async function updateTeamData(
     historico_edicoes: historico,
     ultima_edicao_em: new Date().toISOString(),
   };
+
+  // Mantém payload_completo sincronizado caso exista
+  if (updatedNotes.payload_completo) {
+    updatedNotes.payload_completo = {
+      ...updatedNotes.payload_completo,
+      ...(newData.teamName ? { equipeNome: newData.teamName.trim() } : {}),
+      ...(newData.empatizar ? { empatizar: newData.empatizar } : {}),
+      ...(newData.definir ? { definir: newData.definir } : {}),
+      ...(newData.idear ? { idear: newData.idear } : {}),
+      ...(newData.escopo ? { escopo: newData.escopo } : {}),
+      ...(newData.fechamento ? { fechamento: newData.fechamento } : {}),
+      ...(newData.trabalho_entregue ? { trabalho_entregue: newData.trabalho_entregue } : {}),
+      ...(newData.membros ? { membros: newData.membros } : {}),
+    };
+  }
 
   // Se houver alteração de nome da equipe
   const newTeamName = (newData.teamName && newData.teamName.trim()) || inscription.teamName;
@@ -456,28 +471,129 @@ export async function updateTeamData(
   return {
     success: true,
     message: "Dados da equipe atualizados com sucesso!",
-    data: formatTeamData(
+    data: await formatTeamData(
+      event.id,
       { ...inscription, teamName: newTeamName },
       updatedNotes
     ),
   };
 }
 
-function formatTeamData(inscription: any, notes: any) {
+async function formatTeamData(eventId: string, inscription: any, notes: any) {
+  const p = notes.payload_completo || {};
+
+  // Membros: detalhes editados, array no topo ou payload completo
+  const membros = notes.membros_detalhes || notes.membros || p.membros || [];
+
+  // Etapas do projeto
+  const empatizar = notes.empatizar || p.empatizar || {};
+  const definir = notes.definir || p.definir || {};
+  const idear = notes.idear || p.idear || {};
+  const escopo = notes.escopo || p.escopo || {};
+  const fechamento = notes.fechamento || p.fechamento || {};
+  const ficha_prototipo = notes.ficha_prototipo || p.ficha_prototipo || {};
+
+  // Trabalho Entregue / Artefatos
+  let trabalho_entregue: any = notes.trabalho_entregue || p.trabalho_entregue || {};
+
+  // Garante cópia mutável do array de artefatos adicionais
+  const artefatos: Array<{ tipo: string; titulo: string; linkUrl: string; arquivoNome?: string }> = Array.isArray(
+    trabalho_entregue.artefatos_adicionais
+  )
+    ? [...trabalho_entregue.artefatos_adicionais]
+    : [];
+
+  // Busca se há submissões na tabela formal de submissions para enriquecer os dados
+  try {
+    const emailNorm = (inscription.email || "").trim().toLowerCase();
+    const teamNameNorm = (inscription.teamName || "").trim().toLowerCase();
+
+    const sub: any = await prisma.submission.findFirst({
+      where: {
+        eventId,
+        OR: [
+          { authors: { some: { email: { equals: emailNorm, mode: "insensitive" as const } } } },
+          ...(teamNameNorm ? [{ title: { contains: teamNameNorm, mode: "insensitive" as const } }] : []),
+        ],
+      },
+      include: {
+        files: true,
+        authors: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (sub) {
+      const publicBase = process.env.PUBLIC_API_URL || "https://137-131-233-254.sslip.io";
+
+      if (sub.fileName && !artefatos.some((a) => a.arquivoNome === sub.fileName)) {
+        artefatos.push({
+          tipo: "Arquivo",
+          titulo: `Arquivo Submetido (${sub.fileName})`,
+          linkUrl: `${publicBase}/public/events/${eventId}/submissions/${sub.id}/file`,
+          arquivoNome: sub.fileName,
+        });
+      }
+
+      if (Array.isArray(sub.files)) {
+        for (const fileItem of sub.files) {
+          if (!artefatos.some((a) => a.arquivoNome === fileItem.fileName)) {
+            artefatos.push({
+              tipo: "Arquivo",
+              titulo: fileItem.fileName,
+              linkUrl: `${publicBase}/public/events/${eventId}/submissions/${sub.id}/file`,
+              arquivoNome: fileItem.fileName,
+            });
+          }
+        }
+      }
+
+      // Se não havia videoUrl mas o abstract tem link do youtube
+      if (!trabalho_entregue.video_url && sub.abstract) {
+        const yt = sub.abstract.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]+/);
+        if (yt) {
+          trabalho_entregue.video_url = yt[0];
+        }
+      }
+
+      // Se não havia prototipoUrl mas o abstract tem link de prototipo
+      if (!trabalho_entregue.prototipo_url && sub.abstract) {
+        const proto = sub.abstract.match(/https?:\/\/(?:[a-zA-Z0-9-]+\.)+(?:vercel\.app|canva\.com|figma\.com|drive\.google\.com)[^\s]+/);
+        if (proto) {
+          trabalho_entregue.prototipo_url = proto[0];
+        }
+      }
+
+      trabalho_entregue = {
+        ...trabalho_entregue,
+        codigo_submissao: sub.code,
+        submissao_id: sub.id,
+        titulo: trabalho_entregue.titulo || sub.title,
+        observacoes: trabalho_entregue.observacoes || (sub.abstract ? sub.abstract.slice(0, 400) : ""),
+        enviado_em: trabalho_entregue.enviado_em || (sub.submittedAt ? new Date(sub.submittedAt).toISOString() : new Date().toISOString()),
+        acesso_liberado: trabalho_entregue.acesso_liberado !== false,
+      };
+    }
+  } catch (errSub) {
+    console.warn("[LeaderPortal] Aviso ao mesclar submissions:", errSub);
+  }
+
+  trabalho_entregue.artefatos_adicionais = artefatos;
+
   return {
     id: inscription.id,
-    teamName: inscription.teamName,
-    liderNome: inscription.name,
-    liderEmail: inscription.email,
-    liderTelefone: inscription.phone,
-    membros: notes.membros_detalhes || notes.payload_completo?.membros || [],
-    empatizar: notes.empatizar || {},
-    definir: notes.definir || {},
-    idear: notes.idear || {},
-    escopo: notes.escopo || {},
-    fechamento: notes.fechamento || {},
-    ficha_prototipo: notes.ficha_prototipo || {},
-    trabalho_entregue: notes.trabalho_entregue || {},
+    teamName: inscription.teamName || p.equipeNome || "",
+    liderNome: inscription.name || p.lider?.nome || "",
+    liderEmail: inscription.email || p.lider?.email || "",
+    liderTelefone: inscription.phone || p.lider?.telefone || "",
+    membros,
+    empatizar,
+    definir,
+    idear,
+    escopo,
+    fechamento,
+    ficha_prototipo,
+    trabalho_entregue,
     historico_edicoes: notes.historico_edicoes || [],
   };
 }

@@ -770,28 +770,6 @@ export async function getInscriptionsReport(eventId: string) {
     orderBy: { createdAt: "desc" },
   });
 
-  const participantIds = inscriptions
-    .map((i) => i.participantId)
-    .filter((id): id is string => Boolean(id));
-
-  const participants =
-    participantIds.length > 0
-      ? await prisma.participant.findMany({
-          where: { id: { in: participantIds } },
-          select: {
-            id: true,
-            createdAt: true,
-            checkIns: {
-              select: { createdAt: true },
-              take: 1,
-              orderBy: { createdAt: "desc" },
-            },
-          },
-        })
-      : [];
-
-  const participantMap = new Map(participants.map((p) => [p.id, p]));
-
   return inscriptions.map((ins) => {
     let resolvedTeamName = ins.teamName || null;
     let resolvedMembers = (ins.teamMembers || []).map((m) => m.name);
@@ -819,13 +797,6 @@ export async function getInscriptionsReport(eventId: string) {
       }
     }
 
-    const part = ins.participantId ? participantMap.get(ins.participantId) : null;
-    const confirmedAt =
-      ins.status === "CONFIRMED"
-        ? (part?.createdAt ?? ins.updatedAt).toISOString()
-        : null;
-    const checkedInAt = part?.checkIns?.[0]?.createdAt?.toISOString() ?? null;
-
     return {
       id: ins.id,
       name: ins.name,
@@ -845,10 +816,6 @@ export async function getInscriptionsReport(eventId: string) {
       paymentId: ins.paymentId,
       participantId: ins.participantId,
       createdAt: ins.createdAt.toISOString(),
-      updatedAt: ins.updatedAt.toISOString(),
-      paidAt: confirmedAt,
-      confirmedAt,
-      checkedInAt,
     };
   });
 }
