@@ -586,13 +586,23 @@ export default function CheckInPage() {
                     {/* QR Code específico do Hands On. Inscrição cancelada não dá
                         acesso à sala: o servidor nem envia o token, e aqui só
                         aparece o aviso. */}
-                    {isCancelled || !ho.qrToken ? (
+                    {isCancelled ? (
                       <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 mt-2 text-center">
                         <p className="text-xs font-bold text-red-600 dark:text-red-400">
                           Inscrição cancelada
                         </p>
                         <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
                           Este workshop não dá acesso à sala. Em caso de dúvida, procure a organização do evento.
+                        </p>
+                      </div>
+                    ) : !ho.qrToken ? (
+                      // Aguardando Pix: o QR de acesso só é liberado depois que o pagamento é confirmado.
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mt-2 text-center">
+                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                          Aguardando confirmação do pagamento
+                        </p>
+                        <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
+                          O QR Code de acesso à sala aparece aqui assim que o seu Pix for confirmado pela organização.
                         </p>
                       </div>
                     ) : (
