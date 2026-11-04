@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../../api/client";
-import { EmailFieldWithFeedback } from "../../components/EmailFieldWithFeedback";
 
 /**
  * Configuração e disparo dos e-mails do evento.
@@ -138,7 +137,7 @@ export function EmailsTab({ eventId }: { eventId: string }) {
           </label>
 
           <label>
-            Responder para
+            <span>Responder para</span>
             <input
               type="email"
               value={form.replyTo ?? ""}

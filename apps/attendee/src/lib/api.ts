@@ -371,3 +371,36 @@ export async function adminEditPublicSubmission(
   }
   return data.data;
 }
+
+export interface EmailVerificationResult {
+  valid: boolean;
+  email: string;
+  normalized: string;
+  domain: string;
+  reason?: string;
+  suggestion?: string;
+  details: {
+    syntax: boolean;
+    disposable: boolean;
+    typo: boolean;
+    hasMx: boolean;
+  };
+}
+
+export async function verifyEmail(email: string, checkMx = true): Promise<EmailVerificationResult> {
+  const res = await fetch(`${API_URL}/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, checkMx }),
+  });
+  const json = await res.json();
+  if (json.success) return json.data;
+  return {
+    valid: false,
+    email,
+    normalized: email,
+    domain: email.split("@")[1] || "",
+    reason: json.error?.message || "E-mail inválido.",
+    details: { syntax: false, disposable: false, typo: false, hasMx: false },
+  };
+}

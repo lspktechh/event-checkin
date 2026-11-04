@@ -8,6 +8,7 @@ import {
   getEvent,
   getBatches,
   createInscription,
+  verifyEmail,
   type EventData,
   type BatchItem,
   type InscriptionInput,

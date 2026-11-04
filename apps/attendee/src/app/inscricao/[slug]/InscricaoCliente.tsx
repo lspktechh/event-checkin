@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { loginAttendee } from "@/lib/api";
+import { loginAttendee, verifyEmail } from "@/lib/api";
 import estilos from "./inscricao.module.css";
 
 /**
@@ -98,9 +98,32 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   const [nome, setNome] = useState("");
   const [sobrenome, setSobrenome] = useState("");
   const [email, setEmail] = useState("");
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [cpf, setCpf] = useState("");
   const [telefone, setTelefone] = useState("");
   const [aceite, setAceite] = useState(false);
+
+  async function handleEmailBlur() {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailSuggestion(null);
+      setEmailError(null);
+      return;
+    }
+    try {
+      const res = await verifyEmail(trimmed);
+      if (!res.valid) {
+        setEmailSuggestion(res.suggestion || null);
+        setEmailError(res.reason || "E-mail inválido ou inexistente.");
+      } else {
+        setEmailSuggestion(null);
+        setEmailError(null);
+      }
+    } catch {
+      // Ignora erro de rede no blur
+    }
+  }
 
   // Inscrição em equipe (ver Conteudo.equipe): nomeEquipe + o nome de cada
   // integrante ALÉM do líder (que já é a pessoa preenchendo o formulário
@@ -336,13 +359,66 @@ export function InscricaoCliente({ slug }: { slug: string }) {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError || emailSuggestion) {
+                    setEmailError(null);
+                    setEmailSuggestion(null);
+                  }
+                }}
+                onBlur={handleEmailBlur}
                 required
                 autoComplete="email"
                 inputMode="email"
                 placeholder="maria@exemplo.com"
               />
               <small>É por ele que você acessa seu QR Code e o certificado.</small>
+              {emailSuggestion && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "6px 10px",
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    color: "#92400e",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>
+                    Você quis dizer <strong>{emailSuggestion}</strong>?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail(emailSuggestion);
+                      setEmailSuggestion(null);
+                      setEmailError(null);
+                    }}
+                    style={{
+                      marginLeft: 8,
+                      padding: "4px 8px",
+                      background: "#d97706",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      fontSize: 12,
+                    }}
+                  >
+                    Corrigir
+                  </button>
+                </div>
+              )}
+              {emailError && !emailSuggestion && (
+                <span style={{ color: "#ef4444", fontSize: 12, marginTop: 4, display: "block" }}>
+                  {emailError}
+                </span>
+              )}
             </label>
 
             <div className={estilos.dupla}>
