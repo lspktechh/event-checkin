@@ -600,10 +600,8 @@ export class EmailService {
       isReset?: boolean;
     }
   ): Promise<ResultadoDoEnvio> {
-    const s = resolveEmailSettings(evento.emailSettings, evento.name);
-    if (!s.fromName || s.fromName.includes("COPOL")) {
-      s.fromName = evento.name || "INOVA SAÚDE 2026";
-    }
+    const s = resolveEmailSettings(evento.emailSettings);
+    s.fromName = "LSPk Eventos";
 
     const acaoTexto = params.isReset ? "redefinir a senha de acesso" : "cadastrar a senha de proteção";
     const tituloAssunto = params.isReset ? "Redefinição de Senha" : "Acesso e Senha";
