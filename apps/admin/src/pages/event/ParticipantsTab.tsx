@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { QrCodeModal } from "../../components/QrCodeModal";
 import { ImportCsvModal } from "../../components/ImportCsvModal";
 import { EditParticipantModal } from "../../components/EditParticipantModal";
+import { EmailFieldWithFeedback } from "../../components/EmailFieldWithFeedback";
 import { downloadParticipantsCsv, downloadParticipantsPdf } from "../../utils/participantsReport";
 
 const CERT_LABEL: Record<api.CertificateRowStatus, string> = {
@@ -406,8 +407,12 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
           <input id="p-name" value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div className="field" style={{ flex: 2 }}>
-          <label htmlFor="p-email">E-mail</label>
-          <input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <EmailFieldWithFeedback
+            id="p-email"
+            label="E-mail"
+            value={email}
+            onChange={setEmail}
+          />
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label htmlFor="p-phone">Telefone</label>

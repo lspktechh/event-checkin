@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../../api/client";
+import { EmailFieldWithFeedback } from "../../components/EmailFieldWithFeedback";
 
 /**
  * Configuração e disparo dos e-mails do evento.

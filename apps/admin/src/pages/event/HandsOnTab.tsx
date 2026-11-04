@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import * as api from "../../api/client";
 import { AlertIcon, ClockIcon, BanIcon, BoltIcon, CalendarIcon, CheckIcon, DotIcon, DownloadIcon, FlaskIcon, GradCapIcon, ListIcon, MailIcon, MapPinIcon, MessageIcon, PhoneIcon, PlusIcon, RefreshIcon, SearchIcon, TrashIcon, UserIcon, UsersIcon, WalletIcon } from "../../components/Icons";
+import { EmailFieldWithFeedback } from "../../components/EmailFieldWithFeedback";
 
 interface WorkshopDef {
   id: string;
@@ -3406,17 +3407,15 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
               </label>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
-                  <span>E-mail *</span>
-                  <input
-                    type="email"
-                    placeholder="email@exemplo.com"
+                <div>
+                  <EmailFieldWithFeedback
+                    label="E-mail"
                     value={manualEmail}
-                    onChange={(e) => setManualEmail(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, fontSize: 13 }}
+                    onChange={setManualEmail}
+                    placeholder="email@exemplo.com"
                     required
                   />
-                </label>
+                </div>
 
                 <label className="stack" style={{ gap: 4, fontSize: 12, fontWeight: 600 }}>
                   <span>CPF (apenas números) *</span>

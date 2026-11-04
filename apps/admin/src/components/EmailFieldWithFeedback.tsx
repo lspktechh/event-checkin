@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { getQuickEmailSuggestion } from "../utils/emailValidator.js";
 import * as api from "../api/client.js";
 
