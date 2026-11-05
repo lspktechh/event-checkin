@@ -3202,7 +3202,11 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                             {trab.origem === "inscricao" ? "Enviado na Inscrição" : "Envio Posterior de Trabalho"}
                           </span>
                           <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                            {trab.data}
+                            {trab.data
+                              ? !isNaN(new Date(trab.data).getTime())
+                                ? new Date(trab.data).toLocaleString("pt-BR")
+                                : trab.data
+                              : ""}
                           </span>
                         </div>
 
