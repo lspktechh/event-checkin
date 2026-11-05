@@ -19,6 +19,7 @@ export interface TeamBancaEvaluation {
   teamNumber: number;
   teamName: string;
   ideaDescription?: string;
+  leaderName?: string;
   criterios: CriteriosBanca;
   total: number; // 5 a 25
   anotacoesDeliberacao: string;
@@ -26,6 +27,67 @@ export interface TeamBancaEvaluation {
   atualizadoEm?: string;
   hasInscription: boolean;
   teamData?: any;
+}
+
+function normalizeTeamText(str: string): string {
+  return (str || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function findMatchingInscription(
+  officialName: string,
+  insList: api.InscriptionReportItem[]
+): api.InscriptionReportItem | undefined {
+  const normOfficial = normalizeTeamText(officialName);
+
+  return insList.find((ins) => {
+    let parsedNotes: any = {};
+    if (ins.notes) {
+      try {
+        parsedNotes = JSON.parse(ins.notes);
+      } catch {}
+    }
+
+    const candidates = [
+      ins.teamName,
+      parsedNotes.teamName,
+      parsedNotes.payload_completo?.equipeNome,
+      parsedNotes.idear?.nome_solucao,
+      parsedNotes.payload_completo?.idear?.nome_solucao,
+      parsedNotes.ficha_prototipo?.funcao,
+      parsedNotes.payload_completo?.ficha_prototipo?.funcao,
+    ].filter(Boolean) as string[];
+
+    for (const cand of candidates) {
+      const normCand = normalizeTeamText(cand);
+      if (!normCand) continue;
+      if (normOfficial === normCand) return true;
+      if (normOfficial.includes(normCand) || normCand.includes(normOfficial)) return true;
+    }
+
+    // Heurísticas específicas para as 10 equipes oficiais do INOVA SAÚDE
+    if (normOfficial.includes("burncare") && candidates.some((c) => normalizeTeamText(c).includes("burncare"))) return true;
+    if (
+      normOfficial.includes("comunidade") &&
+      candidates.some((c) => normalizeTeamText(c).includes("vida") || normalizeTeamText(c).includes("academic"))
+    ) return true;
+    if (normOfficial.includes("dosecerta") && candidates.some((c) => normalizeTeamText(c).includes("dosecerta"))) return true;
+    if (normOfficial.includes("ecomix") && candidates.some((c) => normalizeTeamText(c).includes("ecomix"))) return true;
+    if (normOfficial.includes("emergencia") && candidates.some((c) => normalizeTeamText(c).includes("emergencia"))) return true;
+    if (normOfficial.includes("infofast") && candidates.some((c) => normalizeTeamText(c).includes("infofast"))) return true;
+    if (normOfficial.includes("kinetiq") && candidates.some((c) => normalizeTeamText(c).includes("kinetiq"))) return true;
+    if (
+      normOfficial.includes("orthotrack") &&
+      candidates.some((c) => normalizeTeamText(c).includes("orthotrack") || normalizeTeamText(c).includes("ortho"))
+    ) return true;
+    if (normOfficial.includes("prontuario") && candidates.some((c) => normalizeTeamText(c).includes("prontuario"))) return true;
+    if (normOfficial.includes("fisioterapia") && candidates.some((c) => normalizeTeamText(c).includes("fisioterapia"))) return true;
+
+    return false;
+  });
 }
 
 export const INOVA_SAUDE_OFFICIAL_TEAMS = [
@@ -151,12 +213,7 @@ export function EvaluationTab({ eventId, eventName = "INOVA SAÚDE 2026" }: Eval
       INOVA_SAUDE_OFFICIAL_TEAMS.forEach((officialName, idx) => {
         const teamNumber = idx + 1;
         // Tenta achar inscrição correspondente
-        const matchingIns = insList.find((i) => {
-          if (!i.teamName) return false;
-          const cleanTeam = i.teamName.trim().toLowerCase();
-          const cleanOfficial = officialName.trim().toLowerCase();
-          return cleanTeam === cleanOfficial || cleanTeam.includes(cleanOfficial) || cleanOfficial.includes(cleanTeam);
-        });
+        const matchingIns = findMatchingInscription(officialName, insList);
 
         let parsedNotes: any = null;
         if (matchingIns?.notes) {
@@ -237,11 +294,16 @@ export function EvaluationTab({ eventId, eventName = "INOVA SAÚDE 2026" }: Eval
             : [],
         };
 
+        const leaderName = matchingIns
+          ? `${matchingIns.name}${matchingIns.teamName ? ` (${matchingIns.teamName})` : ""}`
+          : undefined;
+
         initialMap[officialName] = {
           id: matchingIns?.id,
           teamNumber,
           teamName: officialName,
           ideaDescription: ideaDesc,
+          leaderName,
           criterios,
           total,
           anotacoesDeliberacao: anotacoes,
@@ -812,6 +874,11 @@ export function EvaluationTab({ eventId, eventName = "INOVA SAÚDE 2026" }: Eval
                         <div style={{ fontWeight: 700, color: "var(--text)", fontSize: "14px" }}>
                           {teamName}
                         </div>
+                        {evalData.leaderName && (
+                          <div style={{ fontSize: "11px", color: "var(--accent)", marginTop: "2px", fontWeight: 600 }}>
+                            👤 {evalData.leaderName}
+                          </div>
+                        )}
                         {evalData.ideaDescription && (
                           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
                             💡 {evalData.ideaDescription}
