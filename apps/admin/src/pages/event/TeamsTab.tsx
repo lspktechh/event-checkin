@@ -225,11 +225,13 @@ export interface TeamRecord {
   vagasRestantes: number;
   trabalhos: TrabalhoItem[];
   createdAt: string;
+  ultimaEdicaoEm?: string;
+  historicoEdicoes?: any[];
   rawInscription: api.InscriptionReportItem;
   avaliacao?: TeamAvaliacao;
 }
 
-type ModalSubTab = "todos" | "integrantes" | "problema" | "solucao" | "escopo" | "prototipo" | "ods" | "entregas";
+type ModalSubTab = "todos" | "integrantes" | "problema" | "solucao" | "escopo" | "prototipo" | "ods" | "entregas" | "historico";
 
 export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabProps) {
   const [inscriptions, setInscriptions] = useState<api.InscriptionReportItem[]>([]);
@@ -301,6 +303,15 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
     } finally {
       setLoading(false);
     }
+  }
+
+  function abrirFichaDaEquipe(team: TeamRecord) {
+    setSelectedTeam(team);
+    setModalTab("todos");
+    // Recarrega silenciosamente os dados para exibir imediatamente alterações recentes feitas no portal
+    api.getInscriptionsReport(eventId).then((freshData) => {
+      setInscriptions(freshData);
+    }).catch(() => {});
   }
 
   // Processa as inscrições e une os dados completos submetidos pelos líderes
@@ -400,8 +411,14 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       if (trilha === "desafio_real") trilhaLabel = "Desafio Real de Saúde (HU/UEL)";
       else if (trilha === "sem_ideia") trilhaLabel = "Banco de Talentos Individual";
 
-      // ─── Dados do Líder ───
-      const liderObj = payload.lider || parsedNotes?.lider || parsedNotes?.membros_detalhes?.[0];
+      // ─── Dados do Líder (prioriza membros_detalhes editado no portal) ───
+      const liderDoArray = parsedNotes?.membros_detalhes?.find((m: any) => m.isLeader);
+      const liderObj =
+        liderDoArray ||
+        parsedNotes?.membros_detalhes?.[0] ||
+        parsedNotes?.lider ||
+        payload.lider;
+
       const lider: TeamMemberDetail = {
         nome: liderObj?.nome?.trim() || ins.name,
         cpf: liderObj?.cpf || ins.document,
@@ -415,13 +432,19 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
         isLeader: true,
       };
 
-      // ─── Demais Integrantes ───
+      // ─── Demais Integrantes (prioriza membros_detalhes editado no portal) ───
       const integrantes: TeamMemberDetail[] = [];
-      const rawMembers = payload.membros || parsedNotes?.membros_detalhes?.slice(1) || [];
+      const rawMembers = parsedNotes?.membros_detalhes || payload.membros || [];
 
       if (Array.isArray(rawMembers) && rawMembers.length > 0) {
         rawMembers.forEach((m: any, idx: number) => {
-          if (m.isLeader || m.nome?.trim() === lider.nome.trim()) return;
+          if (
+            m.isLeader ||
+            (m.nome && m.nome.trim().toLowerCase() === lider.nome.trim().toLowerCase()) ||
+            (m.email && lider.email && m.email.trim().toLowerCase() === lider.email.trim().toLowerCase())
+          ) {
+            return;
+          }
           integrantes.push({
             id: m.id || `m-${idx}`,
             nome: m.nome?.trim() || "Integrante",
@@ -438,7 +461,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
         });
       } else if (ins.teamMembers && ins.teamMembers.length > 0) {
         ins.teamMembers.forEach((mName, idx) => {
-          if (mName.trim() !== lider.nome.trim()) {
+          if (mName.trim().toLowerCase() !== lider.nome.trim().toLowerCase()) {
             integrantes.push({
               id: `leg-${idx}`,
               nome: mName.trim(),
@@ -453,8 +476,8 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
 
       const totalIntegrantes = 1 + integrantes.length;
 
-      // ─── Etapa 1 - Empatizar ───
-      const empatizarRaw = payload.empatizar || parsedNotes?.empatizar || {};
+      // ─── Etapa 1 - Empatizar (prioriza parsedNotes editado no portal) ───
+      const empatizarRaw = parsedNotes?.empatizar || payload.empatizar || {};
       const empatizar = {
         quem_vive: empatizarRaw.quem_vive || payload.ficha_prototipo?.usuario,
         o_que_perde: empatizarRaw.o_que_perde || payload.ficha_prototipo?.dor,
@@ -466,7 +489,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       };
 
       // ─── Etapa 2 - Definir ───
-      const definirRaw = payload.definir || parsedNotes?.definir || {};
+      const definirRaw = parsedNotes?.definir || payload.definir || {};
       const definir = {
         eixo: definirRaw.eixo || payload.ficha_prototipo?.eixo || "Eixo Geral de Saúde",
         frequencia: definirRaw.frequencia,
@@ -476,7 +499,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       };
 
       // ─── Etapa 3 - Idear ───
-      const idearRaw = payload.idear || parsedNotes?.idear || {};
+      const idearRaw = parsedNotes?.idear || payload.idear || {};
       const idear = {
         nome_solucao: idearRaw.nome_solucao || payload.ficha_prototipo?.funcao || teamName,
         categoria: idearRaw.categoria || "Dispositivo / Solução em Saúde",
@@ -485,7 +508,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       };
 
       // ─── Etapa 4 - Escopo ───
-      const escopoRaw = payload.escopo || parsedNotes?.escopo || {};
+      const escopoRaw = parsedNotes?.escopo || payload.escopo || {};
       const escopo = {
         e: escopoRaw.e,
         nao_e: escopoRaw.nao_e,
@@ -494,8 +517,8 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       };
 
       // ─── Etapa 5 - Forma & Ficha Protótipo ───
-      const formaRaw = payload.forma || parsedNotes?.forma || {};
-      const fichaRaw = payload.ficha_prototipo || parsedNotes?.ficha_prototipo || {};
+      const formaRaw = parsedNotes?.forma || payload.forma || {};
+      const fichaRaw = parsedNotes?.ficha_prototipo || payload.ficha_prototipo || {};
       const formas = formaRaw.formas || fichaRaw.formas || [];
 
       const peca3dRaw = formaRaw.campos_forma?.peca_3d || fichaRaw.peca_3d || {};
@@ -523,7 +546,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       };
 
       // ─── Etapa 6 - Fechamento & ODS ───
-      const fechamentoRaw = payload.fechamento || parsedNotes?.fechamento || {};
+      const fechamentoRaw = parsedNotes?.fechamento || payload.fechamento || {};
       const odsList = Array.isArray(fechamentoRaw.ods)
         ? fechamentoRaw.ods
         : Array.isArray(fichaRaw.ods)
@@ -545,14 +568,15 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
 
       // ─── Entregas de Trabalhos / Protótipos ───
       const trabalhos: TrabalhoItem[] = [];
-      if (payload.trabalho_entregue) {
+      const trabalhoEntregue = parsedNotes?.trabalho_entregue || payload.trabalho_entregue;
+      if (trabalhoEntregue) {
         trabalhos.push({
           origem: "inscricao",
-          data: payload.trabalho_entregue.enviado_em || ins.createdAt,
-          videoUrl: payload.trabalho_entregue.video_url,
-          prototipoUrl: payload.trabalho_entregue.prototipo_url,
-          itens: Array.isArray(payload.trabalho_entregue.artefatos_adicionais)
-            ? payload.trabalho_entregue.artefatos_adicionais.map((it: any) => ({
+          data: trabalhoEntregue.enviado_em || ins.createdAt,
+          videoUrl: trabalhoEntregue.video_url,
+          prototipoUrl: trabalhoEntregue.prototipo_url,
+          itens: Array.isArray(trabalhoEntregue.artefatos_adicionais)
+            ? trabalhoEntregue.artefatos_adicionais.map((it: any) => ({
                 tipo: it.tipo || "link",
                 titulo: it.titulo || "Artefato / Documento Complementar",
                 linkUrl: it.linkUrl || it.url || it.link || "",
@@ -560,10 +584,18 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                 arquivoNome: it.arquivoNome || it.name || "",
               }))
             : [],
-          observacoes: payload.trabalho_entregue.observacoes,
-          acessoLiberado: payload.trabalho_entregue.acesso_liberado,
+          observacoes: trabalhoEntregue.observacoes,
+          acessoLiberado: trabalhoEntregue.acesso_liberado,
         });
       }
+
+      // ─── Auditoria e Data da Última Edição Realizada ───
+      const ultimaEdicaoEm = parsedNotes?.ultima_edicao_em || parsedNotes?.payload_completo?.ultima_edicao_em;
+      const historicoEdicoes = Array.isArray(parsedNotes?.historico_edicoes)
+        ? parsedNotes.historico_edicoes
+        : Array.isArray(parsedNotes?.payload_completo?.historico_edicoes)
+        ? parsedNotes.payload_completo.historico_edicoes
+        : [];
 
       const extraWorks = [
         ...(workMap[ins.id] || []),
@@ -613,6 +645,8 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
         vagasRestantes,
         trabalhos,
         createdAt: ins.createdAt,
+        ultimaEdicaoEm,
+        historicoEdicoes,
         rawInscription: ins,
         avaliacao,
       });
@@ -620,6 +654,16 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
 
     return list;
   }, [inscriptions]);
+
+  // Mantém a ficha selecionada sincronizada com dados atualizados
+  useEffect(() => {
+    if (selectedTeam) {
+      const updated = teams.find((t) => t.id === selectedTeam.id);
+      if (updated && updated !== selectedTeam) {
+        setSelectedTeam(updated);
+      }
+    }
+  }, [teams]);
 
   // Lista de eixos únicos
   const eixosDisponiveis = useMemo(() => {
@@ -808,6 +852,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       `**Trilha:** ${team.trilhaLabel}`,
       `**Eixo Temático:** ${team.definir.eixo}`,
       `**Data de Cadastro:** ${new Date(team.createdAt).toLocaleString("pt-BR")}`,
+      `**Última Edição:** ${team.ultimaEdicaoEm ? new Date(team.ultimaEdicaoEm).toLocaleString("pt-BR") : "Sem edições posteriores"}`,
       ``,
       `---`,
       `## 1. INTEGRANTES DA EQUIPE (${team.totalIntegrantes})`,
@@ -1848,10 +1893,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
             <div
               key={team.id}
               className="card"
-              onClick={() => {
-                setSelectedTeam(team);
-                setModalTab("todos");
-              }}
+              onClick={() => abrirFichaDaEquipe(team)}
               style={{
                 padding: "20px",
                 cursor: "pointer",
@@ -2062,8 +2104,10 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                 <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
                   Ver ficha completa <ArrowRightIcon size={12} />
                 </span>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                  {new Date(team.createdAt).toLocaleDateString("pt-BR")}
+                <span style={{ fontSize: "11px", color: team.ultimaEdicaoEm ? "#10b981" : "var(--text-muted)", fontWeight: team.ultimaEdicaoEm ? 600 : 400 }} title={team.ultimaEdicaoEm ? `Última edição: ${new Date(team.ultimaEdicaoEm).toLocaleString("pt-BR")}` : `Inscrito em ${new Date(team.createdAt).toLocaleString("pt-BR")}`}>
+                  {team.ultimaEdicaoEm
+                    ? `✏️ Editado em ${new Date(team.ultimaEdicaoEm).toLocaleDateString("pt-BR")}`
+                    : new Date(team.createdAt).toLocaleDateString("pt-BR")}
                 </span>
               </div>
             </div>
@@ -2124,34 +2168,105 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
 
             {/* Cabeçalho da Equipe */}
             <div style={{ marginBottom: "20px" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <span className="badge badge-cyan" style={{ fontSize: "11px" }}>
-                  {selectedTeam.trilhaLabel}
-                </span>
-                <span className={`badge ${selectedTeam.status === "CONFIRMED" ? "badge-success" : "badge-warning"}`}>
-                  {selectedTeam.status === "CONFIRMED" ? "Inscrição Confirmada" : "Pendente"}
-                </span>
-                {selectedTeam.fechamento.aberta_a_novos ? (
-                  <span className="badge badge-amber" style={{ fontSize: "11px" }}>
-                    {selectedTeam.vagasRestantes} vaga(s) aberta(s)
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                  marginBottom: "8px",
+                  paddingRight: "44px", // espaço reservado para o botão X
+                }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+                  <span className="badge badge-cyan" style={{ fontSize: "11px" }}>
+                    {selectedTeam.trilhaLabel}
                   </span>
-                ) : (
-                  <span className="badge badge-muted" style={{ fontSize: "11px" }}>
-                    Equipe Completa / Fechada
+                  <span className={`badge ${selectedTeam.status === "CONFIRMED" ? "badge-success" : "badge-warning"}`}>
+                    {selectedTeam.status === "CONFIRMED" ? "Inscrição Confirmada" : "Pendente"}
                   </span>
-                )}
+                  {selectedTeam.fechamento.aberta_a_novos ? (
+                    <span className="badge badge-amber" style={{ fontSize: "11px" }}>
+                      {selectedTeam.vagasRestantes} vaga(s) aberta(s)
+                    </span>
+                  ) : (
+                    <span className="badge badge-muted" style={{ fontSize: "11px" }}>
+                      Equipe Completa / Fechada
+                    </span>
+                  )}
+                </div>
+
+                {/* Box de Destaque no Canto: Última Edição Realizada */}
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    background: selectedTeam.ultimaEdicaoEm
+                      ? "rgba(16, 185, 129, 0.12)"
+                      : "rgba(255, 255, 255, 0.04)",
+                    border: `1px solid ${
+                      selectedTeam.ultimaEdicaoEm
+                        ? "rgba(16, 185, 129, 0.35)"
+                        : "var(--border)"
+                    }`,
+                  }}
+                  title={
+                    selectedTeam.ultimaEdicaoEm
+                      ? `Projeto editado pelo líder às ${new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")}`
+                      : "Nenhuma edição recente registrada pelo líder"
+                  }
+                >
+                  <span style={{ fontSize: "15px" }}>{selectedTeam.ultimaEdicaoEm ? "🕒" : "📝"}</span>
+                  <div style={{ lineHeight: 1.2 }}>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                        color: selectedTeam.ultimaEdicaoEm ? "#10b981" : "var(--text-muted)",
+                      }}
+                    >
+                      {selectedTeam.ultimaEdicaoEm ? "Última Edição Realizada" : "Edições do Projeto"}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: selectedTeam.ultimaEdicaoEm ? "#34d399" : "var(--text)",
+                      }}
+                    >
+                      {selectedTeam.ultimaEdicaoEm
+                        ? new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")
+                        : "Sem edições posteriores"}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <h1 style={{ fontSize: "28px", fontWeight: 800, margin: "6px 0", color: "var(--text)" }}>
                 {selectedTeam.teamName}
               </h1>
 
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", display: "flex", flexWrap: "wrap", gap: "12px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center" }}>
                 <span>Protocolo: <code>{selectedTeam.id}</code></span>
                 <span>•</span>
                 <span>Eixo: <strong>{selectedTeam.definir.eixo}</strong></span>
                 <span>•</span>
                 <span>Inscrito em {new Date(selectedTeam.createdAt).toLocaleString("pt-BR")}</span>
+                {selectedTeam.ultimaEdicaoEm && (
+                  <>
+                    <span>•</span>
+                    <span style={{ color: "#10b981", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <span>✏️ Última alteração:</span>
+                      <strong>{new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")}</strong>
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -2460,6 +2575,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                 { id: "prototipo", label: "🛠️ Prototipagem & 3D" },
                 { id: "ods", label: "🌍 Impacto & ODS" },
                 { id: "entregas", label: `📦 Entregas (${selectedTeam.trabalhos.length})` },
+                { id: "historico", label: `🕒 Histórico (${selectedTeam.historicoEdicoes?.length || 0})` },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -3178,6 +3294,73 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 7. SEÇÃO DE HISTÓRICO DE EDIÇÕES / AUDITORIA */}
+            {(modalTab === "todos" || modalTab === "historico") && (
+              <div className="print-card" style={{ marginBottom: "24px" }}>
+                <h3 style={{ fontSize: "14px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--accent)", margin: "0 0 14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>🕒 7. Histórico de Edições Realizadas no Projeto</span>
+                  <span className="badge badge-muted" style={{ fontSize: "11px" }}>
+                    {selectedTeam.historicoEdicoes?.length || 0} registro(s)
+                  </span>
+                </h3>
+
+                {selectedTeam.historicoEdicoes && selectedTeam.historicoEdicoes.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {selectedTeam.historicoEdicoes.map((log: any, idx: number) => (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "10px",
+                          background: "var(--surface)",
+                          border: "1px solid var(--border)",
+                          fontSize: "12px",
+                        }}
+                      >
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
+                          <div style={{ fontWeight: 700, color: "var(--text)" }}>
+                            📅 {new Date(log.timestamp).toLocaleString("pt-BR")}
+                          </div>
+                          <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
+                            Autor: <strong>{log.autor || selectedTeam.lider.email}</strong> {log.ip ? `· IP: ${log.ip}` : ""}
+                          </div>
+                        </div>
+
+                        {Array.isArray(log.alteracoes) && log.alteracoes.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
+                            {log.alteracoes.map((alt: string, aIdx: number) => (
+                              <span
+                                key={aIdx}
+                                className="badge"
+                                style={{
+                                  fontSize: "11px",
+                                  backgroundColor: "rgba(56, 189, 248, 0.12)",
+                                  color: "#38bdf8",
+                                  border: "1px solid rgba(56, 189, 248, 0.25)",
+                                }}
+                              >
+                                ✓ {alt}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ color: "var(--text-muted)", fontStyle: "italic" }}>
+                            Alteração salva no projeto
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: "16px", borderRadius: "10px", background: "rgba(255, 255, 255, 0.03)", border: "1px dashed var(--border)", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
+                    {selectedTeam.ultimaEdicaoEm
+                      ? `Última edição gravada em ${new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")}`
+                      : "Nenhuma alteração posterior foi realizada após a inscrição inicial."}
                   </div>
                 )}
               </div>
