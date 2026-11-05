@@ -398,6 +398,7 @@ export async function updateTeamData(
   if (newData.idear) alteracoes.push("Etapa Idear (Solução e Passos)");
   if (newData.escopo) alteracoes.push("Etapa Escopo (É / Não É / Faz / Não Faz)");
   if (newData.fechamento) alteracoes.push("Etapa Fechamento & Métricas");
+  if (newData.forma) alteracoes.push("Forma do Protótipo & Trava Sanitária");
   if (newData.membros) alteracoes.push(`Composição de Integrantes (${Array.isArray(newData.membros) ? newData.membros.length : 0} pessoas)`);
   if (newData.trabalho_entregue) alteracoes.push("Artefatos / Links de Trabalho");
 
@@ -419,6 +420,7 @@ export async function updateTeamData(
     ...(newData.idear ? { idear: newData.idear } : {}),
     ...(newData.escopo ? { escopo: newData.escopo } : {}),
     ...(newData.fechamento ? { fechamento: newData.fechamento } : {}),
+    ...(newData.forma ? { forma: newData.forma } : {}),
     ...(newData.trabalho_entregue ? { trabalho_entregue: newData.trabalho_entregue } : {}),
     ...(newData.membros ? { membros_detalhes: newData.membros } : {}),
     historico_edicoes: historico,
@@ -435,6 +437,7 @@ export async function updateTeamData(
       ...(newData.idear ? { idear: newData.idear } : {}),
       ...(newData.escopo ? { escopo: newData.escopo } : {}),
       ...(newData.fechamento ? { fechamento: newData.fechamento } : {}),
+      ...(newData.forma ? { forma: newData.forma } : {}),
       ...(newData.trabalho_entregue ? { trabalho_entregue: newData.trabalho_entregue } : {}),
       ...(newData.membros ? { membros: newData.membros } : {}),
     };
@@ -634,14 +637,36 @@ async function formatTeamData(eventId: string, inscription: any, notes: any) {
   const p = notes.payload_completo || {};
 
   // Membros: detalhes editados, array no topo ou payload completo
-  const membros = notes.membros_detalhes || notes.membros || p.membros || [];
+  const rawMembros = notes.membros_detalhes || notes.membros || p.membros || [];
+  let membros = Array.isArray(rawMembros) ? [...rawMembros] : [];
+
+  // Se o líder não estiver explicitamente no array de membros, inclui como primeiro item
+  const liderObj = p.lider || {
+    id: "lider-1",
+    isLeader: true,
+    nome: inscription.name,
+    email: inscription.email,
+    telefone: inscription.phone,
+    vinculo: notes.vinculo || p.lider?.vinculo || "",
+    curso: notes.curso || p.lider?.curso || "",
+    competencias: notes.competencias || p.lider?.competencias || [],
+    papel: "Coordenar a equipe",
+  };
+  const jaTemLider = membros.some(
+    (m) => m.isLeader || (m.email && m.email.toLowerCase() === inscription.email.toLowerCase())
+  );
+  if (!jaTemLider && liderObj.nome) {
+    membros = [{ ...liderObj, isLeader: true }, ...membros];
+  }
 
   // Etapas do projeto
+  const trilha = notes.trilha || p.trilha || "equipe_com_ideia";
   const empatizar = notes.empatizar || p.empatizar || {};
   const definir = notes.definir || p.definir || {};
   const idear = notes.idear || p.idear || {};
   const escopo = notes.escopo || p.escopo || {};
   const fechamento = notes.fechamento || p.fechamento || {};
+  const forma = notes.forma || p.forma || {};
   const ficha_prototipo = notes.ficha_prototipo || p.ficha_prototipo || {};
 
   // Trabalho Entregue / Artefatos
@@ -733,16 +758,20 @@ async function formatTeamData(eventId: string, inscription: any, notes: any) {
 
   return {
     id: inscription.id,
+    trilha,
     teamName: inscription.teamName || p.equipeNome || "",
     liderNome: inscription.name || p.lider?.nome || "",
     liderEmail: inscription.email || p.lider?.email || "",
     liderTelefone: inscription.phone || p.lider?.telefone || "",
+    liderVinculo: liderObj.vinculo || p.lider?.vinculo || "",
+    liderCurso: liderObj.curso || p.lider?.curso || "",
     membros,
     empatizar,
     definir,
     idear,
     escopo,
     fechamento,
+    forma,
     ficha_prototipo,
     trabalho_entregue,
     historico_edicoes: notes.historico_edicoes || [],
