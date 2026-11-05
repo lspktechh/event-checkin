@@ -2,10 +2,12 @@ import { env } from "./config/env.js";
 import { buildApp } from "./app.js";
 import { prisma } from "./database/prisma.js";
 import { syncPermissions } from "./shared/permissions.js";
+import { bootstrapUsers } from "./shared/bootstrap-users.js";
 
 const app = buildApp();
 
 syncPermissions(prisma)
+  .then(() => bootstrapUsers(prisma))
   .then(() =>
     app.listen({ port: env.PORT, host: "0.0.0.0" }).then((address) => {
       app.log.info(`event-checkin backend ouvindo em ${address}`);
