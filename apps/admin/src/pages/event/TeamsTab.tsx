@@ -3423,6 +3423,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                 width: "95vw",
                 maxHeight: "92vh",
                 overflowY: "auto",
+                overflowX: "hidden",
                 padding: "24px",
                 position: "relative",
                 boxShadow: "0 25px 50px rgba(0,0,0,0.7)",
@@ -3560,98 +3561,180 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                         "{critDef.pergunta}"
                       </div>
 
-                      {/* Layout Lado a Lado (O que a equipe colocou + Avaliação da Banca) */}
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                          gap: "16px",
-                          alignItems: "start",
-                        }}
-                      >
+                      {/* Layout Lado a Lado Responsivo (O que a equipe colocou + Avaliação da Banca) */}
+                      <div className="banca-criterion-split">
                         {/* Coluna Esquerda: Informações Declaradas pela Equipe */}
                         <div
                           style={{
                             backgroundColor: "rgba(0, 0, 0, 0.22)",
                             borderRadius: "8px",
-                            padding: "12px",
+                            padding: "14px",
                             border: "1px solid rgba(255, 255, 255, 0.07)",
+                            minWidth: 0,
+                            overflow: "hidden",
                           }}
                         >
                           <TeamCriterionInfoBox critKey={critDef.key} team={evaluatingTeam} />
                         </div>
 
-                        {/* Coluna Direita: Avaliação da Banca */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                          <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#fbbf24", letterSpacing: "0.5px" }}>
-                            ⭐ Atribuir Nota da Banca (1 a 5):
-                          </span>
-
-                          {/* Botões de 1 a 5 */}
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px" }}>
-                            {[1, 2, 3, 4, 5].map((nota) => {
-                              const isSelected = valorAtual === nota;
-                              let descCurta = "";
-                              if (nota === 1) descCurta = "1 - " + critDef.nivel1.slice(0, 20) + "...";
-                              else if (nota === 3) descCurta = "3 - " + critDef.nivel3.slice(0, 20) + "...";
-                              else if (nota === 5) descCurta = "5 - " + critDef.nivel5.slice(0, 20) + "...";
-                              else if (nota === 2) descCurta = "2 - Intermediário";
-                              else if (nota === 4) descCurta = "4 - Intermediário";
-
-                              return (
-                                <button
-                                  key={nota}
-                                  type="button"
-                                  onClick={() => {
-                                    setEvaluationCriterios((prev) => ({
-                                      ...prev,
-                                      [critDef.key]: nota,
-                                    }));
-                                  }}
+                        {/* Coluna Direita: Avaliação da Banca e Guia Oficial */}
+                        <div
+                          style={{
+                            backgroundColor: "rgba(0, 0, 0, 0.22)",
+                            borderRadius: "8px",
+                            padding: "14px",
+                            border: "1px solid rgba(255, 255, 255, 0.07)",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                            gap: "12px",
+                            minWidth: 0,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
+                              <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#fbbf24", letterSpacing: "0.5px" }}>
+                                ⭐ NOTA DA BANCA (1 A 5):
+                              </span>
+                              {valorAtual > 0 && (
+                                <span
                                   style={{
-                                    padding: "8px 4px",
-                                    borderRadius: "6px",
-                                    border: isSelected ? "2px solid #38bdf8" : "1px solid var(--border)",
-                                    backgroundColor: isSelected ? "#0284c7" : "rgba(255, 255, 255, 0.04)",
-                                    color: isSelected ? "#ffffff" : "var(--text)",
-                                    fontWeight: isSelected ? 800 : 600,
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    textAlign: "center",
-                                    transition: "all 0.15s ease",
+                                    fontSize: "11.5px",
+                                    fontWeight: 800,
+                                    color: valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444",
                                   }}
                                 >
-                                  <div style={{ fontSize: "16px", fontWeight: 900 }}>{nota}</div>
-                                  <div style={{ fontSize: "9.5px", opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {descCurta}
-                                  </div>
-                                </button>
-                              );
-                            })}
+                                  {valorAtual === 1 ? "1 - Crítico" : valorAtual === 2 ? "2 - Fraco" : valorAtual === 3 ? "3 - Médio" : valorAtual === 4 ? "4 - Bom" : "5 - Excelente"}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 5 Botões de Nota com largura 100% responsiva */}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "6px", width: "100%" }}>
+                              {[1, 2, 3, 4, 5].map((nota) => {
+                                const isSelected = valorAtual === nota;
+                                return (
+                                  <button
+                                    key={nota}
+                                    type="button"
+                                    onClick={() => {
+                                      setEvaluationCriterios((prev) => ({
+                                        ...prev,
+                                        [critDef.key]: nota,
+                                      }));
+                                    }}
+                                    style={{
+                                      padding: "10px 2px",
+                                      borderRadius: "8px",
+                                      border: isSelected ? "2px solid #38bdf8" : "1px solid var(--border)",
+                                      backgroundColor: isSelected ? "#0284c7" : "rgba(255, 255, 255, 0.04)",
+                                      color: isSelected ? "#ffffff" : "var(--text)",
+                                      cursor: "pointer",
+                                      textAlign: "center",
+                                      transition: "all 0.15s ease",
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <div style={{ fontSize: "18px", fontWeight: 900, lineHeight: 1 }}>{nota}</div>
+                                    <div
+                                      style={{
+                                        fontSize: "9px",
+                                        fontWeight: 600,
+                                        opacity: 0.85,
+                                        marginTop: "4px",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                      }}
+                                    >
+                                      {nota === 1 ? "Crítico" : nota === 2 ? "Fraco" : nota === 3 ? "Médio" : nota === 4 ? "Bom" : "Excelente"}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Guia de Pontuação Oficial deste Critério */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "12px" }}>
+                              <div style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", letterSpacing: "0.5px" }}>
+                                Guia de Avaliação deste Critério:
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setEvaluationCriterios((prev) => ({
+                                    ...prev,
+                                    [critDef.key]: 1,
+                                  }));
+                                }}
+                                style={{
+                                  padding: "6px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  border: valorAtual === 1 ? "1.5px solid #ef4444" : "1px solid rgba(255, 255, 255, 0.06)",
+                                  background: valorAtual === 1 ? "rgba(239, 68, 68, 0.18)" : "rgba(255, 255, 255, 0.02)",
+                                  transition: "all 0.15s ease",
+                                  lineHeight: 1.35,
+                                }}
+                                title="Clique para atribuir Nota 1"
+                              >
+                                <strong style={{ color: "#ef4444" }}>Nota 1:</strong>{" "}
+                                <span style={{ color: "var(--text)" }}>{critDef.nivel1}</span>
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setEvaluationCriterios((prev) => ({
+                                    ...prev,
+                                    [critDef.key]: 3,
+                                  }));
+                                }}
+                                style={{
+                                  padding: "6px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  border: valorAtual === 3 ? "1.5px solid #f59e0b" : "1px solid rgba(255, 255, 255, 0.06)",
+                                  background: valorAtual === 3 ? "rgba(245, 158, 11, 0.18)" : "rgba(255, 255, 255, 0.02)",
+                                  transition: "all 0.15s ease",
+                                  lineHeight: 1.35,
+                                }}
+                                title="Clique para atribuir Nota 3"
+                              >
+                                <strong style={{ color: "#f59e0b" }}>Nota 3:</strong>{" "}
+                                <span style={{ color: "var(--text)" }}>{critDef.nivel3}</span>
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setEvaluationCriterios((prev) => ({
+                                    ...prev,
+                                    [critDef.key]: 5,
+                                  }));
+                                }}
+                                style={{
+                                  padding: "6px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  border: valorAtual === 5 ? "1.5px solid #10b981" : "1px solid rgba(255, 255, 255, 0.06)",
+                                  background: valorAtual === 5 ? "rgba(16, 185, 129, 0.18)" : "rgba(255, 255, 255, 0.02)",
+                                  transition: "all 0.15s ease",
+                                  lineHeight: 1.35,
+                                }}
+                                title="Clique para atribuir Nota 5"
+                              >
+                                <strong style={{ color: "#10b981" }}>Nota 5:</strong>{" "}
+                                <span style={{ color: "var(--text)" }}>{critDef.nivel5}</span>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Descrição contextual da nota selecionada */}
-                          {valorAtual > 0 && (
-                            <div
-                              style={{
-                                fontSize: "11.5px",
-                                color: "var(--text)",
-                                backgroundColor: "rgba(0, 0, 0, 0.2)",
-                                padding: "8px 10px",
-                                borderRadius: "6px",
-                                borderLeft: `3px solid ${
-                                  valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444"
-                                }`,
-                                marginTop: "4px",
-                              }}
-                            >
-                              {valorAtual === 1 && <span><strong>Nota 1:</strong> {critDef.nivel1}</span>}
-                              {valorAtual === 2 && <span><strong>Nota 2:</strong> Intermediário entre 1 e 3.</span>}
-                              {valorAtual === 3 && <span><strong>Nota 3:</strong> {critDef.nivel3}</span>}
-                              {valorAtual === 4 && <span><strong>Nota 4:</strong> Intermediário entre 3 e 5.</span>}
-                              {valorAtual === 5 && <span><strong>Nota 5:</strong> {critDef.nivel5}</span>}
-                            </div>
-                          )}
+                          <div style={{ fontSize: "10.5px", color: "var(--text-muted)", fontStyle: "italic", marginTop: "4px" }}>
+                            💡 Clique nos botões 1 a 5 ou diretamente na descrição acima. Use 2 e 4 para intermediários.
+                          </div>
                         </div>
                       </div>
                     </div>

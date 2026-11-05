@@ -168,7 +168,7 @@ export function TeamCriterionInfoBox({ critKey, team }: TeamCriterionInfoBoxProp
       const oQueAtrapalha = data.definir?.frase?.o_que_atrapalha;
 
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, overflow: "hidden", wordBreak: "break-word" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
             <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#38bdf8", letterSpacing: "0.5px" }}>
               📋 Declarado pela Equipe (Problema):
@@ -231,7 +231,7 @@ export function TeamCriterionInfoBox({ critKey, team }: TeamCriterionInfoBoxProp
       const jaExiste = data.forma?.dispositivo?.ja_existe || data.idear?.frase?.alternativa;
 
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, overflow: "hidden", wordBreak: "break-word" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
             <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#38bdf8", letterSpacing: "0.5px" }}>
               📋 Declarado pela Equipe (Inovação):
@@ -318,7 +318,7 @@ export function TeamCriterionInfoBox({ critKey, team }: TeamCriterionInfoBoxProp
       const duvida = data.fechamento?.maior_duvida || data.fechamento?.duvida_desafio;
 
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, overflow: "hidden", wordBreak: "break-word" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
             <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#38bdf8", letterSpacing: "0.5px" }}>
               📋 Declarado pela Equipe (Viabilidade):
@@ -417,7 +417,7 @@ export function TeamCriterionInfoBox({ critKey, team }: TeamCriterionInfoBoxProp
       const beneficio = data.definir?.frase?.o_que || data.idear?.frase?.beneficio;
 
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, overflow: "hidden", wordBreak: "break-word" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
             <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#38bdf8", letterSpacing: "0.5px" }}>
               📋 Declarado pela Equipe (Impacto):
@@ -482,7 +482,7 @@ export function TeamCriterionInfoBox({ critKey, team }: TeamCriterionInfoBoxProp
       const trabalhos = Array.isArray(data.trabalhos) ? data.trabalhos : [];
 
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, overflow: "hidden", wordBreak: "break-word" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
             <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#38bdf8", letterSpacing: "0.5px" }}>
               📋 Entregas e Links do Protótipo ({trabalhos.length}):
