@@ -56,8 +56,10 @@ export function CredenciamentoPage() {
     };
   }, [eventId]);
 
-  async function handleScan(token: string) {
-    if (processingRef.current || !eventId) return;
+  async function handleScan(scanned: string) {
+    // A câmera às vezes entrega o texto com espaço ou quebra de linha nas pontas.
+    const token = scanned.trim();
+    if (!token || processingRef.current || !eventId) return;
     processingRef.current = true;
     setPaused(true);
 

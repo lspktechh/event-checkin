@@ -837,10 +837,17 @@ export const handsOnService = {
     // `id` chega pelo painel (botão "Fazer Check-in", com permissão de admin):
     // é uma decisão de uma pessoa da equipe. `qrToken` é o que o participante
     // APRESENTA na porta.
-    let reg = await handsOnRepository.findById(idOrToken);
+    const raw = idOrToken.trim();
+    let reg = await handsOnRepository.findById(raw);
     const veioPorId = !!reg;
     if (!reg) {
-      reg = await handsOnRepository.findByQrToken(idOrToken);
+      reg = await handsOnRepository.findByQrToken(raw);
+    }
+    // O site do Hands On mostra `HO-<id da inscrição>` quando não tem o token
+    // em mãos. Esse QR também é o que a pessoa apresenta na porta, então vale
+    // como token (exige pagamento confirmado), não como decisão da equipe.
+    if (!reg && /^HO-[0-9a-f-]{36}$/i.test(raw)) {
+      reg = await handsOnRepository.findById(raw.slice(3));
     }
     if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
 
