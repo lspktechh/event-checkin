@@ -31,6 +31,7 @@ import {
   generateAnonymousTeamPdf,
 } from "../../utils/teamAnonymousPdf";
 import { BANCA_CRITERIOS_DEF, type CriteriosBanca } from "./EvaluationTab";
+import { TeamCriterionInfoBox } from "./TeamCriterionInfoBox";
 
 interface TeamsTabProps {
   eventId: string;
@@ -3418,8 +3419,8 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
             <div
               className="card"
               style={{
-                maxWidth: "760px",
-                width: "100%",
+                maxWidth: "1150px",
+                width: "95vw",
                 maxHeight: "92vh",
                 overflowY: "auto",
                 padding: "24px",
@@ -3514,15 +3515,16 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                     <div
                       key={critDef.key}
                       style={{
-                        padding: "14px",
+                        padding: "16px",
                         borderRadius: "10px",
                         backgroundColor: "rgba(255, 255, 255, 0.03)",
                         border: "1px solid var(--border)",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px", flexWrap: "wrap", gap: "6px" }}>
+                      {/* Topo do Critério */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px", flexWrap: "wrap", gap: "6px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span style={{ fontWeight: 800, color: "#38bdf8", fontSize: "13.5px" }}>
+                          <span style={{ fontWeight: 800, color: "#38bdf8", fontSize: "14px" }}>
                             {critDef.numero}. {critDef.nome}
                           </span>
                           {critDef.desempate && (
@@ -3530,7 +3532,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                               style={{
                                 fontSize: "10px",
                                 fontWeight: 700,
-                                padding: "1px 6px",
+                                padding: "2px 7px",
                                 borderRadius: "4px",
                                 backgroundColor: "rgba(56, 189, 248, 0.2)",
                                 color: "#38bdf8",
@@ -3544,84 +3546,114 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                         {valorAtual > 0 && (
                           <span
                             style={{
-                              fontSize: "12px",
+                              fontSize: "12.5px",
                               fontWeight: 800,
                               color: valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444",
                             }}
                           >
-                            Nota {valorAtual}/5
+                            Nota Atribuída: {valorAtual}/5
                           </span>
                         )}
                       </div>
 
-                      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "10px", fontStyle: "italic" }}>
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "14px", fontStyle: "italic" }}>
                         "{critDef.pergunta}"
                       </div>
 
-                      {/* Botões de 1 a 5 */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px", marginBottom: "8px" }}>
-                        {[1, 2, 3, 4, 5].map((nota) => {
-                          const isSelected = valorAtual === nota;
-                          let descCurta = "";
-                          if (nota === 1) descCurta = "1 - " + critDef.nivel1.slice(0, 20) + "...";
-                          else if (nota === 3) descCurta = "3 - " + critDef.nivel3.slice(0, 20) + "...";
-                          else if (nota === 5) descCurta = "5 - " + critDef.nivel5.slice(0, 20) + "...";
-                          else if (nota === 2) descCurta = "2 - Intermediário";
-                          else if (nota === 4) descCurta = "4 - Intermediário";
-
-                          return (
-                            <button
-                              key={nota}
-                              type="button"
-                              onClick={() => {
-                                setEvaluationCriterios((prev) => ({
-                                  ...prev,
-                                  [critDef.key]: nota,
-                                }));
-                              }}
-                              style={{
-                                padding: "8px 4px",
-                                borderRadius: "6px",
-                                border: isSelected ? "2px solid #38bdf8" : "1px solid var(--border)",
-                                backgroundColor: isSelected ? "#0284c7" : "rgba(255, 255, 255, 0.04)",
-                                color: isSelected ? "#ffffff" : "var(--text)",
-                                fontWeight: isSelected ? 800 : 600,
-                                fontSize: "13px",
-                                cursor: "pointer",
-                                textAlign: "center",
-                                transition: "all 0.15s ease",
-                              }}
-                            >
-                              <div style={{ fontSize: "16px", fontWeight: 900 }}>{nota}</div>
-                              <div style={{ fontSize: "9.5px", opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {descCurta}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Descrição contextual da nota selecionada */}
-                      {valorAtual > 0 && (
+                      {/* Layout Lado a Lado (O que a equipe colocou + Avaliação da Banca) */}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                          gap: "16px",
+                          alignItems: "start",
+                        }}
+                      >
+                        {/* Coluna Esquerda: Informações Declaradas pela Equipe */}
                         <div
                           style={{
-                            fontSize: "11.5px",
-                            color: "var(--text)",
-                            backgroundColor: "rgba(0, 0, 0, 0.2)",
-                            padding: "6px 10px",
-                            borderRadius: "6px",
-                            borderLeft: `3px solid ${
-                              valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444"
-                            }`,
+                            backgroundColor: "rgba(0, 0, 0, 0.22)",
+                            borderRadius: "8px",
+                            padding: "12px",
+                            border: "1px solid rgba(255, 255, 255, 0.07)",
                           }}
                         >
-                          {valorAtual === 1 && <span><strong>Nota 1:</strong> {critDef.nivel1}</span>}
-                          {valorAtual === 2 && <span><strong>Nota 2:</strong> Intermediário entre 1 e 3.</span>}
-                          {valorAtual === 3 && <span><strong>Nota 3:</strong> {critDef.nivel3}</span>}
-                          {valorAtual === 4 && <span><strong>Nota 4:</strong> Intermediário entre 3 e 5.</span>}
-                          {valorAtual === 5 && <span><strong>Nota 5:</strong> {critDef.nivel5}</span>}
+                          <TeamCriterionInfoBox critKey={critDef.key} team={evaluatingTeam} />
                         </div>
-                      )}
+
+                        {/* Coluna Direita: Avaliação da Banca */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#fbbf24", letterSpacing: "0.5px" }}>
+                            ⭐ Atribuir Nota da Banca (1 a 5):
+                          </span>
+
+                          {/* Botões de 1 a 5 */}
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px" }}>
+                            {[1, 2, 3, 4, 5].map((nota) => {
+                              const isSelected = valorAtual === nota;
+                              let descCurta = "";
+                              if (nota === 1) descCurta = "1 - " + critDef.nivel1.slice(0, 20) + "...";
+                              else if (nota === 3) descCurta = "3 - " + critDef.nivel3.slice(0, 20) + "...";
+                              else if (nota === 5) descCurta = "5 - " + critDef.nivel5.slice(0, 20) + "...";
+                              else if (nota === 2) descCurta = "2 - Intermediário";
+                              else if (nota === 4) descCurta = "4 - Intermediário";
+
+                              return (
+                                <button
+                                  key={nota}
+                                  type="button"
+                                  onClick={() => {
+                                    setEvaluationCriterios((prev) => ({
+                                      ...prev,
+                                      [critDef.key]: nota,
+                                    }));
+                                  }}
+                                  style={{
+                                    padding: "8px 4px",
+                                    borderRadius: "6px",
+                                    border: isSelected ? "2px solid #38bdf8" : "1px solid var(--border)",
+                                    backgroundColor: isSelected ? "#0284c7" : "rgba(255, 255, 255, 0.04)",
+                                    color: isSelected ? "#ffffff" : "var(--text)",
+                                    fontWeight: isSelected ? 800 : 600,
+                                    fontSize: "13px",
+                                    cursor: "pointer",
+                                    textAlign: "center",
+                                    transition: "all 0.15s ease",
+                                  }}
+                                >
+                                  <div style={{ fontSize: "16px", fontWeight: 900 }}>{nota}</div>
+                                  <div style={{ fontSize: "9.5px", opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {descCurta}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Descrição contextual da nota selecionada */}
+                          {valorAtual > 0 && (
+                            <div
+                              style={{
+                                fontSize: "11.5px",
+                                color: "var(--text)",
+                                backgroundColor: "rgba(0, 0, 0, 0.2)",
+                                padding: "8px 10px",
+                                borderRadius: "6px",
+                                borderLeft: `3px solid ${
+                                  valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444"
+                                }`,
+                                marginTop: "4px",
+                              }}
+                            >
+                              {valorAtual === 1 && <span><strong>Nota 1:</strong> {critDef.nivel1}</span>}
+                              {valorAtual === 2 && <span><strong>Nota 2:</strong> Intermediário entre 1 e 3.</span>}
+                              {valorAtual === 3 && <span><strong>Nota 3:</strong> {critDef.nivel3}</span>}
+                              {valorAtual === 4 && <span><strong>Nota 4:</strong> Intermediário entre 3 e 5.</span>}
+                              {valorAtual === 5 && <span><strong>Nota 5:</strong> {critDef.nivel5}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
