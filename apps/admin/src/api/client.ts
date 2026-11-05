@@ -1571,6 +1571,7 @@ export interface RaffleClaim {
   number: number;
   createdAt: string;
   eventName: string;
+  deviceKey: string;
 }
 
 export function getRaffle(eventId: string) {

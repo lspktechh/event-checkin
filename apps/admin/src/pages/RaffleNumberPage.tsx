@@ -12,22 +12,50 @@ import * as api from "../api/client";
 
 const DEVICE_KEY_STORAGE = "raffle_device_key";
 
-/** crypto.getRandomValues funciona mesmo fora de HTTPS (ao contrário de randomUUID). */
-function getDeviceKey(): string {
+const KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
+
+function readCookie(name: string): string | null {
   try {
-    const stored = localStorage.getItem(DEVICE_KEY_STORAGE);
-    if (stored && /^[A-Za-z0-9_-]{16,64}$/.test(stored)) return stored;
+    const hit = document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith(`${name}=`));
+    const value = hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
+    return value && KEY_RE.test(value) ? value : null;
   } catch {
-    // navegador sem storage: segue com uma chave só desta visita
+    return null;
   }
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  const key = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Guarda a chave em dois lugares: se um for apagado, o outro segura. */
+function saveDeviceKey(key: string) {
   try {
     localStorage.setItem(DEVICE_KEY_STORAGE, key);
   } catch {
     // ignora
   }
+  try {
+    document.cookie = `${DEVICE_KEY_STORAGE}=${encodeURIComponent(key)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  } catch {
+    // ignora
+  }
+}
+
+/** crypto.getRandomValues funciona mesmo fora de HTTPS (ao contrário de randomUUID). */
+function getDeviceKey(): string {
+  let stored: string | null = null;
+  try {
+    const ls = localStorage.getItem(DEVICE_KEY_STORAGE);
+    if (ls && KEY_RE.test(ls)) stored = ls;
+  } catch {
+    // navegador sem storage
+  }
+  stored = stored ?? readCookie(DEVICE_KEY_STORAGE);
+  if (stored) {
+    saveDeviceKey(stored);
+    return stored;
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const key = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  saveDeviceKey(key);
   return key;
 }
 
@@ -62,6 +90,9 @@ export function RaffleNumberPage() {
         if (cancelled) return;
         setNumber(res.number);
         setEventName(res.eventName);
+        // O servidor pode ter reconhecido o aparelho pelo cookie dele:
+        // alinha a chave local com a que ele usou.
+        if (res.deviceKey && KEY_RE.test(res.deviceKey)) saveDeviceKey(res.deviceKey);
         try {
           localStorage.setItem(cacheKey(eventId), String(res.number));
         } catch {

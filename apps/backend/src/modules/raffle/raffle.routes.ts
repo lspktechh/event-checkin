@@ -17,6 +17,22 @@ const claimBody = z.object({
     .regex(/^[A-Za-z0-9_-]+$/, "deviceKey inválido"),
 });
 
+const DEVICE_COOKIE = "raffle_device";
+const DEVICE_KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
+
+/** Lê o cookie do aparelho sem depender de plugin (o projeto não usa @fastify/cookie). */
+function readDeviceCookie(header: string | undefined): string | null {
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === DEVICE_COOKIE) {
+      const value = decodeURIComponent(v.join("="));
+      return DEVICE_KEY_RE.test(value) ? value : null;
+    }
+  }
+  return null;
+}
+
 const drawBody = z.object({ excludeWinners: z.boolean().optional().default(true) }).optional();
 
 export async function raffleRoutes(app: FastifyInstance) {
@@ -27,10 +43,20 @@ export async function raffleRoutes(app: FastifyInstance) {
   app.post(
     "/public/events/:eventId/raffle/number",
     { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
-    async (request) => {
+    async (request, reply) => {
       const { eventId } = eventIdParams.parse(request.params);
-      const { deviceKey } = claimBody.parse(request.body);
-      return ok(await raffleService.claimNumber(eventId, deviceKey));
+      const body = claimBody.parse(request.body);
+      // O cookie gravado pelo servidor vale mais que a chave do navegador:
+      // ele sobrevive em casos em que o localStorage é apagado, e assim o
+      // mesmo celular continua recebendo o mesmo número.
+      const deviceKey = readDeviceCookie(request.headers.cookie) ?? body.deviceKey;
+      const secure = request.protocol === "https" ? "; Secure" : "";
+      reply.header(
+        "Set-Cookie",
+        `${DEVICE_COOKIE}=${encodeURIComponent(deviceKey)}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${secure}`
+      );
+      const result = await raffleService.claimNumber(eventId, deviceKey);
+      return ok({ ...result, deviceKey });
     }
   );
 
