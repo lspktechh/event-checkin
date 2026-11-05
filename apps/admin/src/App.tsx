@@ -10,6 +10,7 @@ import { UsersPage } from "./pages/UsersPage";
 import { RolesPage } from "./pages/RolesPage";
 import { ApkPage } from "./pages/ApkPage";
 import { CredenciamentoPage } from "./pages/CredenciamentoPage";
+import { RaffleNumberPage } from "./pages/RaffleNumberPage";
 
 export default function App() {
   return (
@@ -17,6 +18,8 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Pública: aberta pelo QR Code da aba Sorteios, sem login. */}
+          <Route path="/numero/:eventId" element={<RaffleNumberPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/eventos/:eventId/credenciamento" element={<CredenciamentoPage />} />
             <Route element={<Layout />}>

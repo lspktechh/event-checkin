@@ -6,6 +6,8 @@ import { syncPermissions } from "../src/shared/permissions.js";
 
 export async function resetDatabase() {
   // Ordem importa: filhos antes dos pais, senão a FK recusa.
+  await prisma.raffleDraw.deleteMany();
+  await prisma.raffleEntry.deleteMany();
   await prisma.submissionAuthor.deleteMany();
   await prisma.submission.deleteMany();
   await prisma.submissionModality.deleteMany();

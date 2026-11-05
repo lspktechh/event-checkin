@@ -19,6 +19,7 @@ import { ScheduleTab } from "./event/ScheduleTab";
 import { CredenciamentoTab } from "./event/CredenciamentoTab";
 import { HandsOnTab } from "./event/HandsOnTab";
 import { TeamsTab } from "./event/TeamsTab";
+import { RaffleTab } from "./event/RaffleTab";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, SmartphoneIcon } from "../components/Icons";
 import { Sheet } from "../components/Sheet";
 
@@ -37,7 +38,8 @@ type Tab =
   | "certificates"
   | "submissions"
   | "emails"
-  | "config";
+  | "config"
+  | "raffle";
 
 /**
  * `gestao`: aba de OPERAÇÃO. Para conta restrita a eventos (conta de
@@ -55,6 +57,12 @@ const TABS: { key: Tab; label: string; permission: string; gestao?: string[] }[]
     gestao: ["participants.edit"],
   },
   { key: "participants", label: "Participantes", permission: "participants.view" },
+  {
+    key: "raffle",
+    label: "Sorteios",
+    permission: "participants.view",
+    gestao: ["participants.edit"],
+  },
   { key: "batches", label: "Lotes", permission: "events.view", gestao: ["events.edit"] },
   { key: "schedule", label: "Programação", permission: "events.view", gestao: ["events.edit"] },
   { key: "emails", label: "E-mails", permission: "events.edit" },
@@ -395,6 +403,7 @@ export function EventDetailPage() {
       ) : null}
 
       {activeTab === "credenciamento" ? <CredenciamentoTab eventId={eventId} /> : null}
+      {activeTab === "raffle" ? <RaffleTab eventId={eventId} /> : null}
       {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "teams" && eventId ? <TeamsTab eventId={eventId} eventName={event?.name} /> : null}
