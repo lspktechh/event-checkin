@@ -174,6 +174,7 @@ export function RaffleTab({ eventId }: Props) {
             <QRCodeSVG value={joinUrl} size={Math.min(window.innerHeight * 0.6, 520)} />
           </div>
           <strong style={{ fontSize: 28 }}>Escaneie para receber seu número</strong>
+          <span className="muted" style={{ fontSize: 20 }}>Abra pela câmera do celular</span>
         </div>
         {shown !== null ? (
           <div className="stack" style={{ alignItems: "center", textAlign: "center" }}>
@@ -214,6 +215,7 @@ export function RaffleTab({ eventId }: Props) {
             <QRCodeSVG value={joinUrl} size={240} />
           </div>
           <strong>Escaneie para receber seu número</strong>
+          <span className="muted" style={{ fontSize: 14, marginTop: -8 }}>Abra pela câmera do celular</span>
           <div className="row" style={{ width: "100%", gap: 8, flexWrap: "nowrap" }}>
             <code
               style={{
