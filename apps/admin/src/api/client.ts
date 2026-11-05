@@ -1545,3 +1545,58 @@ export function verifyEmail(email: string, checkMx = true) {
 
 
 
+
+// --- Sorteios (número aleatório gerado pelo QR Code) ---
+export interface RaffleEntryRecord {
+  id: string;
+  number: number;
+  createdAt: string;
+  wins: number;
+}
+
+export interface RaffleDrawRecord {
+  id: string;
+  entryId: string;
+  number: number;
+  drawnBy: string | null;
+  drawnAt: string;
+}
+
+export interface RaffleState {
+  entries: RaffleEntryRecord[];
+  draws: RaffleDrawRecord[];
+}
+
+export interface RaffleClaim {
+  number: number;
+  createdAt: string;
+  eventName: string;
+}
+
+export function getRaffle(eventId: string) {
+  return request<RaffleState>(`/events/${eventId}/raffle`);
+}
+
+export function drawRaffle(eventId: string, excludeWinners: boolean) {
+  return request<RaffleDrawRecord>(`/events/${eventId}/raffle/draw`, {
+    method: "POST",
+    body: { excludeWinners },
+  });
+}
+
+export function undoRaffleDraw(eventId: string, drawId: string) {
+  return request<{ deletedId: string }>(`/events/${eventId}/raffle/draws/${drawId}`, { method: "DELETE" });
+}
+
+export function resetRaffle(eventId: string) {
+  return request<{ reset: true }>(`/events/${eventId}/raffle`, { method: "DELETE" });
+}
+
+/** Público — usado pela página aberta pelo QR Code (sem login). */
+export function claimRaffleNumber(eventId: string, deviceKey: string) {
+  return request<RaffleClaim>(`/public/events/${eventId}/raffle/number`, {
+    method: "POST",
+    body: { deviceKey },
+    auth: false,
+  });
+}
