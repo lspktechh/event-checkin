@@ -1,6 +1,5 @@
 import { prisma } from "../../database/prisma.js";
 import { AppError, ConflictError, ForbiddenError } from "../../shared/errors.js";
-import { eventIsCopol } from "../../shared/copol.js";
 import { getEventOrThrow } from "../events/events.service.js";
 import * as batchesService from "../batches/batches.service.js";
 import { EMAIL_REGEX, parseCsvRows, type ImportReport, type ImportRowResult } from "../participants/participants.import.js";
@@ -200,54 +199,4 @@ export async function importInscriptions(
     }
   }
   return { ...report, imported, failed };
-}
-
-export interface ConfirmCourtesiesResult {
-  confirmed: number;
-  /** Inscrições que ficaram de fora, com o motivo (ex.: a pessoa já está no evento). */
-  skipped: { id: string; name: string; reason: string }[];
-}
-
-/**
- * COPOL: gera o QR das cortesias que ficaram PENDENTES.
- *
- * Inscrição de valor zero não tem Pix a aguardar, e o sistema confirma as
- * novas na hora; as que ficaram pendentes (criadas antes disso) não têm
- * participante, e portanto não têm QR nem como ser credenciadas. Isto as
- * confirma pelo MESMO caminho do pagamento aprovado (participante com QR,
- * comprovante por e-mail, aviso em tempo real), marcando-as como cortesia.
- *
- * Só toca em inscrição PENDENTE de VALOR ZERO e sem participante: quem vai
- * pagar, quem foi cancelado e quem já foi confirmado ficam como estão. Quem
- * já é participante ativo (mesmo e-mail ou CPF) é pulado, para não nascer um
- * segundo QR para a mesma pessoa. Pode rodar de novo sem efeito.
- */
-export async function confirmPendingCourtesies(eventId: string): Promise<ConfirmCourtesiesResult> {
-  await getEventOrThrow(eventId);
-  if (!(await eventIsCopol(eventId))) {
-    throw new ConflictError("SO_COPOL", "Esta ação só existe para o evento do COPOL");
-  }
-
-  const pendentes = await prisma.inscription.findMany({
-    where: { eventId, status: "PENDING", amount: 0, participantId: null },
-    orderBy: { createdAt: "asc" },
-  });
-
-  const result: ConfirmCourtesiesResult = { confirmed: 0, skipped: [] };
-  for (const ins of pendentes) {
-    if (await isAlreadyInEvent(prisma, eventId, { email: ins.email, document: ins.document })) {
-      result.skipped.push({ id: ins.id, name: ins.name, reason: "Já está no evento com outra inscrição" });
-      continue;
-    }
-    try {
-      // isCourtesy antes de confirmar: o participante herda a marca ao nascer.
-      await prisma.inscription.update({ where: { id: ins.id }, data: { isCourtesy: true } });
-      await confirmInscriptionPayment(ins.id);
-      result.confirmed += 1;
-    } catch (err) {
-      if (!(err instanceof AppError)) throw err;
-      result.skipped.push({ id: ins.id, name: ins.name, reason: err.message });
-    }
-  }
-  return result;
 }

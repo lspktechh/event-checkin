@@ -10,24 +10,18 @@ import { resolveEmailSettings } from "../../lib/email/email-settings.js";
 import type { Prisma } from "@prisma/client";
 
 /**
- * Quem tem ACESSO à sala (e portanto QR de acesso): inscrição CONFIRMADA, ou
- * CORTESIA (valor zero) que ficou pendente — não há Pix a aguardar de quem
- * não paga nada. Quem tem valor a pagar só ganha acesso ao confirmar.
+ * O QR de ACESSO à sala só existe para inscrição CONFIRMADA (paga).
  *
  * - Cancelada não dá acesso: o site o desenharia como um QR válido, e quem o
  *   lesse na porta (ver `checkIn`) entraria sem ter mais a vaga.
- * - Aguardando Pix (com valor) ainda não pagou. O QR que a pessoa vê nessa
- *   fase no site de inscrição é o do PAGAMENTO, outra coisa, e segue existindo.
- *   Ao confirmar, a consulta passa a devolver o token.
+ * - Aguardando Pix ainda não pagou: não tem acesso. O QR que a pessoa vê
+ *   nessa fase no site de inscrição é o do PAGAMENTO, outra coisa, e segue
+ *   existindo. Ao confirmar, a consulta passa a devolver o token.
+ *
+ * A inscrição continua aparecendo na lista, só sem o token.
  */
-function temAcesso(reg: { status: string; amount: unknown }): boolean {
-  if (reg.status === "CONFIRMED") return true;
-  return reg.status === "PENDING" && Number(reg.amount) === 0;
-}
-
-/** A inscrição continua aparecendo na lista, só sem o token quando não tem acesso. */
-function qrComAcesso<T extends { status: string; amount: unknown; qrToken: string }>(reg: T): Omit<T, "qrToken"> & { qrToken: string | null } {
-  return temAcesso(reg) ? reg : { ...reg, qrToken: null };
+function qrSoSeConfirmada<T extends { status: string; qrToken: string }>(reg: T): Omit<T, "qrToken"> & { qrToken: string | null } {
+  return reg.status === "CONFIRMED" ? reg : { ...reg, qrToken: null };
 }
 
 export const HANDS_ON_CAPACITY: Record<string, number> = {
@@ -723,7 +717,7 @@ export const handsOnService = {
       email: reg.email,
       status: reg.status,
       paidAt: reg.paidAt,
-      qrToken: qrComAcesso(reg).qrToken,
+      qrToken: qrSoSeConfirmada(reg).qrToken,
       paymentId: reg.paymentId,
       pixCode: reg.paymentQrCodeContent,
       pixQrCodeBase64: reg.paymentQrCodeBase64,
@@ -770,7 +764,7 @@ export const handsOnService = {
 
   async getAttendeeHandsOn(document: string, email: string, eventId?: string) {
     const lista = await handsOnRepository.findByAttendee(document, email, eventId);
-    return lista.map(qrComAcesso);
+    return lista.map(qrSoSeConfirmada);
   },
 
   async confirmPayment(id: string, notes?: string | null) {
@@ -855,13 +849,12 @@ export const handsOnService = {
       throw new ForbiddenError("Inscrição de Hands On cancelada: não dá acesso à sala");
     }
 
-    // QR apresentado por quem ainda não pagou (Aguardando Pix, com valor): sem acesso.
-    // Cortesia (valor zero) não tem o que pagar e entra mesmo pendente.
+    // QR apresentado por quem ainda não pagou (Aguardando Pix): sem acesso.
     // O token dessa fase não é mostrado ao participante, mas o site de
     // inscrição o recebe no momento da inscrição — sem esta recusa ele valeria
     // como entrada grátis (e o recordCheckin marcaria como CONFIRMED). A equipe
     // confirma o pagamento no painel, ou faz o check-in manual por id.
-    if (!temAcesso(reg) && !veioPorId) {
+    if (reg.status !== "CONFIRMED" && !veioPorId) {
       throw new ForbiddenError("Inscrição de Hands On com pagamento pendente: confirme o pagamento antes de liberar a entrada");
     }
 

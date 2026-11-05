@@ -91,7 +91,6 @@ cortesia — ver "Cortesia no COPOL" abaixo).
 |---|---|---|
 | POST | `/events/:eventId/inscriptions/manual` | Lança uma inscrição já **confirmada**, com participante, QR e comprovante por e-mail. Body: `name, email, document, phone?, institution?, notes?, cortesia?` |
 | POST | `/events/:eventId/inscriptions/import` | Importa inscritos por CSV (mesmas colunas e modo preview/confirm da importação de participantes). Body: `csv, confirm?, cortesia?` |
-| POST | `/events/:eventId/inscriptions/confirm-courtesies` | **Só COPOL** (`participants.edit`). Gera o QR das cortesias que ficaram **pendentes** (ver abaixo) |
 
 Ambas usam o **lote ativo** do evento e ocupam uma vaga dele:
 
@@ -293,13 +292,6 @@ credenciamento por dia ligado). Os demais eventos seguem como antes.
   com QR. Por isso exige e-mail e CPF (`422` no cadastro; `invalid` no preview
   da importação), recusa quem já está no evento (`409 JA_INSCRITO`) e respeita
   o teto do lote. Sem `cortesia`, o participante continua sendo criado solto.
-- **`POST /inscriptions/confirm-courtesies`** confirma, pelo mesmo caminho do
-  pagamento aprovado (participante + QR + comprovante por e-mail), as
-  inscrições `PENDING` de **valor zero** sem participante, marcando-as como
-  cortesia. Não toca em quem vai pagar (valor > 0), cancelados nem já
-  confirmados; pula quem já é participante ativo (e-mail/CPF) e pode rodar de
-  novo sem efeito. Resposta: `{ confirmed, skipped: [{ id, name, reason }] }`.
-  Em evento que não é do COPOL: `409 SO_COPOL`.
 - **`POST /participants/courtesies-to-inscriptions`** traz para Inscritos as
   cortesias que só existem como participante (criadas quando a aba
   Participantes não gerava inscrição). Cria, para cada participante `ACTIVE`
@@ -311,6 +303,8 @@ credenciamento por dia ligado). Os demais eventos seguem como antes.
   inscrição/participante, vem em `skipped` com o motivo. Idempotente.
   Resposta: `{ linked, skipped: [{ id, name, reason }] }`. Fora do COPOL:
   `409 SO_COPOL`.
-- **QR de acesso (site de credenciamento e porta)**: "Aguardando Pix" (valor
-  maior que zero) continua **sem** QR. Hands On pendente de **valor zero**
-  (cortesia/gratuito) tem QR e entra na porta.
+- **Pendente não gera QR.** Inscrição ou Hands On `PENDING` (inclusive o
+  "Aguardando Pix") não tem QR de acesso no site de credenciamento nem entra
+  na porta; só quem está confirmado. Não existe ação em lote que confirme
+  pendentes: a confirmação de uma inscrição pendente é manual, pelo botão da
+  linha em Inscritos.

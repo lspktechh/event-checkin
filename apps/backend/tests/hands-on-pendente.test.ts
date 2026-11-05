@@ -18,7 +18,7 @@ afterAll(async () => {
 const PESSOA = { name: "Ana Souza", email: "ana@exemplo.com", document: "123.456.789-01" };
 
 let seq = 0;
-function inscricao(eventId: string, status: "PENDING" | "CONFIRMED", handsOnId: string, valor = 100) {
+function inscricao(eventId: string, status: "PENDING" | "CONFIRMED", handsOnId: string) {
   seq += 1;
   return prisma.handsOnRegistration.create({
     data: {
@@ -28,7 +28,7 @@ function inscricao(eventId: string, status: "PENDING" | "CONFIRMED", handsOnId: 
       speaker: "Dra. Helena",
       date: "06/11/2026",
       time: "09:00",
-      amount: valor,
+      amount: 100,
       ...PESSOA,
       status,
       qrToken: `HO-token-${status.toLowerCase()}-${seq}-${Math.random().toString(36).slice(2, 8)}`,
@@ -152,57 +152,6 @@ describe("porta do Hands On: QR de inscrição pendente", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().data.alreadyCheckedIn).toBe(false);
-  });
-});
-
-describe("Hands On de valor zero (cortesia) ainda pendente tem acesso", () => {
-  it("portal: a cortesia pendente mostra o QR; quem vai pagar (pendente com valor) continua sem", async () => {
-    // Pega: a regra "só confirmada tem QR" deixar sem QR quem é cortesia e
-    // ficou com status pendente. Cortesia não paga nada, então não há Pix a
-    // aguardar; já quem tem valor a pagar segue sem acesso até confirmar.
-    const event = await createTestEvent();
-    const participant = await prisma.participant.create({
-      data: { eventId: event.id, ...PESSOA, qrToken: "evt_ana_cortesia" },
-    });
-    const attendeeToken = await createAttendeeToken(app, participant);
-    const cortesia = await inscricao(event.id, "PENDING", "ho-a", 0);
-    const aPagar = await inscricao(event.id, "PENDING", "ho-b", 100);
-
-    const res = await app.inject({
-      method: "GET",
-      url: "/attendee/hands-on",
-      headers: { authorization: `Bearer ${attendeeToken}` },
-    });
-
-    const itens = res.json().data as { id: string; qrToken: string | null }[];
-    expect(itens.find((i) => i.id === cortesia.id)?.qrToken).toBe(cortesia.qrToken);
-    expect(itens.find((i) => i.id === aPagar.id)?.qrToken).toBeNull();
-    expect(res.body).not.toContain(aPagar.qrToken);
-  });
-
-  it("porta: o QR de uma cortesia pendente entra e a inscrição vira confirmada", async () => {
-    // Pega: a cortesia ser recusada na porta por estar "pendente", mesmo sem
-    // nada a pagar.
-    const event = await createTestEvent();
-    const cortesia = await inscricao(event.id, "PENDING", "ho-a", 0);
-    const admin = await loginAsAdmin();
-
-    const res = await lerNaPorta(event.id, admin, { qrToken: cortesia.qrToken });
-
-    expect(res.statusCode).toBe(200);
-    const depois = await prisma.handsOnRegistration.findUniqueOrThrow({ where: { id: cortesia.id } });
-    expect(depois.status).toBe("CONFIRMED");
-    expect(depois.checkedInAt).not.toBeNull();
-  });
-
-  it("a consulta pelo id (tela de pagamento) também entrega o QR da cortesia pendente", async () => {
-    // Pega: proteger o portal e esquecer a terceira via que devolve o token.
-    const event = await createTestEvent();
-    const cortesia = await inscricao(event.id, "PENDING", "ho-a", 0);
-
-    const res = await app.inject({ method: "GET", url: `/public/hands-on/inscriptions/${cortesia.id}` });
-
-    expect(res.json().data.qrToken).toBe(cortesia.qrToken);
   });
 });
 
