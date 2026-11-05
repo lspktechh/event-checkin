@@ -30,6 +30,7 @@ import {
   exportTeamsEvaluationZip,
   generateAnonymousTeamPdf,
 } from "../../utils/teamAnonymousPdf";
+import { BANCA_CRITERIOS_DEF, type CriteriosBanca } from "./EvaluationTab";
 
 interface TeamsTabProps {
   eventId: string;
@@ -119,10 +120,14 @@ export interface TrabalhoItem {
   acessoLiberado?: boolean;
 }
 
+export type TeamAvaliacaoCriterios = CriteriosBanca;
+
 export interface TeamAvaliacao {
-  nota: number; // 1 a 10
+  nota: number; // total (5 a 25) ou nota legada
+  criterios?: CriteriosBanca;
   posicao?: string;
   comentario?: string;
+  anotacoesDeliberacao?: string;
   avaliadorNome?: string;
   atualizadoEm?: string;
 }
@@ -246,8 +251,16 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
   const [evaluatingTeam, setEvaluatingTeam] = useState<TeamRecord | null>(null);
   const [savingEvaluation, setSavingEvaluation] = useState(false);
   const [evaluationNota, setEvaluationNota] = useState<number | null>(null);
+  const [evaluationCriterios, setEvaluationCriterios] = useState<CriteriosBanca>({
+    problema: 0,
+    inovacao: 0,
+    viabilidade: 0,
+    impacto: 0,
+    prototipoApresentacao: 0,
+  });
   const [evaluationPosicao, setEvaluationPosicao] = useState<string>("");
   const [evaluationComentario, setEvaluationComentario] = useState<string>("");
+  const [evaluationAnotacoesDeliberacao, setEvaluationAnotacoesDeliberacao] = useState<string>("");
   const [evaluationAvaliadorNome, setEvaluationAvaliadorNome] = useState<string>("");
 
   // Estado do Modal de Adição/Edição de Trabalho da Equipe
@@ -565,8 +578,10 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
         avaliacaoRaw && typeof avaliacaoRaw.nota === "number"
           ? {
               nota: avaliacaoRaw.nota,
+              criterios: avaliacaoRaw.criterios,
               posicao: avaliacaoRaw.posicao || undefined,
               comentario: avaliacaoRaw.comentario || undefined,
+              anotacoesDeliberacao: avaliacaoRaw.anotacoesDeliberacao || undefined,
               avaliadorNome: avaliacaoRaw.avaliadorNome || undefined,
               atualizadoEm: avaliacaoRaw.atualizadoEm || undefined,
             }
@@ -918,19 +933,56 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
 
   function abrirModalAvaliacao(team: TeamRecord) {
     setEvaluatingTeam(team);
-    setEvaluationNota(team.avaliacao?.nota ?? null);
+    const crit = team.avaliacao?.criterios;
+    if (crit) {
+      setEvaluationCriterios({
+        problema: crit.problema || 0,
+        inovacao: crit.inovacao || 0,
+        viabilidade: crit.viabilidade || 0,
+        impacto: crit.impacto || 0,
+        prototipoApresentacao: crit.prototipoApresentacao || 0,
+      });
+      setEvaluationNota(team.avaliacao?.nota ?? null);
+    } else {
+      setEvaluationCriterios({
+        problema: 0,
+        inovacao: 0,
+        viabilidade: 0,
+        impacto: 0,
+        prototipoApresentacao: 0,
+      });
+      setEvaluationNota(team.avaliacao?.nota ?? null);
+    }
     setEvaluationPosicao(team.avaliacao?.posicao ?? "");
     setEvaluationComentario(team.avaliacao?.comentario ?? "");
+    setEvaluationAnotacoesDeliberacao(team.avaliacao?.anotacoesDeliberacao ?? "");
     const storedAvaliador = typeof window !== "undefined" ? localStorage.getItem("inova_avaliador_nome") || "" : "";
     setEvaluationAvaliadorNome(team.avaliacao?.avaliadorNome ?? storedAvaliador);
   }
 
   async function salvarAvaliacao() {
     if (!evaluatingTeam) return;
-    if (evaluationNota === null || evaluationNota < 1 || evaluationNota > 10) {
-      alert("Por favor, selecione uma nota de 1 a 10 para a ideia da equipe.");
+
+    const somaCriterios =
+      (evaluationCriterios.problema || 0) +
+      (evaluationCriterios.inovacao || 0) +
+      (evaluationCriterios.viabilidade || 0) +
+      (evaluationCriterios.impacto || 0) +
+      (evaluationCriterios.prototipoApresentacao || 0);
+
+    const hasAllCriterios =
+      evaluationCriterios.problema >= 1 &&
+      evaluationCriterios.inovacao >= 1 &&
+      evaluationCriterios.viabilidade >= 1 &&
+      evaluationCriterios.impacto >= 1 &&
+      evaluationCriterios.prototipoApresentacao >= 1;
+
+    if (!hasAllCriterios && evaluationNota === null) {
+      alert("Por favor, selecione uma nota de 1 a 5 para todos os 5 critérios da banca.");
       return;
     }
+
+    const notaFinal = hasAllCriterios ? somaCriterios : (evaluationNota ?? 0);
 
     setSavingEvaluation(true);
     try {
@@ -944,24 +996,50 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       }
 
       const novaAvaliacao: TeamAvaliacao = {
-        nota: evaluationNota,
+        nota: notaFinal,
+        criterios: hasAllCriterios ? evaluationCriterios : undefined,
         posicao: evaluationPosicao.trim() || undefined,
         comentario: evaluationComentario.trim() || undefined,
+        anotacoesDeliberacao: evaluationAnotacoesDeliberacao.trim() || undefined,
         avaliadorNome: evaluationAvaliadorNome.trim() || undefined,
         atualizadoEm: new Date().toISOString(),
       };
 
-      baseNotesObj.avaliacao = novaAvaliacao;
+      baseNotesObj.avaliacao = {
+        ...novaAvaliacao,
+        metodologia: "INOVA_SAUDE_2026_5_CRITERIOS",
+      };
 
       if (evaluationAvaliadorNome.trim() && typeof window !== "undefined") {
         localStorage.setItem("inova_avaliador_nome", evaluationAvaliadorNome.trim());
+      }
+
+      // Sincroniza com localStorage da aba Banca Avaliadora
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(`inova_banca_evaluations_${eventId}`);
+          const map = raw ? JSON.parse(raw) : {};
+          map[evaluatingTeam.teamName] = {
+            id: evaluatingTeam.id,
+            teamNumber: 0,
+            teamName: evaluatingTeam.teamName,
+            ideaDescription: evaluatingTeam.idear?.nome_solucao || "",
+            criterios: evaluationCriterios,
+            total: notaFinal,
+            anotacoesDeliberacao: evaluationAnotacoesDeliberacao.trim(),
+            avaliadorNome: evaluationAvaliadorNome.trim(),
+            atualizadoEm: new Date().toISOString(),
+            hasInscription: true,
+          };
+          localStorage.setItem(`inova_banca_evaluations_${eventId}`, JSON.stringify(map));
+        } catch {}
       }
 
       await api.updateInscription(eventId, evaluatingTeam.id, {
         notes: JSON.stringify(baseNotesObj),
       });
 
-      showToast(`Avaliação da equipe "${evaluatingTeam.teamName}" salva com sucesso! ⭐ ${evaluationNota}/10`);
+      showToast(`Avaliação da equipe "${evaluatingTeam.teamName}" salva com sucesso! ⭐ ${notaFinal}/25`);
 
       if (selectedTeam && selectedTeam.id === evaluatingTeam.id) {
         setSelectedTeam({
@@ -999,6 +1077,17 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
       }
 
       delete baseNotesObj.avaliacao;
+
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(`inova_banca_evaluations_${eventId}`);
+          if (raw) {
+            const map = JSON.parse(raw);
+            delete map[evaluatingTeam.teamName];
+            localStorage.setItem(`inova_banca_evaluations_${eventId}`, JSON.stringify(map));
+          }
+        } catch {}
+      }
 
       await api.updateInscription(eventId, evaluatingTeam.id, {
         notes: JSON.stringify(baseNotesObj),
@@ -1860,7 +1949,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                 </div>
               </div>
 
-              {/* ─── Avaliação da Ideia & Nota ─── */}
+              {/* ─── Avaliação da Ideia & Nota (Ficha da Banca) ─── */}
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: "10px" }} onClick={(e) => e.stopPropagation()}>
                 {team.avaliacao ? (
                   <div
@@ -1868,47 +1957,82 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                       background: "rgba(16, 185, 129, 0.08)",
                       border: "1px solid rgba(16, 185, 129, 0.25)",
                       borderRadius: "8px",
-                      padding: "6px 10px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "8px",
+                      padding: "8px 10px",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                      <span
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            background:
+                              team.avaliacao.criterios || team.avaliacao.nota > 10
+                                ? team.avaliacao.nota >= 22
+                                  ? "#10b981"
+                                  : team.avaliacao.nota >= 18
+                                  ? "#06b6d4"
+                                  : team.avaliacao.nota >= 14
+                                  ? "#f59e0b"
+                                  : "#ef4444"
+                                : team.avaliacao.nota >= 9
+                                ? "#10b981"
+                                : team.avaliacao.nota >= 7
+                                ? "#06b6d4"
+                                : team.avaliacao.nota >= 5
+                                ? "#f59e0b"
+                                : "#ef4444",
+                            color: "#ffffff",
+                            fontWeight: 800,
+                            fontSize: "11px",
+                            padding: "2px 7px",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          ⭐ {team.avaliacao.nota}/{team.avaliacao.criterios || team.avaliacao.nota > 10 ? "25" : "10"}
+                        </span>
+                        {team.avaliacao.posicao && (
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#fbbf24" }}>
+                            🏆 {team.avaliacao.posicao}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: "2px 8px", fontSize: "11px", height: "auto" }}
+                        onClick={() => abrirModalAvaliacao(team)}
+                      >
+                        Editar Ficha
+                      </button>
+                    </div>
+
+                    {team.avaliacao.criterios && (
+                      <div
                         style={{
-                          background:
-                            team.avaliacao.nota >= 9
-                              ? "#10b981"
-                              : team.avaliacao.nota >= 7
-                              ? "#06b6d4"
-                              : team.avaliacao.nota >= 5
-                              ? "#f59e0b"
-                              : "#ef4444",
-                          color: "#ffffff",
-                          fontWeight: 800,
-                          fontSize: "11px",
-                          padding: "2px 7px",
-                          borderRadius: "6px",
+                          display: "flex",
+                          gap: "4px",
+                          marginTop: "6px",
+                          fontSize: "10px",
+                          color: "var(--text-muted)",
+                          flexWrap: "wrap",
                         }}
                       >
-                        ⭐ {team.avaliacao.nota}/10
-                      </span>
-                      {team.avaliacao.posicao && (
-                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#fbbf24" }}>
-                          🏆 {team.avaliacao.posicao}
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8", fontWeight: 700 }} title="Problema (1º Desempate)">
+                          P: {team.avaliacao.criterios.problema}
                         </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: "2px 8px", fontSize: "11px", height: "auto" }}
-                      onClick={() => abrirModalAvaliacao(team)}
-                    >
-                      Editar Nota
-                    </button>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)" }} title="Inovação">
+                          I: {team.avaliacao.criterios.inovacao}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8", fontWeight: 700 }} title="Viabilidade (2º Desempate)">
+                          V: {team.avaliacao.criterios.viabilidade}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)" }} title="Impacto">
+                          Imp: {team.avaliacao.criterios.impacto}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)" }} title="Protótipo e Apresentação">
+                          Prot: {team.avaliacao.criterios.prototipoApresentacao}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <button
@@ -1929,7 +2053,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                     }}
                     onClick={() => abrirModalAvaliacao(team)}
                   >
-                    ⭐ Avaliar Ideia & Nota (1-10)
+                    ⭐ Avaliar na Banca (5 Critérios)
                   </button>
                 )}
               </div>
@@ -2155,13 +2279,13 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                 <span>
                   ⭐{" "}
                   {selectedTeam.avaliacao
-                    ? `Nota: ${selectedTeam.avaliacao.nota}/10 (${selectedTeam.avaliacao.posicao || "Editar"})`
-                    : "Avaliar Ideia da Equipe"}
+                    ? `Nota: ${selectedTeam.avaliacao.nota}/${selectedTeam.avaliacao.criterios || selectedTeam.avaliacao.nota > 10 ? "25" : "10"} (${selectedTeam.avaliacao.posicao || "Editar"})`
+                    : "Avaliar na Banca (5 Critérios)"}
                 </span>
               </button>
             </div>
 
-            {/* ──── BANNER DE AVALIAÇÃO DA BANCA ──── */}
+            {/* ──── BANNER DE AVALIAÇÃO DA BANCA (INOVA SAÚDE 2026) ──── */}
             {selectedTeam.avaliacao ? (
               <div
                 style={{
@@ -2172,7 +2296,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                   border: "1px solid rgba(16, 185, 129, 0.35)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "10px",
+                  gap: "12px",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
@@ -2180,7 +2304,15 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                     <span
                       style={{
                         background:
-                          selectedTeam.avaliacao.nota >= 9
+                          selectedTeam.avaliacao.criterios || selectedTeam.avaliacao.nota > 10
+                            ? selectedTeam.avaliacao.nota >= 22
+                              ? "#10b981"
+                              : selectedTeam.avaliacao.nota >= 18
+                              ? "#06b6d4"
+                              : selectedTeam.avaliacao.nota >= 14
+                              ? "#f59e0b"
+                              : "#ef4444"
+                            : selectedTeam.avaliacao.nota >= 9
                             ? "#10b981"
                             : selectedTeam.avaliacao.nota >= 7
                             ? "#06b6d4"
@@ -2194,7 +2326,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                         borderRadius: "8px",
                       }}
                     >
-                      ⭐ Nota da Ideia: {selectedTeam.avaliacao.nota}/10
+                      ⭐ Nota da Banca: {selectedTeam.avaliacao.nota}/{selectedTeam.avaliacao.criterios || selectedTeam.avaliacao.nota > 10 ? "25" : "10"}
                     </span>
                     {selectedTeam.avaliacao.posicao && (
                       <span style={{ fontSize: "14px", fontWeight: 800, color: "#fbbf24" }}>
@@ -2211,6 +2343,57 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                     ✏️ Editar Avaliação
                   </button>
                 </div>
+
+                {/* 5 Critérios Oficiais da Banca */}
+                {selectedTeam.avaliacao.criterios && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                      gap: "8px",
+                      background: "rgba(0, 0, 0, 0.2)",
+                      padding: "12px",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(56, 189, 248, 0.12)", border: "1px solid rgba(56, 189, 248, 0.3)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "#38bdf8", textTransform: "uppercase" }}>1. Problema (1º Desemp.)</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.problema}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.04)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>2. Inovação</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.inovacao}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(56, 189, 248, 0.12)", border: "1px solid rgba(56, 189, 248, 0.3)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "#38bdf8", textTransform: "uppercase" }}>3. Viabilidade (2º Desemp.)</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.viabilidade}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.04)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>4. Impacto</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.impacto}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.04)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>5. Protótipo & Apres.</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.prototipoApresentacao}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedTeam.avaliacao.anotacoesDeliberacao && (
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      color: "var(--text)",
+                      lineHeight: 1.5,
+                      background: "rgba(0,0,0,0.18)",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      borderLeft: "3px solid #38bdf8",
+                    }}
+                  >
+                    <strong style={{ color: "#38bdf8" }}>Anotações para a Deliberação:</strong> {selectedTeam.avaliacao.anotacoesDeliberacao}
+                  </div>
+                )}
 
                 {selectedTeam.avaliacao.comentario && (
                   <div
@@ -2254,7 +2437,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                 }}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                  ⭐ Esta equipe ainda não possui nota atribuída por um avaliador.
+                  ⭐ Esta equipe ainda não possui notas atribuídas na banca examinadora.
                 </div>
                 <button
                   type="button"
@@ -2262,7 +2445,7 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
                   style={{ color: "#fbbf24", borderColor: "rgba(245, 158, 11, 0.4)" }}
                   onClick={() => abrirModalAvaliacao(selectedTeam)}
                 >
-                  ⭐ Avaliar Ideia & Nota
+                  ⭐ Avaliar na Banca (5 Critérios)
                 </button>
               </div>
             )}
@@ -3014,286 +3197,428 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
         </div>
       )}
 
-      {/* ──── MODAL DE AVALIAÇÃO DA IDEIA (BANCA EXAMINADORA) ──── */}
-      {evaluatingTeam && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.8)",
-            zIndex: 1100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "16px",
-            backdropFilter: "blur(6px)",
-          }}
-          onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
-        >
+      {/* ──── MODAL DE AVALIAÇÃO DA IDEIA (FICHA DA BANCA INOVA SAÚDE 2026) ──── */}
+      {evaluatingTeam && (() => {
+        const liveSoma =
+          (evaluationCriterios.problema || 0) +
+          (evaluationCriterios.inovacao || 0) +
+          (evaluationCriterios.viabilidade || 0) +
+          (evaluationCriterios.impacto || 0) +
+          (evaluationCriterios.prototipoApresentacao || 0);
+
+        const allFiveRated =
+          evaluationCriterios.problema >= 1 &&
+          evaluationCriterios.inovacao >= 1 &&
+          evaluationCriterios.viabilidade >= 1 &&
+          evaluationCriterios.impacto >= 1 &&
+          evaluationCriterios.prototipoApresentacao >= 1;
+
+        return (
           <div
-            className="card"
             style={{
-              maxWidth: "580px",
-              width: "100%",
-              maxHeight: "92vh",
-              overflowY: "auto",
-              padding: "24px",
-              position: "relative",
-              boxShadow: "0 25px 50px rgba(0,0,0,0.7)",
-              border: "1px solid var(--border)",
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.85)",
+              zIndex: 1100,
               display: "flex",
-              flexDirection: "column",
-              gap: "18px",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "16px",
+              backdropFilter: "blur(6px)",
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
           >
-            {/* Cabeçalho */}
             <div
+              className="card"
               style={{
+                maxWidth: "760px",
+                width: "100%",
+                maxHeight: "92vh",
+                overflowY: "auto",
+                padding: "24px",
+                position: "relative",
+                boxShadow: "0 25px 50px rgba(0,0,0,0.7)",
+                border: "1px solid var(--border)",
                 display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: "12px",
-                borderBottom: "1px solid var(--border)",
-                paddingBottom: "14px",
+                flexDirection: "column",
+                gap: "18px",
               }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <div>
-                <span
+              {/* Cabeçalho */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  borderBottom: "1px solid var(--border)",
+                  paddingBottom: "14px",
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      color: "#fbbf24",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    ⭐ Ficha da Banca INOVA SAÚDE 2026
+                  </span>
+                  <h2 style={{ margin: "4px 0 2px", fontSize: "20px", fontWeight: 800, color: "var(--text)" }}>
+                    Avaliação da Equipe: {evaluatingTeam.teamName}
+                  </h2>
+                  <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                    Solução Proposta: <strong style={{ color: "var(--text)" }}>{evaluatingTeam.idear?.nome_solucao || "Em desenvolvimento"}</strong>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
                   style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#fbbf24",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
+                    background: "rgba(255,255,255,0.08)",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--text)",
+                    padding: "6px",
+                    borderRadius: "6px",
                   }}
                 >
-                  ⭐ Banca Examinadora / Avaliador
-                </span>
-                <h2 style={{ margin: "4px 0 2px", fontSize: "20px", fontWeight: 800, color: "var(--text)" }}>
-                  Avaliação da Ideia da Equipe
-                </h2>
-                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                  Equipe: <strong style={{ color: "var(--text)" }}>{evaluatingTeam.teamName}</strong> • Solução:{" "}
-                  <em>{evaluatingTeam.idear.nome_solucao}</em>
+                  <XIcon size={18} />
+                </button>
+              </div>
+
+              {/* Banner de Instruções e Regra de Ouro */}
+              <div
+                style={{
+                  background: "rgba(56, 189, 248, 0.08)",
+                  border: "1px solid rgba(56, 189, 248, 0.25)",
+                  borderRadius: "8px",
+                  padding: "12px 14px",
+                  fontSize: "12.5px",
+                  lineHeight: "1.5",
+                  color: "var(--text)",
+                }}
+              >
+                <div style={{ fontWeight: 700, color: "#38bdf8", marginBottom: "4px" }}>
+                  📋 Como avaliar: Dê uma nota de 1 a 5 em cada critério
+                </div>
+                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                  Use 2 e 4 para os casos entre as descrições. Os cinco têm o mesmo peso (2, como no edital), então basta somar: <strong>máximo 25</strong>. Todas as equipes começam do zero hoje.
+                </div>
+                <div style={{ marginTop: "6px", fontSize: "12px", color: "#fbbf24" }}>
+                  💡 <strong>Acabamento não conta.</strong> Um protótipo de papel testado com usuários vale mais que um app bonito nunca testado.
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "11.5px", color: "var(--text-muted)" }}>
+                  ⚖️ <strong>Critérios de desempate:</strong> 1º maior nota em <em>Problema</em>. Se continuar empatado, 2º maior nota em <em>Viabilidade</em>.
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
+              {/* 5 Critérios Oficiais */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {BANCA_CRITERIOS_DEF.map((critDef) => {
+                  const valorAtual = evaluationCriterios[critDef.key] || 0;
+
+                  return (
+                    <div
+                      key={critDef.key}
+                      style={{
+                        padding: "14px",
+                        borderRadius: "10px",
+                        backgroundColor: "rgba(255, 255, 255, 0.03)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px", flexWrap: "wrap", gap: "6px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontWeight: 800, color: "#38bdf8", fontSize: "13.5px" }}>
+                            {critDef.numero}. {critDef.nome}
+                          </span>
+                          {critDef.desempate && (
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: 700,
+                                padding: "1px 6px",
+                                borderRadius: "4px",
+                                backgroundColor: "rgba(56, 189, 248, 0.2)",
+                                color: "#38bdf8",
+                              }}
+                            >
+                              {critDef.desempate}
+                            </span>
+                          )}
+                        </div>
+
+                        {valorAtual > 0 && (
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: 800,
+                              color: valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444",
+                            }}
+                          >
+                            Nota {valorAtual}/5
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "10px", fontStyle: "italic" }}>
+                        "{critDef.pergunta}"
+                      </div>
+
+                      {/* Botões de 1 a 5 */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px", marginBottom: "8px" }}>
+                        {[1, 2, 3, 4, 5].map((nota) => {
+                          const isSelected = valorAtual === nota;
+                          let descCurta = "";
+                          if (nota === 1) descCurta = "1 - " + critDef.nivel1.slice(0, 20) + "...";
+                          else if (nota === 3) descCurta = "3 - " + critDef.nivel3.slice(0, 20) + "...";
+                          else if (nota === 5) descCurta = "5 - " + critDef.nivel5.slice(0, 20) + "...";
+                          else if (nota === 2) descCurta = "2 - Intermediário";
+                          else if (nota === 4) descCurta = "4 - Intermediário";
+
+                          return (
+                            <button
+                              key={nota}
+                              type="button"
+                              onClick={() => {
+                                setEvaluationCriterios((prev) => ({
+                                  ...prev,
+                                  [critDef.key]: nota,
+                                }));
+                              }}
+                              style={{
+                                padding: "8px 4px",
+                                borderRadius: "6px",
+                                border: isSelected ? "2px solid #38bdf8" : "1px solid var(--border)",
+                                backgroundColor: isSelected ? "#0284c7" : "rgba(255, 255, 255, 0.04)",
+                                color: isSelected ? "#ffffff" : "var(--text)",
+                                fontWeight: isSelected ? 800 : 600,
+                                fontSize: "13px",
+                                cursor: "pointer",
+                                textAlign: "center",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <div style={{ fontSize: "16px", fontWeight: 900 }}>{nota}</div>
+                              <div style={{ fontSize: "9.5px", opacity: 0.85, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {descCurta}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Descrição contextual da nota selecionada */}
+                      {valorAtual > 0 && (
+                        <div
+                          style={{
+                            fontSize: "11.5px",
+                            color: "var(--text)",
+                            backgroundColor: "rgba(0, 0, 0, 0.2)",
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            borderLeft: `3px solid ${
+                              valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444"
+                            }`,
+                          }}
+                        >
+                          {valorAtual === 1 && <span><strong>Nota 1:</strong> {critDef.nivel1}</span>}
+                          {valorAtual === 2 && <span><strong>Nota 2:</strong> Intermediário entre 1 e 3.</span>}
+                          {valorAtual === 3 && <span><strong>Nota 3:</strong> {critDef.nivel3}</span>}
+                          {valorAtual === 4 && <span><strong>Nota 4:</strong> Intermediário entre 3 e 5.</span>}
+                          {valorAtual === 5 && <span><strong>Nota 5:</strong> {critDef.nivel5}</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Placar Total da Ficha */}
+              <div
                 style={{
-                  background: "rgba(255,255,255,0.08)",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text)",
-                  padding: "6px",
-                  borderRadius: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 18px",
+                  borderRadius: "10px",
+                  backgroundColor: allFiveRated ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.04)",
+                  border: allFiveRated ? "1px solid #10b981" : "1px dashed var(--border)",
+                  flexWrap: "wrap",
+                  gap: "10px",
                 }}
               >
-                <XIcon size={18} />
-              </button>
-            </div>
+                <div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Soma dos 5 Critérios (Máximo 25)
+                  </div>
+                  <div style={{ fontSize: "11px", color: allFiveRated ? "#10b981" : "#f59e0b" }}>
+                    {allFiveRated
+                      ? "✓ Todos os 5 critérios foram avaliados"
+                      : "⚠️ Preencha os 5 critérios de 1 a 5"}
+                  </div>
+                </div>
 
-            {/* 1. SELEÇÃO DA NOTA (1 A 10) */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                <label style={{ fontSize: "13px", fontWeight: 700, color: "var(--text)" }}>
-                  1. Nota da Ideia (Selecione de 1 a 10) *
-                </label>
-                {evaluationNota !== null && (
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 800,
-                      padding: "2px 8px",
-                      borderRadius: "6px",
-                      color: "#ffffff",
-                      background:
-                        evaluationNota >= 9
-                          ? "#10b981"
-                          : evaluationNota >= 7
-                          ? "#06b6d4"
-                          : evaluationNota >= 5
-                          ? "#f59e0b"
-                          : "#ef4444",
-                    }}
-                  >
-                    ⭐ {evaluationNota}/10 -{" "}
-                    {evaluationNota >= 9
-                      ? "Excelente / Destaque"
-                      : evaluationNota >= 7
-                      ? "Boa Solução"
-                      : evaluationNota >= 5
-                      ? "Regular"
-                      : "Inicial / Insuficiente"}
+                <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                  <span style={{ fontSize: "32px", fontWeight: 900, color: allFiveRated ? "#10b981" : "#ffffff" }}>
+                    {liveSoma}
                   </span>
+                  <span style={{ fontSize: "16px", color: "var(--text-muted)", fontWeight: 700 }}>/ 25</span>
+                </div>
+              </div>
+
+              {/* Nome do Avaliador(a) */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                  Avaliador(a):
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Seu nome completo ou identificação da banca examinadora"
+                  value={evaluationAvaliadorNome}
+                  onChange={(e) => setEvaluationAvaliadorNome(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px" }}
+                />
+              </div>
+
+              {/* Anotações para a Deliberação */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                  Anotações para a deliberação:
+                </label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder="Registre argumentos para o debate da banca, considerações qualitativas, pontos fortes e fragilidades do projeto..."
+                  value={evaluationAnotacoesDeliberacao}
+                  onChange={(e) => setEvaluationAnotacoesDeliberacao(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px", resize: "vertical" }}
+                />
+              </div>
+
+              {/* Posição / Classificação Provisória ou Final */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "8px" }}>
+                  Posição / Classificação da Equipe (Opcional):
+                </label>
+
+                {/* Pílulas rápidas */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                  {[
+                    "🥇 1º Lugar",
+                    "🥈 2º Lugar",
+                    "🥉 3º Lugar",
+                    "4º Lugar",
+                    "5º Lugar",
+                    "Finalista",
+                    "Menção Honrosa",
+                    "Destaque Inovação",
+                  ].map((pos) => {
+                    const isSelected = evaluationPosicao === pos;
+                    return (
+                      <button
+                        key={pos}
+                        type="button"
+                        onClick={() => setEvaluationPosicao(pos)}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: isSelected ? 700 : 500,
+                          border: isSelected ? "1px solid #fbbf24" : "1px solid var(--border)",
+                          background: isSelected ? "rgba(251, 191, 36, 0.2)" : "rgba(255,255,255,0.04)",
+                          color: isSelected ? "#fbbf24" : "var(--text-muted)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {pos}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Ou digite a colocação (ex: 1º Lugar Geral, Menção Honrosa...)"
+                  value={evaluationPosicao}
+                  onChange={(e) => setEvaluationPosicao(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px" }}
+                />
+              </div>
+
+              {/* Parecer Adicional do Avaliador */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                  Parecer do Avaliador (Feedback Geral):
+                </label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  placeholder="Comentário adicional sobre a apresentação ou protótipo..."
+                  value={evaluationComentario}
+                  onChange={(e) => setEvaluationComentario(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px", resize: "vertical" }}
+                />
+              </div>
+
+              {/* Rodapé e Ações */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "14px",
+                  marginTop: "4px",
+                }}
+              >
+                {evaluatingTeam.avaliacao ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={removerAvaliacao}
+                    disabled={savingEvaluation}
+                    style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                  >
+                    🗑️ Remover Notas
+                  </button>
+                ) : (
+                  <div />
                 )}
-              </div>
 
-              {/* Botões de 1 a 10 */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: "5px" }}>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-                  const isSelected = evaluationNota === num;
-                  const cor =
-                    num >= 9 ? "#10b981" : num >= 7 ? "#06b6d4" : num >= 5 ? "#f59e0b" : "#ef4444";
-                  return (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setEvaluationNota(num)}
-                      style={{
-                        height: "44px",
-                        borderRadius: "8px",
-                        border: isSelected ? `2px solid ${cor}` : "1px solid var(--border)",
-                        background: isSelected ? cor : "rgba(255,255,255,0.03)",
-                        color: isSelected ? "#ffffff" : "var(--text)",
-                        fontWeight: isSelected ? 800 : 600,
-                        fontSize: "15px",
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {num}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 2. POSIÇÃO / COLOCAÇÃO */}
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "8px" }}>
-                2. Posição / Classificação da Equipe
-              </label>
-
-              {/* Pílulas rápidas */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                {[
-                  "🥇 1º Lugar",
-                  "🥈 2º Lugar",
-                  "🥉 3º Lugar",
-                  "4º Lugar",
-                  "5º Lugar",
-                  "Finalista",
-                  "Menção Honrosa",
-                  "Destaque Inovação",
-                ].map((pos) => {
-                  const isSelected = evaluationPosicao === pos;
-                  return (
-                    <button
-                      key={pos}
-                      type="button"
-                      onClick={() => setEvaluationPosicao(pos)}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: "6px",
-                        fontSize: "11px",
-                        fontWeight: isSelected ? 700 : 500,
-                        border: isSelected ? "1px solid #fbbf24" : "1px solid var(--border)",
-                        background: isSelected ? "rgba(251, 191, 36, 0.2)" : "rgba(255,255,255,0.04)",
-                        color: isSelected ? "#fbbf24" : "var(--text-muted)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {pos}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <input
-                type="text"
-                className="input"
-                placeholder="Ou digite a colocação (ex: 1º Lugar Geral, 2º Lugar Eixo Saúde...)"
-                value={evaluationPosicao}
-                onChange={(e) => setEvaluationPosicao(e.target.value)}
-                style={{ width: "100%", fontSize: "13px" }}
-              />
-            </div>
-
-            {/* 3. COMENTÁRIO SOBRE A NOTA E POSIÇÃO */}
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
-                3. Comentário do Avaliador (Parecer & Justificativa da Nota e Posição)
-              </label>
-              <textarea
-                className="input"
-                rows={4}
-                placeholder="Escreva aqui seu comentário detalhado sobre a ideia da equipe, os pontos fortes, pontos a melhorar e o motivo da nota e da posição alcançada..."
-                value={evaluationComentario}
-                onChange={(e) => setEvaluationComentario(e.target.value)}
-                style={{ width: "100%", fontSize: "13px", resize: "vertical" }}
-              />
-            </div>
-
-            {/* 4. NOME DO AVALIADOR */}
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
-                4. Nome do Avaliador / Integrante da Banca
-              </label>
-              <input
-                type="text"
-                className="input"
-                placeholder="Seu nome ou identificação (ex: Prof. Avaliador / Banca Oficial)"
-                value={evaluationAvaliadorNome}
-                onChange={(e) => setEvaluationAvaliadorNome(e.target.value)}
-                style={{ width: "100%", fontSize: "13px" }}
-              />
-            </div>
-
-            {/* RODAPÉ E AÇÕES */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "10px",
-                borderTop: "1px solid var(--border)",
-                paddingTop: "14px",
-                marginTop: "4px",
-              }}
-            >
-              {evaluatingTeam.avaliacao ? (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={removerAvaliacao}
-                  disabled={savingEvaluation}
-                  style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
-                >
-                  🗑️ Remover Nota
-                </button>
-              ) : (
-                <div />
-              )}
-
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setEvaluatingTeam(null)}
-                  disabled={savingEvaluation}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={salvarAvaliacao}
-                  disabled={savingEvaluation || evaluationNota === null}
-                  style={{ minWidth: "140px" }}
-                >
-                  {savingEvaluation ? "Salvando..." : "💾 Salvar Avaliação"}
-                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setEvaluatingTeam(null)}
+                    disabled={savingEvaluation}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={salvarAvaliacao}
+                    disabled={savingEvaluation || (!allFiveRated && evaluationNota === null)}
+                    style={{ minWidth: "150px" }}
+                  >
+                    {savingEvaluation ? "Salvando..." : "💾 Salvar Avaliação"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ──── MODAL DE GERENCIAMENTO DE TRABALHO ENTREGUE ──── */}
       {editingWorkTeam && (

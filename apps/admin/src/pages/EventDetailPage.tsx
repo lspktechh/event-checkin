@@ -20,6 +20,7 @@ import { CredenciamentoTab } from "./event/CredenciamentoTab";
 import { HandsOnTab } from "./event/HandsOnTab";
 import { TeamsTab } from "./event/TeamsTab";
 import { RaffleTab } from "./event/RaffleTab";
+import { EvaluationTab } from "./event/EvaluationTab";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, SmartphoneIcon } from "../components/Icons";
 import { Sheet } from "../components/Sheet";
 
@@ -28,6 +29,7 @@ type Tab =
   | "participants"
   | "inscriptions"
   | "teams"
+  | "evaluation"
   | "handson"
   | "batches"
   | "schedule"
@@ -124,14 +126,23 @@ export function EventDetailPage() {
   const visibleTabs = useMemo(() => {
     const list = [...TABS];
     if (isInovaSaude) {
-      // Insere "Equipes" logo após a aba "Inscritos"
+      // Insere "Equipes" e "Banca Avaliadora" logo após a aba "Inscritos"
       const inscritosIdx = list.findIndex((t) => t.key === "inscriptions");
       const insertAt = inscritosIdx >= 0 ? inscritosIdx + 1 : 1;
-      list.splice(insertAt, 0, {
-        key: "teams" as Tab,
-        label: "Equipes",
-        permission: "participants.view",
-      });
+      list.splice(
+        insertAt,
+        0,
+        {
+          key: "teams" as Tab,
+          label: "Equipes",
+          permission: "participants.view",
+        },
+        {
+          key: "evaluation" as Tab,
+          label: "Banca Avaliadora",
+          permission: "participants.view",
+        }
+      );
     }
     if (isCopol) {
       // Insere "Hands On" logo após a aba "Inscritos"
@@ -407,6 +418,7 @@ export function EventDetailPage() {
       {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "teams" && eventId ? <TeamsTab eventId={eventId} eventName={event?.name} /> : null}
+      {activeTab === "evaluation" && eventId ? <EvaluationTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "handson" && eventId ? <HandsOnTab eventId={eventId} /> : null}
       {activeTab === "batches" ? <BatchesTab eventId={eventId} /> : null}
       {activeTab === "schedule" ? <ScheduleTab eventId={eventId} /> : null}

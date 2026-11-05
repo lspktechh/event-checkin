@@ -493,15 +493,16 @@ export function generateAnonymousTeamPdf(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
-  doc.text("CRITÉRIO DE AVALIAÇÃO (METODOLOGIA MIT / IDEATHON)", 18, y + 4.5);
+  doc.text("CRITÉRIO DE AVALIAÇÃO (FICHA DA BANCA INOVA SAÚDE 2026)", 18, y + 4.5);
   doc.text("PESO", pageW - 55, y + 4.5, { align: "center" });
-  doc.text("NOTA (0 a 10)", pageW - 25, y + 4.5, { align: "center" });
+  doc.text("NOTA (1 a 5)", pageW - 25, y + 4.5, { align: "center" });
 
   const criterios = [
-    { nome: "1. Cerne do Problema & Validação Prática", desc: "Profundidade do entendimento da dor, usuários reais e validação", peso: "25%" },
-    { nome: "2. Proposta de Solução & Inovação", desc: "Clareza da proposta de valor, viabilidade da ideia e diferencial", peso: "25%" },
-    { nome: "3. Viabilidade Técnica & Prototipagem", desc: "Nível de execução do protótipo (software, 3D ou fluxo) e escopo", peso: "25%" },
-    { nome: "4. Impacto Social & Boas Práticas (MIT)", desc: "Alinhamento com ODS, potencial de escala e rigor metodológico", peso: "25%" },
+    { nome: "1. Problema (1º Critério de Desempate)", desc: "A dor é real e foi verificada com quem a vive?", peso: "Peso 2" },
+    { nome: "2. Inovação", desc: "O que a solução faz de diferente do que já existe?", peso: "Peso 2" },
+    { nome: "3. Viabilidade (2º Critério de Desempate)", desc: "Dá para construir e manter com recursos realistas?", peso: "Peso 2" },
+    { nome: "4. Impacto", desc: "Quanto melhora a saúde de quem é atendido na região?", peso: "Peso 2" },
+    { nome: "5. Protótipo e apresentação", desc: "O protótipo mostra a ideia e o pitch convence?", peso: "Peso 2" },
   ];
 
   let gridY = y + 6.5;
@@ -537,7 +538,7 @@ export function generateAnonymousTeamPdf(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(14, 54, 52);
-  doc.text("NOTA FINAL DO AVALIADOR (MÉDIA PONDERADA):", 18, gridY + 5);
+  doc.text("SOMA TOTAL (MÁXIMO 25 PONTOS — NOTAS DE 1 A 5):", 18, gridY + 5);
 
   doc.setDrawColor(14, 54, 52);
   doc.setLineWidth(0.6);
@@ -580,37 +581,41 @@ export function generateEvaluationIndexPdf(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(3, 105, 161);
-  doc.text("GUIA DE AVALIAÇÃO DA BANCA EXAMINADORA — DEMODAY 2026", 18, y + 6);
+  doc.text("GUIA DE AVALIAÇÃO DA BANCA EXAMINADORA — INOVA SAÚDE 2026", 18, y + 6);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
   const guiaIntro =
-    "Prezado(a) avaliador(a), neste pacote você encontra a ficha técnica individual de cada projeto concorrente no INOVA SAÚDE 2026. Todas as informações de autoria pessoal e contatos foram rigorosamente mantidas em sigilo para garantir uma avaliação justa e imparcial às cegas. Avalie cada projeto com notas de 0 a 10 nos 4 critérios da metodologia MIT e preencha a sua planilha individual de avaliação.";
+    "Como avaliar: Dê uma nota de 1 a 5 em cada critério. Use 2 e 4 para os casos entre as descrições. Os cinco critérios têm o mesmo peso (2, como no edital), então basta somar as notas: pontuação máxima 25. Todas as equipes começam do zero hoje.\n\nRegra de Ouro: Acabamento não conta. Um protótipo de papel testado com usuários vale mais que um app bonito nunca testado.\n\nCritérios de Desempate: 1º maior nota em Problema. Se continuar empatado, 2º maior nota em Viabilidade.";
   const introLines = doc.splitTextToSize(guiaIntro, pageW - 36);
   doc.text(introLines, 18, y + 12);
 
-  y += 35;
+  y += introLines.length * 3.8 + 14;
 
   // Tabela com os Critérios Oficiais de Avaliação
-  y = drawSectionHeader(doc, "Critérios Oficiais de Avaliação (0 a 10)", y, pageW, [3, 105, 161]);
+  y = drawSectionHeader(doc, "Critérios Oficiais de Avaliação (1 a 5 — Máximo 25)", y, pageW, [3, 105, 161]);
 
   const criterios = [
     {
-      criterio: "1. Cerne do Problema & Validação (0 a 10)",
-      desc: "Avalia a relevância da dor na saúde, o grau de validação com usuários reais, impacto negativo da dor e entendimento das falhas das soluções atuais.",
+      criterio: "1. Problema (1º Critério de Desempate) — 'A dor é real e foi verificada com quem a vive?'",
+      desc: "Nota 1: Problema genérico ou suposto | Nota 3: Problema claro, com algum contato com quem vive | Nota 5: Dor concreta, com evidência: conversa, dado ou observação no serviço.",
     },
     {
-      criterio: "2. Proposta de Solução & Inovação (0 a 10)",
-      desc: "Avalia a clareza da proposta de valor (Pitch MIT), a originalidade da ideia, os diferenciais competitivos e o benefício direto proporcionado.",
+      criterio: "2. Inovação — 'O que a solução faz de diferente do que já existe?'",
+      desc: "Nota 1: Repete o que já existe | Nota 3: Adapta algo conhecido a um contexto novo | Nota 5: Muda a forma de resolver o problema.",
     },
     {
-      criterio: "3. Viabilidade Técnica & Prototipagem (0 a 10)",
-      desc: "Avalia a qualidade e execução do protótipo entregue (aplicação/software, peça 3D, fluxo), clareza de escopo e viabilidade real de implantação.",
+      criterio: "3. Viabilidade (2º Critério de Desempate) — 'Dá para construir e manter com recursos realistas?'",
+      desc: "Nota 1: Depende de algo fora do alcance | Nota 3: Caminho possível, mas com lacunas importantes | Nota 5: Próximo passo claro, recursos realistas e quem manteria.",
     },
     {
-      criterio: "4. Impacto Social & Boas Práticas MIT (0 a 10)",
-      desc: "Avalia o alinhamento com as ODS da ONU (especialmente ODS 3 e ODS 9), potencial de escala regional/nacional e métricas de acompanhamento.",
+      criterio: "4. Impacto — 'Quanto melhora a saúde de quem é atendido na região?'",
+      desc: "Nota 1: Benefício pequeno ou incerto | Nota 3: Benefício claro para um grupo definido | Nota 5: Benefício frequente, mensurável e com potencial de crescer.",
+    },
+    {
+      criterio: "5. Protótipo e apresentação — 'O protótipo mostra a ideia e o pitch convence?'",
+      desc: "Nota 1: Sem protótipo ou pitch confuso | Nota 3: Protótipo mostra parte da ideia, pitch compreensível | Nota 5: Protótipo demonstra a ideia e o pitch é claro e no tempo.",
     },
   ];
 
