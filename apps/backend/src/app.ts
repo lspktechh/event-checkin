@@ -62,6 +62,8 @@ export function buildApp() {
       const isSslip = !!origin && /^https:\/\/[a-z0-9.-]+\.sslip\.io$/.test(origin);
       const isSuperInteligencia = !!origin && /^https:\/\/(www\.)?superinteligencia\.tec\.br$/.test(origin);
       const isGithubPages = !!origin && /^https:\/\/[a-z0-9-]+\.github\.io$/.test(origin);
+      const isTryCloudflare = !!origin && /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin);
+      const isLhrLife = !!origin && /^https:\/\/[a-z0-9-]+\.lhr\.life$/.test(origin);
       if (
         !origin ||
         ALLOWED_ORIGINS.length === 0 ||
@@ -69,7 +71,9 @@ export function buildApp() {
         isVercelPreview ||
         isSslip ||
         isSuperInteligencia ||
-        isGithubPages
+        isGithubPages ||
+        isTryCloudflare ||
+        isLhrLife
       ) {
         callback(null, true);
       } else {
