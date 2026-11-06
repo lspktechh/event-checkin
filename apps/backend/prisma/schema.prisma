@@ -171,8 +171,8 @@ model User {
   customPermissions    String[] @default([])
   useCustomPermissions Boolean  @default(false)
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
@@ -427,9 +427,9 @@ model Submission {
 
   status SubmissionStatus @default(DRAFT)
 
-  submittedAt DateTime?
-  withdrawnAt DateTime?
-  decidedAt   DateTime?
+  submittedAt    DateTime?
+  withdrawnAt    DateTime?
+  decidedAt      DateTime?
   decisionReason String?   @db.Text
 
   /// Similaridade com os OUTROS trabalhos do mesmo evento, de 0 a 1.
@@ -488,7 +488,7 @@ model SubmissionFile {
   fileName      String?
   fileSizeBytes Int?
   /// Ordem de exibição; o primeiro enviado é 0.
-  position Int @default(0)
+  position      Int     @default(0)
 
   createdAt DateTime @default(now())
 
@@ -604,10 +604,15 @@ model CheckIn {
   // evento". O dia é calculado no servidor (ver checkins/event-day.ts).
   dayIndex Int @default(0)
 
+  // Período do dia (COPOL): 1 = Manhã (a partir das 07:30), 2 = Noite (a partir
+  // das 18:00) — cada um é um credenciamento independente. 0 em todo evento
+  // comum. Calculado no servidor pela hora da leitura (checkins/event-day.ts).
+  period Int @default(0)
+
   // Garante, no nível do banco, que o mesmo participante não seja
-  // credenciado duas vezes no mesmo evento NO MESMO DIA — mesmo sob
+  // credenciado duas vezes no mesmo evento NO MESMO DIA E PERÍODO — mesmo sob
   // concorrência entre câmeras/terminais diferentes.
-  @@unique([eventId, participantId, dayIndex])
+  @@unique([eventId, participantId, dayIndex, period])
   @@unique([terminalId, localCheckInId])
   @@index([terminalId])
   @@map("checkins")
@@ -685,7 +690,7 @@ model Inscription {
   // vaga do lote (batchId preenchido). Existe porque, com lote, o
   // relatório mostra o nome do lote no lugar de `category`, e uma
   // inscrição gratuita de lote de preço zero seria indistinguível dela.
-  isCourtesy       Boolean           @default(false)
+  isCourtesy Boolean @default(false)
 
   // ---- consentimento (LGPD art. 8o, §1o) --------------------------
   // O onus de provar que o consentimento foi obtido e' do controlador.
@@ -897,23 +902,23 @@ model CertificateTemplate {
 /// Permite controle individualizado de vagas, presença (check-in) e QR code
 /// exclusivo por workshop do congressista.
 model HandsOnRegistration {
-  id          String    @id @default(uuid())
-  eventId     String
-  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  handsOnId   String    @db.VarChar(100)
-  title       String    @db.VarChar(200)
-  speaker     String    @db.VarChar(150)
-  date        String    @db.VarChar(50)
-  time        String    @db.VarChar(50)
-  location    String?   @db.VarChar(200)
-  sponsor     String?   @db.VarChar(100)
-  amount      Decimal   @db.Decimal(10, 2)
-  name        String    @db.VarChar(200)
-  email       String    @db.VarChar(200)
-  document    String    @db.VarChar(50) // CPF
-  phone       String?   @db.VarChar(50)
-  category    String?   @db.VarChar(100)
-  institution String?   @db.VarChar(200)
+  id                   String    @id @default(uuid())
+  eventId              String
+  event                Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  handsOnId            String    @db.VarChar(100)
+  title                String    @db.VarChar(200)
+  speaker              String    @db.VarChar(150)
+  date                 String    @db.VarChar(50)
+  time                 String    @db.VarChar(50)
+  location             String?   @db.VarChar(200)
+  sponsor              String?   @db.VarChar(100)
+  amount               Decimal   @db.Decimal(10, 2)
+  name                 String    @db.VarChar(200)
+  email                String    @db.VarChar(200)
+  document             String    @db.VarChar(50) // CPF
+  phone                String?   @db.VarChar(50)
+  category             String?   @db.VarChar(100)
+  institution          String?   @db.VarChar(200)
   status               String    @default("PENDING") @db.VarChar(30) // PENDING, CONFIRMED, CANCELLED
   qrToken              String    @unique @db.VarChar(100)
   paymentId            String?   @db.VarChar(100)
@@ -935,7 +940,6 @@ model HandsOnRegistration {
   @@index([paymentId])
   @@map("hands_on_registrations")
 }
-
 
 /// Número da sorte gerado quando alguém escaneia o QR Code da aba "Sorteios".
 ///

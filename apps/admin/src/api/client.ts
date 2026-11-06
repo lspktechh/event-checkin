@@ -575,6 +575,15 @@ export function deleteTerminal(eventId: string, terminalId: string) {
 }
 
 // --- Statistics ---
+/** Período do dia no credenciamento do COPOL: Manhã ou Noite. */
+export interface CheckInPeriod {
+  /** 1 = Manhã, 2 = Noite. */
+  index: number;
+  label: string;
+  /** Horário de início, "HH:MM". */
+  startsAt: string;
+}
+
 /** Dia de um evento com credenciamento por dia (o COPOL). */
 export interface CheckInDay {
   /** 1 = primeiro dia. */
@@ -582,7 +591,12 @@ export interface CheckInDay {
   total: number;
   /** Data local do dia, "YYYY-MM-DD". */
   date: string;
+  /** Período em que a leitura caiu (Manhã/Noite). */
+  period?: CheckInPeriod;
 }
+
+/** Quantas pessoas foram credenciadas em um período. */
+export type PeriodCount = CheckInPeriod & { checkedIn: number };
 
 export interface EventStatistics {
   totalRegistered: number;
@@ -595,8 +609,16 @@ export interface EventStatistics {
   multiDay?: {
     total: number;
     /** `null` fora dos dias do evento. */
-    today: { index: number; date: string; checkedIn: number } | null;
-    perDay: { index: number; date: string; checkedIn: number }[];
+    today: {
+      index: number;
+      date: string;
+      /** Pessoas no dia (manhã ou noite). */
+      checkedIn: number;
+      /** O período em andamento agora, com o contador dele. */
+      period: PeriodCount;
+      periods: PeriodCount[];
+    } | null;
+    perDay: { index: number; date: string; checkedIn: number; periods: PeriodCount[] }[];
   };
 }
 export function getStatistics(eventId: string) {
@@ -605,8 +627,11 @@ export function getStatistics(eventId: string) {
 
 // --- Report ---
 export interface ReportCheckIn {
+  participantId: string;
   /** Dia do evento (1, 2, 3); 0 em evento sem credenciamento por dia. */
   dayIndex: number;
+  /** Período do dia (1 = Manhã, 2 = Noite); 0 em evento sem credenciamento por dia. */
+  period: number;
   participantName: string;
   participantEmail: string | null;
   participantPhone: string | null;
@@ -620,6 +645,9 @@ export interface EventReport {
   eventLocation: string;
   totalRegistered: number;
   totalCheckedIn: number;
+  /** Só em evento por dia: os dias e os períodos, para os relatórios separados. */
+  days?: { index: number; date: string }[];
+  periods?: CheckInPeriod[];
   checkIns: ReportCheckIn[];
 }
 export function getReport(eventId: string) {

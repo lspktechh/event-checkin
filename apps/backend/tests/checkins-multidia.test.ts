@@ -130,7 +130,14 @@ describe("credenciamento por dia — evento com multiDayCheckIn", () => {
     const res = await lerNoTerminal(event.id, token, pessoa.qrToken);
 
     const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-    expect(res.json().data.day).toEqual({ index: 2, total: 3, date: hoje });
+    // O período (Manhã/Noite) depende da hora em que o teste roda; os testes
+    // dele, com relógio fixo, estão em checkins-periodo.test.ts.
+    expect(res.json().data.day).toEqual({
+      index: 2,
+      total: 3,
+      date: hoje,
+      period: { index: expect.any(Number), label: expect.any(String), startsAt: expect.any(String) },
+    });
   });
 
   it("a câmera ao vivo do painel (rota admin) também registra por dia", async () => {

@@ -182,19 +182,28 @@ usa a mesma regra e as mesmas respostas.
 
 ### Credenciamento por dia (`Event.multiDayCheckIn`, ligado só no COPOL)
 
-Nesse modo o **mesmo QR Code vale em todos os dias** e cada dia tem a sua
-presença. Em qualquer outro evento nada muda: um check-in por participante no
-evento todo (`CheckIn.dayIndex = 0`).
+Nesse modo o **mesmo QR Code vale em todos os dias** e cada dia tem **dois
+credenciamentos independentes**: **Manhã** (a partir das 07:30) e **Noite** (a
+partir das 18:00). Em qualquer outro evento nada muda: um check-in por
+participante no evento todo (`CheckIn.dayIndex = 0`, `CheckIn.period = 0`).
 
-- A regra do banco é `UNIQUE(eventId, participantId, dayIndex)`: a duplicidade é
-  por **participante + dia**, e vale mesmo com duas câmeras lendo ao mesmo tempo.
+- A regra do banco é `UNIQUE(eventId, participantId, dayIndex, period)`: a
+  duplicidade é por **participante + dia + período**, e vale mesmo com duas
+  câmeras lendo ao mesmo tempo. Quem entrou de manhã pode ser credenciado de
+  novo à noite.
+- O período (`period` 1 = Manhã, 2 = Noite) também é calculado **no servidor**,
+  pela **hora local** (fuso do evento) da leitura: a partir das 18:00 é Noite,
+  antes é Manhã. **Antes das 07:30 ainda conta como Manhã** (ninguém é barrado
+  por chegar cedo) e a Noite vai até a meia-noite. Os horários ficam em
+  `checkins/event-day.ts` (`CHECKIN_PERIODS`).
 - O dia (`dayIndex` 1, 2, 3…) é calculado **no servidor** pelo horário da leitura
   e pelas datas e fuso do evento (`Event.startDate/endDate/timezone`). O dia vira
   à meia-noite de **Brasília**, não de UTC. Na sincronização offline vale o
   horário da leitura, não o da sincronização.
-- A resposta traz `day: { "index": 2, "total": 3, "date": "2026-11-06" }`
-  (`null` em evento comum). Repetir no mesmo dia → `ALREADY_CHECKED_IN`; o dia
-  seguinte não é bloqueado pelo anterior.
+- A resposta traz `day: { "index": 2, "total": 3, "date": "2026-11-06",
+  "period": { "index": 2, "label": "Noite", "startsAt": "18:00" } }` (`null` em
+  evento comum). Repetir no mesmo dia **e período** → `ALREADY_CHECKED_IN`; a
+  noite não é bloqueada pela manhã, nem o dia seguinte pelo anterior.
 - Certificados e comprovante continuam liberados com presença em **qualquer** dia.
 
 ### `GET /events/:eventId/statistics`
@@ -219,13 +228,22 @@ uma vez). Só em evento por dia a resposta ganha:
 ```json
 "multiDay": {
   "total": 3,
-  "today": { "index": 2, "date": "2026-11-06", "checkedIn": 412 },   // null fora dos dias do evento
-  "perDay": [{ "index": 1, "date": "2026-11-05", "checkedIn": 380 }, …]
+  "today": {                                   // null fora dos dias do evento
+    "index": 2, "date": "2026-11-06",
+    "checkedIn": 412,                          // pessoas no dia (manhã ou noite)
+    "period": { "index": 2, "label": "Noite", "startsAt": "18:00", "checkedIn": 96 },  // período em andamento
+    "periods": [{ "index": 1, "label": "Manhã", "startsAt": "07:30", "checkedIn": 401 }, …]
+  },
+  "perDay": [{ "index": 1, "date": "2026-11-05", "checkedIn": 380,
+               "periods": [{ "index": 1, "label": "Manhã", "startsAt": "07:30", "checkedIn": 371 }, …] }, …]
 }
 ```
 
-`GET /events/:eventId/report` também conta pessoas em `totalCheckedIn` e cada
-linha de `checkIns` traz `dayIndex` (0 em evento comum).
+`GET /events/:eventId/report` também conta pessoas em `totalCheckedIn`. Cada
+linha de `checkIns` traz `participantId`, `dayIndex` e `period` (0 em evento
+comum). Só em evento por dia a resposta ganha `days` (`[{ index, date }]`) e
+`periods` (`[{ index, label, startsAt }]`), para montar os relatórios separados
+por dia.
 
 ## Sincronização offline (requer token de terminal)
 

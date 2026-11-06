@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { AlertIcon, CheckIcon, XIcon } from "../Icons";
 import type { CheckInFeedbackStatus } from "../../utils/audioFeedback";
 import type { CheckInDay } from "../../api/client";
-import { dayLabel } from "../../utils/eventDay";
+import { dayLabel, periodPhrase } from "../../utils/eventDay";
 
 export interface FeedbackData {
   status: CheckInFeedbackStatus;
@@ -159,7 +159,8 @@ export function FeedbackOverlay({ data, onDismiss }: Props) {
             margin: "4px 0 0",
           }}
         >
-          Já registrado {data.day ? "neste dia " : ""}às <strong>{formatTime(data.checkedInAt)}</strong>
+          Já registrado {data.day ? `${data.day.period ? periodPhrase(data.day.period) : "neste dia"} ` : ""}às{" "}
+          <strong>{formatTime(data.checkedInAt)}</strong>
         </p>
       ) : null}
 

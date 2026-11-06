@@ -1,5 +1,5 @@
 import type { EventStatistics } from "../../api/client";
-import { dayLabel } from "../../utils/eventDay";
+import { dayLabel, periodPhrase } from "../../utils/eventDay";
 
 /**
  * Faixa com o dia do evento em que o credenciamento está acontecendo
@@ -29,9 +29,9 @@ export function DayBanner({ stats }: { stats: EventStatistics | null }) {
     >
       {today ? (
         <>
-          {dayLabel({ index: today.index, total: multi.total, date: today.date })}
+          {dayLabel({ index: today.index, total: multi.total, date: today.date, period: today.period })}
           <span style={{ fontWeight: 600, opacity: 0.9, textTransform: "none", marginLeft: 10 }}>
-            {today.checkedIn} credenciado(s) hoje
+            {today.period.checkedIn} credenciado(s) {periodPhrase(today.period)}
           </span>
         </>
       ) : (
