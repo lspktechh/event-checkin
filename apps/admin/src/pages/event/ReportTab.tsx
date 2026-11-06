@@ -221,8 +221,9 @@ export function ReportTab({ eventId }: { eventId: string }) {
         </div>
       )}
 
-      <div className="spread" style={{ flexWrap: "wrap", gap: 12 }}>
-        <div className="row" style={{ gap: 16, flexWrap: "wrap", flex: 1 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-start" }}>
+        {/* Grade que se ajusta à largura: no celular os números ficam 2-3 por linha. */}
+        <div style={{ flex: "1 1 420px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
           <StatCard label="Inscritos" value={report.totalRegistered} />
           <StatCard label={selectedDay ? "Presentes no dia" : "Presentes"} value={view.present} color="var(--success)" />
           {selectedDay &&
@@ -345,7 +346,7 @@ function DayChip({ active, onClick, children }: { active: boolean; onClick: () =
 
 function StatCard({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
-    <div className="card" style={{ flex: 1, minWidth: 110, textAlign: "center", padding: 14 }}>
+    <div className="card" style={{ textAlign: "center", padding: 14 }}>
       <p className="muted" style={{ margin: "0 0 6px", fontSize: 12 }}>
         {label}
       </p>
