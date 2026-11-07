@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, type RGB } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import type { CertificateLayout } from "./certificate-layout.js";
 import QRCode from "qrcode";
 import { formatEventDateRange, formatEventDateRangeShort } from "../../shared/br-date.js";
@@ -11,6 +12,7 @@ import type { ParagraphSegment } from "./certificate-settings.js";
 // __dirname não existe em ESM — apps/backend roda com "type": "module".
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const ASSETS_DIR = join(currentDir, "..", "..", "..", "assets", "certificates");
+const FONTE_CURSIVA = join(ASSETS_DIR, "fonts", "GreatVibes-Regular.ttf");
 
 export interface CertificateSignatory {
   name: string;
@@ -333,8 +335,18 @@ export async function renderCertificatePdf(data: CertificateData): Promise<Buffe
 
   // --- Nome do participante ---
   const caixaNome = data.layout.nome;
-  // A fonte segue a arte: serifada no COPOL, sem serifa na Semantix.
-  const fonteDoNome = caixaNome.fonte === "sem-serifa" ? helveticaBold : timesBold;
+  // A fonte segue a arte: serifada no COPOL, sem serifa na Semantix,
+  // cursiva quando a arte já usa letra cursiva nas frases.
+  //
+  // A cursiva é embutida (com subset) só quando pedida: as fontes padrão
+  // do PDF não pesam nada no arquivo, a TTF sim.
+  let fonteDoNome: PDFFont;
+  if (caixaNome.fonte === "cursiva") {
+    pdf.registerFontkit(fontkit);
+    fonteDoNome = await pdf.embedFont(await readFile(FONTE_CURSIVA), { subset: true });
+  } else {
+    fonteDoNome = caixaNome.fonte === "sem-serifa" ? helveticaBold : timesBold;
+  }
   const nameMaxWidthPx = caixaNome.xDireita - caixaNome.xEsquerda;
   const corpoMaximo = toX(caixaNome.tamanhoMaximo ?? 55);
   const nameFontSize = fitFontSize(data.participantName, fonteDoNome, toX(nameMaxWidthPx), corpoMaximo, 16);
@@ -347,7 +359,8 @@ export async function renderCertificatePdf(data: CertificateData): Promise<Buffe
     y: toY(caixaNome.yBase),
     size: nameFontSize,
     font: fonteDoNome,
-    color: primaryColor,
+    // Cor própria do nome, se o modelo definir; senão a de destaque.
+    color: caixaNome.cor ? hexToRgb(caixaNome.cor) : primaryColor,
   });
 
   // --- Parágrafo descritivo (evento/local/data/carga horária dinâmicos) ---
