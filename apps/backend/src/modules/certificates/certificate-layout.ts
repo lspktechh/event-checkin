@@ -68,8 +68,20 @@ export const certificateLayoutSchema = z.object({
      * Precisa acompanhar a arte: o COPOL usa serifada, a Semantix usa sem
      * serifa. Errar aqui não quebra nada — só faz o nome parecer colado
      * de outro documento, que é como um certificado perde credibilidade.
+     *
+     * "cursiva" é a Great Vibes (assets/certificates/fonts), para artes que
+     * já trazem frases em letra cursiva e querem o nome no mesmo estilo.
      */
-    fonte: z.enum(["serifada", "sem-serifa"]).optional(),
+    fonte: z.enum(["serifada", "sem-serifa", "cursiva"]).optional(),
+    /**
+     * Cor do NOME, só dele.
+     *
+     * Diferente de `corPrincipal`, que também pinta o nome do evento, o
+     * título do chip e os signatários. Uma arte pode querer o nome em
+     * dourado sem mexer no resto. Quando presente, ganha de qualquer outra
+     * cor para o nome — é a escolha mais específica que existe.
+     */
+    cor: corHex.optional(),
   }),
 
   /** Parágrafo descritivo. Ausente = a arte já o traz. */

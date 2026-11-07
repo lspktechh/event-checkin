@@ -17,6 +17,8 @@ interface Ponto {
 
 type Marcando = "nomeEsquerda" | "nomeDireita" | "nomeBase" | "qr" | null;
 
+type Fonte = "serifada" | "sem-serifa" | "cursiva";
+
 export function CertificateTemplatesPage() {
   const [modelos, setModelos] = useState<api.CertificateTemplateRecord[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -39,7 +41,12 @@ export function CertificateTemplatesPage() {
   const [nomeBase, setNomeBase] = useState<number | null>(null);
   const [qr, setQr] = useState<Ponto | null>(null);
   const [tamanhoQr, setTamanhoQr] = useState(120);
-  const [fonte, setFonte] = useState<"serifada" | "sem-serifa">("sem-serifa");
+  const [fonte, setFonte] = useState<Fonte>("sem-serifa");
+  // Cor própria do nome. Null = segue a cor de destaque do evento.
+  const [corNome, setCorNome] = useState<string | null>(null);
+  // Corpo máximo do nome, em px da arte. Null = padrão do sistema (55),
+  // que é pequeno para artes grandes.
+  const [tamanhoNome, setTamanhoNome] = useState<number | null>(null);
 
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -69,13 +76,15 @@ export function CertificateTemplatesPage() {
     });
 
     const l = (m.layout ?? {}) as {
-      nome?: { xEsquerda: number; xDireita: number; yBase: number; fonte?: string };
+      nome?: { xEsquerda: number; xDireita: number; yBase: number; fonte?: string; cor?: string; tamanhoMaximo?: number };
       qr?: { xEsquerda: number; yTopo: number; tamanho: number } | null;
     };
     setNomeEsq(l.nome?.xEsquerda ?? null);
     setNomeDir(l.nome?.xDireita ?? null);
     setNomeBase(l.nome?.yBase ?? null);
-    setFonte(l.nome?.fonte === "serifada" ? "serifada" : "sem-serifa");
+    setFonte(l.nome?.fonte === "serifada" || l.nome?.fonte === "cursiva" ? l.nome.fonte : "sem-serifa");
+    setCorNome(l.nome?.cor ?? null);
+    setTamanhoNome(l.nome?.tamanhoMaximo ?? null);
     setQr(l.qr ? { x: l.qr.xEsquerda, y: l.qr.yTopo } : null);
     setTamanhoQr(l.qr?.tamanho ?? 120);
 
@@ -92,6 +101,9 @@ export function CertificateTemplatesPage() {
     setNomeBase(null);
     setQr(null);
     setMarcando(null);
+    setFonte("sem-serifa");
+    setCorNome(null);
+    setTamanhoNome(null);
   }
 
   function aoEscolherArquivo(ev: ChangeEvent<HTMLInputElement>) {
@@ -163,6 +175,8 @@ export function CertificateTemplatesPage() {
             yBase: nomeBase,
             alinhamento: "esquerda",
             fonte,
+            ...(corNome ? { cor: corNome } : {}),
+            ...(tamanhoNome ? { tamanhoMaximo: tamanhoNome } : {}),
           },
           // Nulo = a arte já traz. É o caso comum: quase toda arte pronta
           // já vem com o texto, a data e as assinaturas impressos.
@@ -303,12 +317,56 @@ export function CertificateTemplatesPage() {
 
             <label className="campo">
               Fonte do nome
-              <select value={fonte} onChange={(e) => setFonte(e.target.value as typeof fonte)}>
+              <select value={fonte} onChange={(e) => setFonte(e.target.value as Fonte)}>
                 <option value="sem-serifa">Sem serifa</option>
                 <option value="serifada">Serifada</option>
+                <option value="cursiva">Cursiva (Great Vibes)</option>
               </select>
               <small className="muted">Escolha a que combina com a arte.</small>
             </label>
+
+            <label className="campo">
+              Tamanho máximo do nome (px da arte)
+              <input
+                type="number"
+                min={8}
+                max={200}
+                placeholder="55"
+                value={tamanhoNome ?? ""}
+                onChange={(e) => setTamanhoNome(e.target.value ? Number(e.target.value) : null)}
+              />
+              <small className="muted">
+                Nomes longos encolhem para caber entre o início e o fim marcados. Em branco = 55.
+              </small>
+            </label>
+
+            <div className="campo">
+              Cor do nome
+              <div className="row" style={{ gap: "0.5rem", alignItems: "center" }}>
+                <label className="row" style={{ gap: "0.35rem", alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={corNome !== null}
+                    onChange={(e) => setCorNome(e.target.checked ? corNome ?? "#B8934A" : null)}
+                  />
+                  Usar cor própria
+                </label>
+                {corNome !== null && (
+                  <>
+                    <input
+                      type="color"
+                      aria-label="Cor do nome"
+                      value={corNome}
+                      onChange={(e) => setCorNome(e.target.value.toUpperCase())}
+                    />
+                    <code>{corNome}</code>
+                  </>
+                )}
+              </div>
+              <small className="muted">
+                Sem cor própria, o nome sai na cor de destaque do evento.
+              </small>
+            </div>
 
             <div style={{ position: "relative", border: "1px solid var(--linha)", borderRadius: "0.5rem", overflow: "hidden" }}>
               <img
