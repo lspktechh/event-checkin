@@ -34,6 +34,12 @@ export async function eventsRoutes(app: FastifyInstance) {
     return ok(await eventsService.listOpenRegistrationEvents());
   });
 
+  // Público — eventos Encerrados no painel (aba "Realizados" do portal).
+  // Rota estática: tem precedência sobre /public/events/:slug.
+  app.get("/public/events/closed", async () => {
+    return ok(await eventsService.listClosedEvents());
+  });
+
   // Público — o evento pelo endereço divulgado (/inscricao/<slug>).
   app.get("/public/events/:slug", async (request) => {
     const { slug } = z.object({ slug: z.string().trim().min(1).max(80) }).parse(request.params);

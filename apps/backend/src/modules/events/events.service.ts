@@ -75,6 +75,21 @@ export async function listOpenRegistrationEvents() {
     .map((e) => ({ slug: e.slug, name: e.name, startDate: e.startDate }));
 }
 
+/**
+ * Eventos realizados, para a aba "Realizados" do portal.
+ *
+ * "Realizado" é o que o organizador marcou como Encerrado no painel
+ * (status CLOSED) — e não "a data passou" — E escolheu mostrar no site
+ * (showInPortal). Assim o evento só aparece ali por decisão de alguém, e
+ * um evento ainda Ativo nunca é listado como acabado.
+ *
+ * Devolve só o que a lista mostra: nome, data e local (mais o endereço,
+ * quando houver). Nada de configuração interna.
+ */
+export async function listClosedEvents() {
+  return eventsRepository.listClosedEvents();
+}
+
 export async function getPublicEventBySlug(slug: string) {
   const event = await prisma.event.findUnique({ where: { slug } });
   if (!event || event.status !== "ACTIVE") {

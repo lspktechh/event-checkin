@@ -1,0 +1,468 @@
+/*
+ * O portal LSPK Eventos: Acessar, Inscrição e Realizados.
+ *
+ * Escuro e chapado, sem cartões: a hierarquia vem do tamanho do texto, de
+ * linhas finas e de um único azul. O azul aparece só onde há uma ação.
+ *
+ * Os valores são os do desenho aprovado ("Credenciamento LSPK – Celular").
+ * Ficam aqui, e não em globals.css, porque o resto do site (a tela do QR,
+ * os trabalhos) ainda usa a paleta anterior — mexer no global mudaria
+ * telas que não foram pedidas.
+ */
+
+.pagina {
+  --fundo: #0f1115;
+  --tinta: #f2f0ea;
+  --tinta-media: #b4b6bd;
+  --tinta-fraca: #9a9da6;
+  --tinta-apagada: #8a8d96;
+  --linha: #23262d;
+  --campo-fundo: #16181d;
+  --campo-borda: #2a2d35;
+  --azul: #4459f5;
+  --azul-hover: #3a4ee0;
+  --azul-foco: #6577ff;
+  --link: #9aa5ff;
+  --link-hover: #c3c9ff;
+
+  min-height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px 40px;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--fonte-titulo), system-ui, sans-serif;
+}
+
+/* No celular a barra do navegador já ocupa o topo; o respiro grande é de tela larga. */
+@media (min-width: 640px) {
+  .pagina {
+    padding-top: 64px;
+  }
+}
+
+.coluna {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+}
+
+.larga {
+  max-width: 640px;
+}
+
+.pagina a {
+  color: var(--link);
+}
+.pagina a:hover {
+  color: var(--link-hover);
+}
+
+.pagina :where(a, button, input):focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ───────── Cabeçalho ───────── */
+
+.cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--tinta);
+  text-decoration: none;
+}
+.pagina a.cabecalho,
+.pagina a.cabecalho:hover {
+  color: var(--tinta);
+}
+
+.marca {
+  flex: none;
+  display: block;
+}
+
+.nomes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nomeMarca {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.rotuloMono {
+  font-family: var(--fonte-mono-portal), ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tinta-apagada);
+}
+
+/* ───────── Abas ───────── */
+
+.abas {
+  margin-top: 40px;
+  display: flex;
+  gap: 28px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.pagina a.aba {
+  height: 48px;
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  color: var(--tinta-apagada);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.pagina a.aba:hover {
+  color: var(--tinta);
+}
+.pagina a.abaAtiva,
+.pagina a.abaAtiva:hover {
+  color: var(--tinta);
+  border-bottom-color: var(--azul);
+}
+
+.conteudo {
+  padding-top: 36px;
+}
+
+.rodape {
+  margin-top: 72px;
+}
+
+/* ───────── Texto ───────── */
+
+.secao {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.cabecaSecao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.lead {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--tinta-fraca);
+}
+.lead strong {
+  color: var(--tinta);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.dica {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--link-hover);
+}
+
+.centro {
+  margin: 0;
+  font-size: 15px;
+  color: var(--tinta-fraca);
+  text-align: center;
+}
+
+.estado {
+  margin: 0;
+  padding: 24px 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--tinta-fraca);
+}
+
+/* ───────── Formulário ───────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--tinta-media);
+}
+
+.campo input {
+  height: 52px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  background: var(--campo-fundo);
+  border: 1px solid var(--campo-borda);
+  border-radius: 10px;
+  color: var(--tinta);
+  font-family: inherit;
+  /* 16px evita o zoom automático do iOS ao focar o campo. */
+  font-size: 16px;
+}
+.campo input::placeholder {
+  color: #6f727a;
+}
+.campo input:focus {
+  outline: none;
+  border-color: var(--azul-foco);
+}
+
+.campo small {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tinta-apagada);
+}
+
+.aceite {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--tinta-fraca);
+  cursor: pointer;
+}
+.aceite input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--azul);
+}
+
+.botao {
+  height: 52px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--azul);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.botao:hover:not(:disabled) {
+  background: var(--azul-hover);
+}
+.botao:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.espaco {
+  margin-top: 6px;
+}
+
+.erro {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ───────── Linhas (eventos) ───────── */
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--linha);
+}
+
+.linhaData {
+  flex: none;
+  width: 96px;
+  font-family: var(--fonte-mono-portal), ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--tinta-apagada);
+}
+
+.linhaInfo {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.linhaNome {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.linhaLocal {
+  font-size: 14px;
+  color: var(--tinta-apagada);
+}
+
+.pagina .acao,
+.pagina a.acao {
+  flex: none;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pagina .acao:hover:not(:disabled),
+.pagina a.acao:hover {
+  color: var(--link-hover);
+}
+.pagina .acao:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* ───────── Inscrição ───────── */
+
+.logoParceiro {
+  align-self: flex-start;
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.logoParceiroImg {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
+.metaEvento {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--tinta-fraca);
+}
+
+.metaSecundaria {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--tinta-apagada);
+}
+
+.subtituloEvento {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.destaques {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.destaque {
+  padding-left: 14px;
+  border-left: 2px solid var(--campo-borda);
+}
+.destaque h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.destaque p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--tinta-fraca);
+}
+
+.fechado {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--campo-borda);
+  border-radius: 10px;
+  background: var(--campo-fundo);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ───────── Validação do e-mail (sugestão de correção) ───────── */
+
+.sugestao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.sugestao strong {
+  overflow-wrap: anywhere;
+}
+.sugestao button {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #d97706;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.erroCampo {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #fca5a5;
+}

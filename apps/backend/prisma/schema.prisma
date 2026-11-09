@@ -231,6 +231,14 @@ model Event {
   /// Ligado apenas no COPOL (ver migration add_multi_day_checkin).
   multiDayCheckIn Boolean @default(false)
 
+  /// Mostrar este evento no site LSPK Eventos (apps/attendee), na aba
+  /// "Realizados" — que lista só eventos Encerrados E marcados aqui. Separado
+  /// de `visibility` de propósito: aquela decide o que aparece nos sites
+  /// do COPOL/institucional, e tornar um evento "Público" só para ele
+  /// constar no portal o faria disputar o lugar de destaque nesses sites.
+  /// Padrão falso: aplicar a migração não divulga evento nenhum.
+  showInPortal Boolean @default(false)
+
   siteContent Json?
 
   // Configuração do certificado/comprovante deste evento — carga horária,

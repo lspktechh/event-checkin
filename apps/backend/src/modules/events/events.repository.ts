@@ -49,6 +49,23 @@ export function listEventsWithOpenRegistration() {
   });
 }
 
+/**
+ * Eventos Encerrados (status CLOSED) que o organizador marcou para o site
+ * (showInPortal), do mais recente para o mais antigo.
+ *
+ * É a lista da aba "Realizados" do portal. O limite existe porque a rota
+ * é pública: sem ele, o número de eventos do sistema decide o tamanho da
+ * resposta.
+ */
+export function listClosedEvents() {
+  return prisma.event.findMany({
+    where: { status: "CLOSED", showInPortal: true },
+    orderBy: { startDate: "desc" },
+    take: 100,
+    select: { slug: true, name: true, location: true, startDate: true, endDate: true },
+  });
+}
+
 export function findEventById(eventId: string) {
   return prisma.event.findUnique({ where: { id: eventId } });
 }

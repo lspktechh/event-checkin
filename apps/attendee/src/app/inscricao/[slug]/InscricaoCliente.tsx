@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginAttendee, verifyEmail } from "@/lib/api";
-import estilos from "./inscricao.module.css";
+import { PortalShell } from "@/components/portal/PortalShell";
+import estilos from "@/components/portal/portal.module.css";
 
 /**
  * Página pública de inscrição.
@@ -246,113 +248,102 @@ export function InscricaoCliente({ slug }: { slug: string }) {
     }
   }
 
+
   if (carregando) {
     return (
-      <main className={estilos.pagina}>
-        <p className={estilos.aviso}>Carregando…</p>
-      </main>
+      <PortalShell aba="inscricao">
+        <p className={estilos.estado}>Carregando…</p>
+      </PortalShell>
     );
   }
 
   if (erroDaPagina || !evento) {
     return (
-      <main className={estilos.pagina}>
-        <div className={estilos.cartao}>
-          <h1 className={estilos.tituloErro}>Evento não encontrado</h1>
-          <p className={estilos.texto}>{erroDaPagina}</p>
-        </div>
-      </main>
+      <PortalShell aba="inscricao">
+        <section className={estilos.secao}>
+          <h1 className={estilos.titulo}>Evento não encontrado</h1>
+          {erroDaPagina && <p className={estilos.lead}>{erroDaPagina}</p>}
+          <p className={estilos.centro}>
+            <Link href="/inscricao">Ver inscrições abertas</Link>
+          </p>
+        </section>
+      </PortalShell>
     );
   }
 
   const isEcohub = slug.toLowerCase().includes("ecohub");
 
-  return (
-    <main className={estilos.pagina}>
-      <div className={estilos.faixaTopo} aria-hidden="true" />
+  // Evento que já começou deixa de ser "o próximo".
+  const jaComecou = new Date(evento.startDate).getTime() < Date.now();
 
-      <section className={estilos.hero}>
-        {isEcohub && (
-          <div className={estilos.logoEcohub}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/partners/ecohub-rodape.png"
-              alt="Ecohub — ecossistema de inovação"
-              className={estilos.logoImg}
-            />
+  // Linha de apoio sob a data: quem realiza, o certificado e o formato.
+  const detalhes = [
+    c.realizacao?.join(" · "),
+    c.cargaHoraria ?? "Com certificado",
+    equipeConfig ? `Em equipe · ${equipeConfig.tamanho} pessoas` : null,
+  ].filter(Boolean);
+
+  return (
+    <PortalShell aba="inscricao">
+      <section className={estilos.secao} style={{ gap: 28 }}>
+        <div className={estilos.cabecaSecao}>
+          {isEcohub && (
+            <div className={estilos.logoParceiro}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/partners/ecohub-rodape.png"
+                alt="Ecohub — ecossistema de inovação"
+                className={estilos.logoParceiroImg}
+              />
+            </div>
+          )}
+          <span className={estilos.rotuloMono}>{jaComecou ? "Inscrições abertas" : "Próximo evento"}</span>
+          <h1 className={estilos.titulo}>{c.heroTitulo ?? evento.name}</h1>
+          {c.heroSubtitulo && <p className={estilos.subtituloEvento}>{c.heroSubtitulo}</p>}
+          <p className={estilos.metaEvento}>
+            {dataFormatada} · {horaFormatada} · {c.local ?? evento.location ?? "Local a confirmar"}
+          </p>
+          <p className={estilos.metaSecundaria}>{detalhes.join(" · ")}</p>
+          {c.heroTexto && <p className={estilos.lead}>{c.heroTexto}</p>}
+        </div>
+
+        {c.destaques && c.destaques.length > 0 && (
+          <div className={estilos.destaques}>
+            {c.destaques.map((d) => (
+              <article key={d.titulo} className={estilos.destaque}>
+                <h2>{d.titulo}</h2>
+                <p>{d.texto}</p>
+              </article>
+            ))}
           </div>
         )}
-        <p className={estilos.sobreTitulo}>{c.realizacao?.join(" · ") ?? "Inscrições abertas"}</p>
-        <h1 className={estilos.titulo}>{c.heroTitulo ?? evento.name}</h1>
-        {c.heroSubtitulo && <p className={estilos.subtitulo}>{c.heroSubtitulo}</p>}
-        {c.heroTexto && <p className={estilos.texto}>{c.heroTexto}</p>}
-
-        <ul className={estilos.fatos}>
-          <li>
-            <span className={estilos.fatoRotulo}>Data</span>
-            <strong>
-              {dataFormatada} · {horaFormatada}
-            </strong>
-          </li>
-          <li>
-            <span className={estilos.fatoRotulo}>Local</span>
-            <strong>{c.local ?? evento.location ?? "A confirmar"}</strong>
-          </li>
-          <li>
-            <span className={estilos.fatoRotulo}>Certificado</span>
-            <strong>{c.cargaHoraria ?? "Com certificado"}</strong>
-          </li>
-          {equipeConfig && (
-            <li>
-              <span className={estilos.fatoRotulo}>Formato</span>
-              <strong>Em equipe · {equipeConfig.tamanho} pessoas</strong>
-            </li>
-          )}
-        </ul>
-      </section>
-
-      {c.destaques && c.destaques.length > 0 && (
-        <section className={estilos.destaques}>
-          {c.destaques.map((d) => (
-            <article key={d.titulo} className={estilos.destaque}>
-              <h2>{d.titulo}</h2>
-              <p>{d.texto}</p>
-            </article>
-          ))}
-        </section>
-      )}
-
-      <section className={estilos.cartao} id="inscricao">
-        <h2 className={estilos.tituloForm}>Faça sua inscrição</h2>
 
         {!evento.registrationsOpen ? (
-          <p className={estilos.fechado}>
-            As inscrições para este evento estão encerradas.
-          </p>
+          <p className={estilos.fechado}>As inscrições para este evento estão encerradas.</p>
         ) : (
-          <form onSubmit={enviar} className={estilos.form} noValidate>
-            <div className={estilos.dupla}>
-              <label className={estilos.campo}>
-                Nome
-                <input
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  required
-                  autoComplete="given-name"
-                  placeholder="Maria"
-                />
-              </label>
-              <label className={estilos.campo}>
-                Sobrenome
-                <input
-                  value={sobrenome}
-                  onChange={(e) => setSobrenome(e.target.value)}
-                  required
-                  autoComplete="family-name"
-                  placeholder="Souza"
-                />
-              </label>
-            </div>
+          <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
+            <label className={estilos.campo}>
+              Nome
+              <input
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                required
+                autoComplete="given-name"
+                placeholder="Maria"
+              />
+            </label>
+
+            <label className={estilos.campo}>
+              Sobrenome
+              <input
+                value={sobrenome}
+                onChange={(e) => setSobrenome(e.target.value)}
+                required
+                autoComplete="family-name"
+                placeholder="Souza"
+              />
+              <small>Nome e sobrenome saem como você escrever no certificado.</small>
+            </label>
 
             <label className={estilos.campo}>
               E-mail
@@ -370,24 +361,11 @@ export function InscricaoCliente({ slug }: { slug: string }) {
                 required
                 autoComplete="email"
                 inputMode="email"
-                placeholder="maria@exemplo.com"
+                placeholder="seu@email.com"
               />
               <small>É por ele que você acessa seu QR Code e o certificado.</small>
               {emailSuggestion && (
-                <div
-                  style={{
-                    marginTop: 6,
-                    padding: "6px 10px",
-                    background: "#fef3c7",
-                    border: "1px solid #fde68a",
-                    borderRadius: 8,
-                    fontSize: 13,
-                    color: "#92400e",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
+                <div className={estilos.sugestao}>
                   <span>
                     Você quis dizer <strong>{emailSuggestion}</strong>?
                   </span>
@@ -398,51 +376,39 @@ export function InscricaoCliente({ slug }: { slug: string }) {
                       setEmailSuggestion(null);
                       setEmailError(null);
                     }}
-                    style={{
-                      marginLeft: 8,
-                      padding: "4px 8px",
-                      background: "#d97706",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      fontSize: 12,
-                    }}
                   >
                     Corrigir
                   </button>
                 </div>
               )}
               {emailError && !emailSuggestion && (
-                <span style={{ color: "#ef4444", fontSize: 12, marginTop: 4, display: "block" }}>
+                <span role="alert" className={estilos.erroCampo}>
                   {emailError}
                 </span>
               )}
             </label>
 
-            <div className={estilos.dupla}>
-              <label className={estilos.campo}>
-                CPF
-                <input
-                  value={cpf}
-                  onChange={(e) => setCpf(formatarCpf(e.target.value))}
-                  required
-                  inputMode="numeric"
-                  placeholder="000.000.000-00"
-                />
-              </label>
-              <label className={estilos.campo}>
-                Telefone
-                <input
-                  value={telefone}
-                  onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
-                  inputMode="tel"
-                  autoComplete="tel"
-                  placeholder="(41) 90000-0000"
-                />
-              </label>
-            </div>
+            <label className={estilos.campo}>
+              CPF
+              <input
+                value={cpf}
+                onChange={(e) => setCpf(formatarCpf(e.target.value))}
+                required
+                inputMode="numeric"
+                placeholder="000.000.000-00"
+              />
+            </label>
+
+            <label className={estilos.campo}>
+              Celular
+              <input
+                value={telefone}
+                onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="(00) 00000-0000"
+              />
+            </label>
 
             {equipeConfig && (
               <>
@@ -502,20 +468,22 @@ export function InscricaoCliente({ slug }: { slug: string }) {
               </span>
             </label>
 
-            {erro && <p className={estilos.erro}>{erro}</p>}
+            {erro && (
+              <p role="alert" className={estilos.erro}>
+                {erro}
+              </p>
+            )}
 
-            <button type="submit" className={estilos.botao} disabled={enviando}>
+            <button type="submit" className={`${estilos.botao} ${estilos.espaco}`} disabled={enviando}>
               {enviando ? "Enviando…" : "Confirmar inscrição"}
             </button>
 
-            <p className={estilos.rodapeForm}>
-              Já se inscreveu? <a href="/">Acesse seu QR Code</a>.
+            <p className={estilos.centro}>
+              Já se inscreveu? <Link href="/">Acesse seu QR Code</Link>
             </p>
           </form>
         )}
       </section>
-
-      <div className={estilos.faixaRodape} aria-hidden="true" />
-    </main>
+    </PortalShell>
   );
 }

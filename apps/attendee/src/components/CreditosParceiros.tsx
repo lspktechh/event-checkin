@@ -20,12 +20,20 @@ const APOIO = [
   { nome: "Universidade Positivo", src: "/partners/positivo-rodape.png", largura: 313, altura: 96 },
 ];
 
-export function CreditosParceiros({ className = "" }: { className?: string }) {
+export function CreditosParceiros({
+  className = "",
+  align = "center",
+}: {
+  className?: string;
+  /** `start` alinha à esquerda, como no portal; o padrão continua centralizado. */
+  align?: "center" | "start";
+}) {
+  const inicio = align === "start";
   return (
     <div
-      className={`flex flex-wrap items-center justify-center gap-x-8 gap-y-5 ${className}`}
+      className={`flex flex-wrap items-center ${inicio ? "justify-start" : "justify-center"} gap-x-8 gap-y-5 ${className}`}
     >
-      <div className="flex flex-col items-center gap-2">
+      <div className={`flex flex-col ${inicio ? "items-start" : "items-center"} gap-2`}>
         <Rotulo>Desenvolvido por</Rotulo>
         <a
           href="https://www.instagram.com/lspktech"
@@ -44,9 +52,9 @@ export function CreditosParceiros({ className = "" }: { className?: string }) {
         </a>
       </div>
 
-      <div className="flex flex-col items-center gap-2">
+      <div className={`flex flex-col ${inicio ? "items-start" : "items-center"} gap-2`}>
         <Rotulo>Apoio</Rotulo>
-        <div className="flex flex-wrap items-center justify-center gap-2.5">
+        <div className={`flex flex-wrap items-center ${inicio ? "justify-start" : "justify-center"} gap-2.5`}>
           {APOIO.map((p) => (
             <span
               key={p.nome}

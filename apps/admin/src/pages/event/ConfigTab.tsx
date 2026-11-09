@@ -19,6 +19,7 @@ export function ConfigTab({ eventId }: { eventId: string }) {
   const [slug, setSlug] = useState("");
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [visibility, setVisibility] = useState<"PUBLIC" | "PRIVATE">("PRIVATE");
+  const [showInPortal, setShowInPortal] = useState(false);
 
   // Configurações de Pagamento PIX (Manual)
   const [pixKey, setPixKey] = useState("");
@@ -44,6 +45,7 @@ export function ConfigTab({ eventId }: { eventId: string }) {
         setSlug(c.slug ?? "");
         setTimezone(c.timezone);
         setVisibility(c.visibility);
+        setShowInPortal(c.showInPortal);
       })
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar a configuração")
@@ -77,6 +79,7 @@ export function ConfigTab({ eventId }: { eventId: string }) {
         slug: slug.trim() === "" ? null : slug.trim(),
         timezone,
         visibility,
+        showInPortal,
       });
       setAviso("Configuração salva.");
       carregar();
@@ -218,6 +221,20 @@ export function ConfigTab({ eventId }: { eventId: string }) {
               no portal de credenciamento enquanto as inscrições estiverem abertas.
             </small>
           </label>
+
+          <label className="inline">
+            <input
+              type="checkbox"
+              checked={showInPortal}
+              onChange={(e) => setShowInPortal(e.target.checked)}
+            />
+            Mostrar na aba “Realizados” do site LSPK Eventos
+          </label>
+          <small className="muted">
+            O evento só aparece ali quando estiver <strong>Encerrado</strong> (o seletor de
+            status no topo desta página). Enquanto estiver Ativo, nada muda no site. Esta opção é
+            independente da Visibilidade acima.
+          </small>
 
           <button type="submit" className="btn" disabled={salvando}>
             {salvando ? "Salvando…" : "Salvar"}

@@ -834,6 +834,8 @@ export interface EventConfig {
   timezone: string;
   language: string;
   visibility: "PUBLIC" | "PRIVATE";
+  /** Mostrar na aba "Realizados" do site LSPK Eventos (só aparece com o evento Encerrado). */
+  showInPortal: boolean;
   modules: EventModuleInfo[];
 }
 
@@ -842,7 +844,7 @@ export function getEventConfig(eventId: string) {
 }
 export function updateEventConfig(
   eventId: string,
-  body: Partial<Pick<EventConfig, "slug" | "timezone" | "language" | "visibility">>
+  body: Partial<Pick<EventConfig, "slug" | "timezone" | "language" | "visibility" | "showInPortal">>
 ) {
   return request<EventConfig>(`/events/${eventId}/config`, { method: "PATCH", body });
 }

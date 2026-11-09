@@ -52,6 +52,7 @@ export async function getConfig(eventId: string) {
     timezone: event.timezone,
     language: event.language,
     visibility: event.visibility,
+    showInPortal: event.showInPortal,
     // O catálogo vem do código; o banco só diz o que está ligado. Assim a
     // tela lista sempre todos os módulos possíveis, mesmo os desligados —
     // sem isso o organizador não descobre que existe um módulo novo.
@@ -86,6 +87,7 @@ export async function updateConfig(eventId: string, input: UpdateEventConfigInpu
         ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
         ...(input.language !== undefined ? { language: input.language } : {}),
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+        ...(input.showInPortal !== undefined ? { showInPortal: input.showInPortal } : {}),
       },
       select: {
         id: true,
@@ -93,6 +95,7 @@ export async function updateConfig(eventId: string, input: UpdateEventConfigInpu
         timezone: true,
         language: true,
         visibility: true,
+        showInPortal: true,
       },
     });
   } catch (err) {
