@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginAttendee, verifyEmail } from "@/lib/api";
 import { PortalShell } from "@/components/portal/PortalShell";
+import { CalendarIcon, ClockIcon, MapPinIcon, CheckCircleIcon } from "@/components/Icons";
 import estilos from "@/components/portal/portal.module.css";
 
 /**
@@ -323,17 +324,14 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   ].filter(Boolean);
 
   return (
-    <PortalShell aba="inscricao">
-      <section className={estilos.secao} style={{ gap: 28 }}>
-        <div className={estilos.cabecaSecao}>
+    <PortalShell aba="inscricao" larga>
+      <div className={estilos.layoutInscricao}>
+        {/* Painel com detalhes do evento */}
+        <section className={estilos.painelDetalhes}>
           {banner && (
-            <div style={{ width: "100%", borderRadius: "16px", overflow: "hidden", marginBottom: "16px", maxHeight: "320px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.04)" }}>
+            <div className={estilos.bannerHero}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={banner}
-                alt={tituloExibicao}
-                style={{ width: "100%", maxHeight: "320px", objectFit: "cover", display: "block" }}
-              />
+              <img src={banner} alt={tituloExibicao} />
             </div>
           )}
           {isEcohub && (
@@ -346,41 +344,86 @@ export function InscricaoCliente({ slug }: { slug: string }) {
               />
             </div>
           )}
-          <span className={estilos.rotuloMono}>{jaComecou ? "Inscrições abertas" : "Próximo evento"}</span>
-          <h1 className={estilos.titulo}>{tituloExibicao}</h1>
-          {c.heroSubtitulo && <p className={estilos.subtituloEvento}>{c.heroSubtitulo}</p>}
-          <p className={estilos.metaEvento}>
-            {dataFormatada} · {horarioFormatado} · {c.local ?? evento.location ?? "Local a confirmar"}
-          </p>
-          <p className={estilos.metaSecundaria}>{detalhes.join(" · ")}</p>
-          {descricaoExibicao && <p className={estilos.lead}>{descricaoExibicao}</p>}
-        </div>
 
-        {c.destaques && c.destaques.length > 0 && (
-          <div className={estilos.destaques}>
-            {c.destaques.map((d) => (
-              <article key={d.titulo} className={estilos.destaque}>
-                <h2>{d.titulo}</h2>
-                <p>{d.texto}</p>
-              </article>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <span className={estilos.badgeAberto}>
+              <span className={estilos.pontoAberto}></span>
+              {jaComecou ? "Inscrições abertas" : "Próximo evento"}
+            </span>
+            <h1 className={estilos.titulo} style={{ marginTop: "6px" }}>{tituloExibicao}</h1>
+            {c.heroSubtitulo && <p className={estilos.subtituloEvento}>{c.heroSubtitulo}</p>}
           </div>
-        )}
 
-        {(!evento.registrationsOpen || evento.registrationInPortal === false) ? (
-          <div style={{ textAlign: "center", padding: "28px 20px", background: "rgba(255,255,255,0.03)", borderRadius: "12px", border: "1px solid var(--border)" }}>
-            <p className={estilos.fechado} style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 10px" }}>
-              As inscrições para este evento estão encerradas.
-            </p>
-            <p className={estilos.lead} style={{ fontSize: "14px", margin: "0 0 18px" }}>
-              Novas inscrições não estão sendo aceitas no momento.
-            </p>
-            <Link href="/" className={estilos.botao} style={{ display: "inline-block", textDecoration: "none", width: "auto", padding: "10px 24px" }}>
-              Já é inscrito? Acesse seu QR Code
-            </Link>
+          <div className={estilos.chipsContainer}>
+            {dataFormatada && (
+              <span className={estilos.chip} title="Data do evento">
+                <CalendarIcon size={14} color="#3b5bff" />
+                {dataFormatada}
+              </span>
+            )}
+            {horarioFormatado && (
+              <span className={estilos.chip} title="Horário">
+                <ClockIcon size={14} color="#3b5bff" />
+                {horarioFormatado}
+              </span>
+            )}
+            {(c.local || evento.location) && (
+              <span className={estilos.chip} title="Local">
+                <MapPinIcon size={14} color="#3b5bff" />
+                {c.local ?? evento.location}
+              </span>
+            )}
+            <span className={estilos.chip} title="Certificado">
+              <CheckCircleIcon size={14} color="#10b981" />
+              {c.cargaHoraria ?? "Com certificado"}
+            </span>
           </div>
-        ) : (
-          <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
+
+          {descricaoExibicao && (
+            <div className={estilos.cartaoModerno} style={{ padding: "18px 20px" }}>
+              <p className={estilos.lead} style={{ margin: 0, fontSize: "14px", lineHeight: "1.6" }}>
+                {descricaoExibicao}
+              </p>
+            </div>
+          )}
+
+          {c.destaques && c.destaques.length > 0 && (
+            <div className={estilos.destaques}>
+              {c.destaques.map((d) => (
+                <article key={d.titulo} className={estilos.destaque}>
+                  <h2>{d.titulo}</h2>
+                  <p>{d.texto}</p>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Formulário de Inscrição */}
+        <section className={estilos.cartaoModerno}>
+          <div style={{ marginBottom: "20px" }}>
+            <h2 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 4px", color: "var(--tinta)" }}>
+              Formulário de Inscrição
+            </h2>
+            <p className={estilos.lead} style={{ fontSize: "14px", margin: 0 }}>
+              Preencha seus dados para receber o QR Code de acesso e certificado.
+            </p>
+          </div>
+
+          {(!evento.registrationsOpen || evento.registrationInPortal === false) ? (
+            <div style={{ textAlign: "center", padding: "28px 16px", background: "rgba(255,255,255,0.02)", borderRadius: "14px", border: "1px solid var(--linha)" }}>
+              <p className={estilos.fechado} style={{ fontSize: "15px", fontWeight: 600, margin: "0 0 10px" }}>
+                As inscrições para este evento estão encerradas.
+              </p>
+              <p className={estilos.lead} style={{ fontSize: "14px", margin: "0 0 18px" }}>
+                Novas inscrições não estão sendo aceitas no momento.
+              </p>
+              <Link href="/" className={estilos.botao} style={{ display: "inline-flex", textDecoration: "none", width: "auto", padding: "0 20px" }}>
+                Já é inscrito? Acesse seu QR Code
+              </Link>
+            </div>
+          ) : (
+            <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
             <label className={estilos.campo}>
               Nome
               <input
@@ -544,7 +587,8 @@ export function InscricaoCliente({ slug }: { slug: string }) {
             </p>
           </form>
         )}
-      </section>
+        </section>
+      </div>
     </PortalShell>
   );
 }

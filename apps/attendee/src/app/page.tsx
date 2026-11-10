@@ -183,31 +183,33 @@ export default function AcessarPage() {
           </p>
         )}
 
-        <form onSubmit={handleSubmit} className={estilos.form}>
-          {error && (
-            <p role="alert" className={estilos.erro}>
-              {error}
-            </p>
-          )}
+        <div className={estilos.cartaoModerno}>
+          <form onSubmit={handleSubmit} className={estilos.form}>
+            {error && (
+              <p role="alert" className={estilos.erro}>
+                {error}
+              </p>
+            )}
 
-          <div className={estilos.campo}>
-            <label htmlFor="email">E-mail cadastrado</label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu@email.com"
-              autoComplete="email"
-              autoCapitalize="none"
-            />
-          </div>
+            <div className={estilos.campo}>
+              <label htmlFor="email">E-mail cadastrado</label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="seu@email.com"
+                autoComplete="email"
+                autoCapitalize="none"
+              />
+            </div>
 
-          <button type="submit" disabled={loading} className={estilos.botao}>
-            {loading ? "Buscando…" : "Entrar"}
-          </button>
-        </form>
+            <button type="submit" disabled={loading} className={estilos.botao}>
+              {loading ? "Buscando…" : "Entrar →"}
+            </button>
+          </form>
+        </div>
 
         <p className={estilos.centro}>
           Ainda não se inscreveu? <Link href="/inscricao">Fazer inscrição</Link>

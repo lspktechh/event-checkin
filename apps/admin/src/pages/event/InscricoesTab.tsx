@@ -19,6 +19,17 @@ function fromDatetimeLocal(value: string): string {
   return new Date(value).toISOString();
 }
 
+function slugify(text: string): string {
+  if (!text) return "";
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function InscricoesTab({ eventId }: { eventId: string }) {
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -57,7 +68,8 @@ export function InscricoesTab({ eventId }: { eventId: string }) {
 
         setEventStatus(ev.status || "ACTIVE");
         setRegistrationInPortal(ev.status === "CLOSED" ? false : cfg.registrationInPortal);
-        setSlug(cfg.slug || "");
+        const resolvedInitialSlug = cfg.slug || (cfg.registrationInPortal ? slugify(ev.name) : "");
+        setSlug(resolvedInitialSlug);
 
         const siteContent = ev.siteContent as any;
         const regForm = siteContent?.registrationForm;
@@ -124,12 +136,17 @@ export function InscricoesTab({ eventId }: { eventId: string }) {
     setSalvando(true);
 
     try {
-      const cleanSlug = slug.trim() === "" ? null : slug.trim().toLowerCase();
+      let cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
       const finalRegistrationInPortal = eventStatus === "CLOSED" ? false : registrationInPortal;
+
+      if (finalRegistrationInPortal && !cleanSlug) {
+        cleanSlug = slugify(titulo.trim() || event.name || "evento");
+        setSlug(cleanSlug);
+      }
 
       // 1. Atualiza configuração de slug e se a inscrição está ligada no site
       await api.updateEventConfig(eventId, {
-        slug: cleanSlug,
+        slug: cleanSlug || null,
         registrationInPortal: finalRegistrationInPortal,
       });
 
@@ -291,7 +308,13 @@ export function InscricoesTab({ eventId }: { eventId: string }) {
               type="checkbox"
               disabled={eventStatus === "CLOSED"}
               checked={eventStatus === "CLOSED" ? false : registrationInPortal}
-              onChange={(e) => setRegistrationInPortal(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setRegistrationInPortal(checked);
+                if (checked && !slug.trim()) {
+                  setSlug(slugify(titulo.trim() || event?.name || "evento"));
+                }
+              }}
               style={{ width: 18, height: 18, cursor: eventStatus === "CLOSED" ? "not-allowed" : "pointer" }}
             />
             <div>
@@ -342,6 +365,12 @@ export function InscricoesTab({ eventId }: { eventId: string }) {
               </div>
             </div>
           )}
+
+          <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>
+            <button type="submit" disabled={salvando} className="btn btn-sm btn-primary">
+              {salvando ? "Salvando..." : "Salvar Configurações"}
+            </button>
+          </div>
         </section>
 
         {/* CARD 2: SELEÇÃO DE CAMPOS */}

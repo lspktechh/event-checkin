@@ -1,6 +1,7 @@
 import type { Event, EventStatus } from "@prisma/client";
 import { prisma } from "../../database/prisma.js";
 import { NotFoundError } from "../../shared/errors.js";
+import { slugify } from "../../shared/slugify.js";
 import * as eventsRepository from "./events.repository.js";
 import type { CreateEventInput, UpdateEventInput } from "./events.schema.js";
 import { resolveSiteContent } from "./site-content.js";
@@ -76,8 +77,20 @@ export async function listActiveEvents() {
 export async function listOpenRegistrationEvents() {
   const events = await eventsRepository.listEventsWithOpenRegistration();
   return events
-    .filter((e) => isRegistrationOpen(e))
-    .map((e) => ({ slug: e.slug, name: e.name, startDate: e.startDate }));
+    .filter((e) => isRegistrationOpen(e) && Boolean(e.slug))
+    .map((e) => {
+      const site = (e.siteContent as any) || {};
+      const reg = site.registrationForm || {};
+      return {
+        slug: e.slug!,
+        name: reg.customTitle || e.name,
+        description: reg.customDescription || e.description || null,
+        location: e.location || null,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        bannerUrl: reg.bannerUrl || site.bannerUrl || site.imageUrl || null,
+      };
+    });
 }
 
 /**
@@ -96,7 +109,16 @@ export async function listClosedEvents() {
 }
 
 export async function getPublicEventBySlug(slug: string) {
-  const event = await prisma.event.findUnique({ where: { slug } });
+  let event = await prisma.event.findUnique({ where: { slug } });
+  if (!event || event.status !== "ACTIVE") {
+    // Tenta fallback comparando slugify(name) dos eventos ativos
+    const active = await prisma.event.findMany({ where: { status: "ACTIVE" } });
+    const matched = active.find((e) => e.slug === slug || slugify(e.name) === slug);
+    if (matched) {
+      event = matched;
+    }
+  }
+
   if (!event || event.status !== "ACTIVE") {
     throw new NotFoundError("Evento não encontrado");
   }
@@ -109,7 +131,7 @@ export async function getPublicEventBySlug(slug: string) {
     location: publico.location,
     startDate: publico.startDate,
     endDate: publico.endDate,
-    slug: publico.slug,
+    slug: publico.slug || slugify(publico.name),
     timezone: publico.timezone,
     registrationsOpen: publico.registrationsOpen,
     // O site LSPK Eventos só aceita inscrição de quem o organizador ligou.

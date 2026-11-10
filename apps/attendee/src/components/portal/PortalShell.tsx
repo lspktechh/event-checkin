@@ -43,15 +43,23 @@ function Marca() {
 export function PortalShell({
   aba,
   larga = false,
+  extraLarga = false,
   children,
 }: {
   aba: AbaDoPortal;
   larga?: boolean;
+  extraLarga?: boolean;
   children: ReactNode;
 }) {
+  const larguraClasse = extraLarga
+    ? estilos.extraLarga
+    : larga
+    ? estilos.larga
+    : "";
+
   return (
     <div className={estilos.pagina}>
-      <div className={`${estilos.coluna} ${larga ? estilos.larga : ""}`}>
+      <div className={`${estilos.coluna} ${larguraClasse}`}>
         <Link href="/" className={estilos.cabecalho} aria-label="LSPK Eventos — início">
           <Marca />
           <span className={estilos.nomes}>
