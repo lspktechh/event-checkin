@@ -54,7 +54,7 @@ describe("visibilidade do evento", () => {
     const e = await createTestEvent({ name: "Semantix" });
     await prisma.event.update({
       where: { id: e.id },
-      data: { visibility: "PRIVATE", slug: "semantix" },
+      data: { visibility: "PRIVATE", slug: "semantix", registrationInPortal: true },
     });
 
     const res = await app.inject({ method: "GET", url: "/public/events/open-registration" });
@@ -62,7 +62,7 @@ describe("visibilidade do evento", () => {
   });
 
   it("evento sem slug fica fora do portal — não há para onde mandar", async () => {
-    await createTestEvent({ name: "Sem endereço" });
+    await createTestEvent({ name: "Sem endereço", registrationInPortal: true });
     const res = await app.inject({ method: "GET", url: "/public/events/open-registration" });
     expect(res.json().data).toHaveLength(0);
   });
@@ -71,10 +71,34 @@ describe("visibilidade do evento", () => {
     const e = await createTestEvent({ name: "Encerrado" });
     await prisma.event.update({
       where: { id: e.id },
-      data: { slug: "encerrado", registrationsClosedAt: new Date() },
+      data: { slug: "encerrado", registrationsClosedAt: new Date(), registrationInPortal: true },
     });
 
     const res = await app.inject({ method: "GET", url: "/public/events/open-registration" });
     expect(res.json().data).toHaveLength(0);
+  });
+
+  it("com endereço e inscrição aberta, mas SEM a opção do site, não aparece — quem escolhe é o organizador", async () => {
+    // A aba "Inscrição" do portal só oferece o que o organizador ligou no
+    // painel ("Inscrição pelo site"). Antes, qualquer evento Ativo com
+    // endereço entrava sozinho na lista.
+    const e = await createTestEvent({ name: "Evento sem a opção" });
+    await prisma.event.update({ where: { id: e.id }, data: { slug: "sem-opcao" } });
+
+    const res = await app.inject({ method: "GET", url: "/public/events/open-registration" });
+    expect(res.json().data).toEqual([]);
+  });
+
+  it("a página de inscrição recebe a opção, para o site saber se o evento aceita inscrição por ele", async () => {
+    const ligado = await createTestEvent({ name: "Ligado", registrationInPortal: true });
+    await prisma.event.update({ where: { id: ligado.id }, data: { slug: "ligado" } });
+    const desligado = await createTestEvent({ name: "Desligado" });
+    await prisma.event.update({ where: { id: desligado.id }, data: { slug: "desligado" } });
+
+    const a = await app.inject({ method: "GET", url: "/public/events/ligado" });
+    const b = await app.inject({ method: "GET", url: "/public/events/desligado" });
+
+    expect(a.json().data.registrationInPortal).toBe(true);
+    expect(b.json().data.registrationInPortal).toBe(false);
   });
 });

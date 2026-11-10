@@ -36,6 +36,7 @@ export async function createTestEvent(
     endDate: Date;
     certificateSettings: unknown;
     showInPortal: boolean;
+    registrationInPortal: boolean;
   }> = {}
 ) {
   return prisma.event.create({
@@ -54,6 +55,9 @@ export async function createTestEvent(
       status: overrides.status ?? "ACTIVE",
       certificateSettings: overrides.certificateSettings as never,
       ...(overrides.showInPortal !== undefined ? { showInPortal: overrides.showInPortal } : {}),
+      ...(overrides.registrationInPortal !== undefined
+        ? { registrationInPortal: overrides.registrationInPortal }
+        : {}),
     },
   });
 }

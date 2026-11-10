@@ -239,6 +239,14 @@ model Event {
   /// Padrão falso: aplicar a migração não divulga evento nenhum.
   showInPortal Boolean @default(false)
 
+  /// Inscrição pelo site LSPK Eventos (apps/attendee): o evento aparece na aba
+  /// "Inscrição" e o formulário do site aceita inscrições dele. Independente de
+  /// `showInPortal` (que é a aba "Realizados") e de `visibility`.
+  /// Padrão falso para evento novo — quem liga é o organizador, no painel. A
+  /// migração liga nos eventos Ativos com endereço, que já apareciam na aba
+  /// antes desta opção existir: aplicá-la não tira ninguém do ar.
+  registrationInPortal Boolean @default(false)
+
   siteContent Json?
 
   // Configuração do certificado/comprovante deste evento — carga horária,

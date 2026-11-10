@@ -53,6 +53,7 @@ export async function getConfig(eventId: string) {
     language: event.language,
     visibility: event.visibility,
     showInPortal: event.showInPortal,
+    registrationInPortal: event.registrationInPortal,
     // O catálogo vem do código; o banco só diz o que está ligado. Assim a
     // tela lista sempre todos os módulos possíveis, mesmo os desligados —
     // sem isso o organizador não descobre que existe um módulo novo.
@@ -88,6 +89,9 @@ export async function updateConfig(eventId: string, input: UpdateEventConfigInpu
         ...(input.language !== undefined ? { language: input.language } : {}),
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
         ...(input.showInPortal !== undefined ? { showInPortal: input.showInPortal } : {}),
+        ...(input.registrationInPortal !== undefined
+          ? { registrationInPortal: input.registrationInPortal }
+          : {}),
       },
       select: {
         id: true,
@@ -96,6 +100,7 @@ export async function updateConfig(eventId: string, input: UpdateEventConfigInpu
         language: true,
         visibility: true,
         showInPortal: true,
+        registrationInPortal: true,
       },
     });
   } catch (err) {

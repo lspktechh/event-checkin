@@ -58,6 +58,8 @@ export const updateEventConfigSchema = z.object({
   visibility: z.enum(["PUBLIC", "PRIVATE"]).optional(),
   // Aba "Realizados" do site LSPK Eventos. Só vale com o evento Encerrado.
   showInPortal: z.boolean().optional(),
+  // Aba "Inscrição" do site LSPK Eventos: lista o evento e aceita inscrição.
+  registrationInPortal: z.boolean().optional(),
 });
 
 export const moduleParamsSchema = z.object({

@@ -836,6 +836,8 @@ export interface EventConfig {
   visibility: "PUBLIC" | "PRIVATE";
   /** Mostrar na aba "Realizados" do site LSPK Eventos (só aparece com o evento Encerrado). */
   showInPortal: boolean;
+  /** Inscrição pelo site LSPK Eventos: aparece na aba "Inscrição" e o formulário do site aceita o evento. */
+  registrationInPortal: boolean;
   modules: EventModuleInfo[];
 }
 
@@ -844,7 +846,7 @@ export function getEventConfig(eventId: string) {
 }
 export function updateEventConfig(
   eventId: string,
-  body: Partial<Pick<EventConfig, "slug" | "timezone" | "language" | "visibility" | "showInPortal">>
+  body: Partial<Pick<EventConfig, "slug" | "timezone" | "language" | "visibility" | "showInPortal" | "registrationInPortal">>
 ) {
   return request<EventConfig>(`/events/${eventId}/config`, { method: "PATCH", body });
 }

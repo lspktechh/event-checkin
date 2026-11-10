@@ -107,6 +107,8 @@ export async function getPublicEventBySlug(slug: string) {
     slug: publico.slug,
     timezone: publico.timezone,
     registrationsOpen: publico.registrationsOpen,
+    // O site LSPK Eventos só aceita inscrição de quem o organizador ligou.
+    registrationInPortal: event.registrationInPortal,
     pixKey: event.pixKey,
     pixKeyType: event.pixKeyType,
     pixReceiverName: event.pixReceiverName,

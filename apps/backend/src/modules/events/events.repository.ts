@@ -40,11 +40,13 @@ export function listActiveEvents() {
  * de credenciamento precisa da segunda — ele não divulga evento nenhum,
  * só leva quem chegou até ele ao lugar certo.
  *
- * Sem slug fica de fora: sem endereço público não há para onde mandar.
+ * Sem slug fica de fora: sem endereço público não há para onde mandar. E só
+ * entra quem o organizador ligou ("Inscrição pelo site", registrationInPortal):
+ * o portal oferece o que foi escolhido, não tudo o que estiver Ativo.
  */
 export function listEventsWithOpenRegistration() {
   return prisma.event.findMany({
-    where: { status: "ACTIVE", slug: { not: null } },
+    where: { status: "ACTIVE", slug: { not: null }, registrationInPortal: true },
     orderBy: { startDate: "asc" },
   });
 }

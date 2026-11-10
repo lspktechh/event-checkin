@@ -20,6 +20,7 @@ export function ConfigTab({ eventId }: { eventId: string }) {
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [visibility, setVisibility] = useState<"PUBLIC" | "PRIVATE">("PRIVATE");
   const [showInPortal, setShowInPortal] = useState(false);
+  const [registrationInPortal, setRegistrationInPortal] = useState(false);
 
   // Configurações de Pagamento PIX (Manual)
   const [pixKey, setPixKey] = useState("");
@@ -46,6 +47,7 @@ export function ConfigTab({ eventId }: { eventId: string }) {
         setTimezone(c.timezone);
         setVisibility(c.visibility);
         setShowInPortal(c.showInPortal);
+        setRegistrationInPortal(c.registrationInPortal);
       })
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar a configuração")
@@ -80,6 +82,7 @@ export function ConfigTab({ eventId }: { eventId: string }) {
         timezone,
         visibility,
         showInPortal,
+        registrationInPortal,
       });
       setAviso("Configuração salva.");
       carregar();
@@ -221,6 +224,22 @@ export function ConfigTab({ eventId }: { eventId: string }) {
               no portal de credenciamento enquanto as inscrições estiverem abertas.
             </small>
           </label>
+
+          <label className="inline">
+            <input
+              type="checkbox"
+              checked={registrationInPortal}
+              onChange={(e) => setRegistrationInPortal(e.target.checked)}
+            />
+            Inscrição pelo site LSPK Eventos
+          </label>
+          <small className="muted">
+            Liga a inscrição pelo site: o evento aparece na aba <strong>Inscrição</strong> e o
+            formulário do site passa a aceitar inscrições dele. Precisa de um{" "}
+            <strong>endereço</strong> (campo acima) e de inscrições abertas; o botão de
+            encerrar inscrições continua valendo. Desligado, o evento não é oferecido pelo
+            site.
+          </small>
 
           <label className="inline">
             <input

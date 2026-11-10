@@ -120,6 +120,33 @@ describe("endereço público (slug)", () => {
   });
 });
 
+describe("inscrição pelo site LSPK Eventos (registrationInPortal)", () => {
+  it("evento novo NÃO oferece inscrição pelo site — é o organizador quem liga", async () => {
+    const cfg = (await get(`/events/${eventId}/config`)).json().data;
+    expect(cfg.registrationInPortal).toBe(false);
+  });
+
+  it("liga e desliga, e a leitura devolve o valor salvo", async () => {
+    const ligou = await patch(`/events/${eventId}/config`, { registrationInPortal: true });
+    expect(ligou.statusCode).toBe(200);
+    expect((await get(`/events/${eventId}/config`)).json().data.registrationInPortal).toBe(true);
+
+    await patch(`/events/${eventId}/config`, { registrationInPortal: false });
+    expect((await get(`/events/${eventId}/config`)).json().data.registrationInPortal).toBe(false);
+  });
+
+  it("recusa valor que não é verdadeiro/falso", async () => {
+    const res = await patch(`/events/${eventId}/config`, { registrationInPortal: "sim" });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it("é independente de showInPortal (Realizados)", async () => {
+    await patch(`/events/${eventId}/config`, { registrationInPortal: true });
+    const cfg = (await get(`/events/${eventId}/config`)).json().data;
+    expect(cfg.showInPortal).toBe(false);
+  });
+});
+
 describe("mostrar no site LSPK Eventos (showInPortal)", () => {
   it("evento novo NÃO vai para o site — é o organizador quem liga", async () => {
     // Contrato da migração: aplicar não divulga nenhum evento que já existia.
