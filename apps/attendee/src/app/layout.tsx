@@ -57,7 +57,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       translate="no"
       className={`notranslate ${grotesk.variable} ${mono.variable} ${monoPortal.variable}`}
     >
-      <body className="notranslate">{children}</body>
+      <head>
+        <meta name="google" content="notranslate" />
+        <meta name="googlebot" content="notranslate" />
+        <meta name="robots" content="notranslate" />
+      </head>
+      <body className="notranslate" translate="no">
+        {children}
+      </body>
     </html>
   );
 }

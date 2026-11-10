@@ -74,7 +74,8 @@ export function PortalShell({
               key={a.id}
               href={a.href}
               aria-current={a.id === aba ? "page" : undefined}
-              className={`${estilos.aba} ${a.id === aba ? estilos.abaAtiva : ""}`}
+              className={`${estilos.aba} ${a.id === aba ? estilos.abaAtiva : ""} notranslate`}
+              translate="no"
             >
               {a.rotulo}
             </Link>
