@@ -503,16 +503,18 @@ export function InscricaoCliente({ slug }: { slug: string }) {
               </label>
             )}
 
-            <label className={estilos.campo}>
-              Celular
-              <input
-                value={telefone}
-                onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="(00) 00000-0000"
-              />
-            </label>
+            {exigeTelefone && (
+              <label className={estilos.campo}>
+                Celular / WhatsApp
+                <input
+                  value={telefone}
+                  onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="(00) 00000-0000"
+                />
+              </label>
+            )}
 
             {equipeConfig && (
               <>
