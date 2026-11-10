@@ -85,11 +85,21 @@
 .cabecalho {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
   color: var(--tinta);
   text-decoration: none;
   padding: 4px 0;
-  width: fit-content;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  .cabecalho {
+    justify-content: flex-start;
+    width: fit-content;
+    margin: 0;
+  }
 }
 
 .pagina a.cabecalho,
@@ -192,6 +202,15 @@
   margin-top: 64px;
   padding-top: 24px;
   border-top: 1px solid var(--linha);
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+@media (min-width: 640px) {
+  .rodape {
+    justify-content: flex-start;
+  }
 }
 
 /* ───────── Tipografia e Estrutura ───────── */

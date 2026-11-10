@@ -84,7 +84,7 @@ export function PortalShell({
         <main className={estilos.conteudo}>{children}</main>
 
         <footer className={estilos.rodape}>
-          <CreditosParceiros align="start" />
+          <CreditosParceiros align="responsive" />
         </footer>
       </div>
     </div>

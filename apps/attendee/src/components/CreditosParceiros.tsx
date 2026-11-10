@@ -25,15 +25,39 @@ export function CreditosParceiros({
   align = "center",
 }: {
   className?: string;
-  /** `start` alinha à esquerda, como no portal; o padrão continua centralizado. */
-  align?: "center" | "start";
+  /**
+   * `start`: alinha à esquerda em todas as telas.
+   * `responsive`: centralizado no mobile (<640px) e alinhado à esquerda no desktop (>=640px).
+   * `center`: centralizado em todas as telas (padrão).
+   */
+  align?: "center" | "start" | "responsive";
 }) {
-  const inicio = align === "start";
+  const isResponsive = align === "responsive";
+  const isStart = align === "start";
+
+  const containerJustify = isResponsive
+    ? "justify-center sm:justify-start"
+    : isStart
+    ? "justify-start"
+    : "justify-center";
+
+  const itemAlign = isResponsive
+    ? "items-center sm:items-start text-center sm:text-left"
+    : isStart
+    ? "items-start text-left"
+    : "items-center text-center";
+
+  const apoioJustify = isResponsive
+    ? "justify-center sm:justify-start"
+    : isStart
+    ? "justify-start"
+    : "justify-center";
+
   return (
     <div
-      className={`flex flex-wrap items-center ${inicio ? "justify-start" : "justify-center"} gap-x-8 gap-y-5 ${className}`}
+      className={`flex flex-wrap items-center ${containerJustify} gap-x-8 gap-y-5 w-full ${className}`}
     >
-      <div className={`flex flex-col ${inicio ? "items-start" : "items-center"} gap-2`}>
+      <div className={`flex flex-col ${itemAlign} gap-2`}>
         <Rotulo>Desenvolvido por</Rotulo>
         <a
           href="https://www.instagram.com/lspktech"
@@ -52,9 +76,9 @@ export function CreditosParceiros({
         </a>
       </div>
 
-      <div className={`flex flex-col ${inicio ? "items-start" : "items-center"} gap-2`}>
+      <div className={`flex flex-col ${itemAlign} gap-2`}>
         <Rotulo>Apoio</Rotulo>
-        <div className={`flex flex-wrap items-center ${inicio ? "justify-start" : "justify-center"} gap-2.5`}>
+        <div className={`flex flex-wrap items-center ${apoioJustify} gap-2.5`}>
           {APOIO.map((p) => (
             <span
               key={p.nome}
