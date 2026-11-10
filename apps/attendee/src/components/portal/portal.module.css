@@ -52,14 +52,14 @@
 
 .coluna {
   width: 100%;
-  max-width: 480px;
+  max-width: 520px;
   display: flex;
   flex-direction: column;
   transition: max-width 0.25s ease;
 }
 
 .larga {
-  max-width: 920px;
+  max-width: 960px;
 }
 
 .extraLarga {
@@ -551,23 +551,26 @@
 .layoutInscricao {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 20px;
   width: 100%;
 }
 
-@media (min-width: 860px) {
-  .layoutInscricao {
-    display: grid;
-    grid-template-columns: 1fr 1.1fr;
-    gap: 36px;
-    align-items: start;
+.gridCamposDuplo {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 480px) {
+  .gridCamposDuplo {
+    grid-template-columns: 1fr 1fr;
   }
 }
 
 .painelDetalhes {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .bannerHero {

@@ -339,10 +339,27 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   ].filter(Boolean);
 
   return (
-    <PortalShell aba="inscricao" larga>
+    <PortalShell aba="inscricao">
+      <div style={{ marginBottom: "16px" }}>
+        <Link
+          href="/inscricao"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "14px",
+            color: "var(--link)",
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+        >
+          ← Ver todos os eventos
+        </Link>
+      </div>
+
       <div className={estilos.layoutInscricao}>
         {/* Painel com detalhes do evento */}
-        <section className={estilos.painelDetalhes}>
+        <section className={`${estilos.cartaoModerno} ${estilos.painelDetalhes}`}>
           {banner && (
             <div className={estilos.bannerHero}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -365,7 +382,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
               <span className={estilos.pontoAberto}></span>
               {jaComecou ? "Inscrições abertas" : "Próximo evento"}
             </span>
-            <h1 className={estilos.titulo} style={{ marginTop: "6px" }}>{tituloExibicao}</h1>
+            <h1 className={estilos.titulo} style={{ marginTop: "4px" }}>{tituloExibicao}</h1>
             {c.heroSubtitulo && <p className={estilos.subtituloEvento}>{c.heroSubtitulo}</p>}
           </div>
 
@@ -388,18 +405,16 @@ export function InscricaoCliente({ slug }: { slug: string }) {
                 {c.local ?? evento.location}
               </span>
             )}
-            <span className={estilos.chip} title="Certificado">
+            <span className={`${estilos.chip} notranslate`} translate="no" title="Certificado">
               <CheckCircleIcon size={14} color="#10b981" />
               {c.cargaHoraria ?? "Com certificado"}
             </span>
           </div>
 
           {descricaoExibicao && (
-            <div className={estilos.cartaoModerno} style={{ padding: "18px 20px" }}>
-              <p className={estilos.lead} style={{ margin: 0, fontSize: "14px", lineHeight: "1.6" }}>
-                {descricaoExibicao}
-              </p>
-            </div>
+            <p className={estilos.lead} style={{ margin: "4px 0 0", fontSize: "14px", lineHeight: "1.6" }}>
+              {descricaoExibicao}
+            </p>
           )}
 
           {c.destaques && c.destaques.length > 0 && (
@@ -417,7 +432,11 @@ export function InscricaoCliente({ slug }: { slug: string }) {
         {/* Formulário de Inscrição */}
         <section className={estilos.cartaoModerno}>
           <div style={{ marginBottom: "20px" }}>
-            <h2 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 4px", color: "var(--tinta)" }}>
+            <h2
+              className="notranslate"
+              translate="no"
+              style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 4px", color: "var(--tinta)" }}
+            >
               Formulário de Inscrição
             </h2>
             <p className={estilos.lead} style={{ fontSize: "14px", margin: 0 }}>
@@ -440,7 +459,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
           ) : (
             <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
             {exigeNome && (
-              <>
+              <div className={estilos.gridCamposDuplo}>
                 <label className={estilos.campo}>
                   Nome
                   <input
@@ -463,7 +482,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
                   />
                   <small>Nome e sobrenome saem como você escrever no certificado.</small>
                 </label>
-              </>
+              </div>
             )}
 
             {exigeEmail && (
