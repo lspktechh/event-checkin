@@ -25,20 +25,12 @@ export default function AcessarPage() {
   // é por aqui, com o e-mail da inscrição, que o certificado é baixado.
   const [dicaCertificado, setDicaCertificado] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const emailParam = params.get("email");
-    if (emailParam) setEmail(emailParam);
-    if (params.get("certificado") === "1") setDicaCertificado(true);
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executarLogin = async (emailAlvo: string) => {
     setError(null);
     setLoading(true);
 
     try {
-      const cleanEmail = email.trim().toLowerCase();
+      const cleanEmail = emailAlvo.trim().toLowerCase();
       const response = await loginAttendee(cleanEmail);
 
       const foundEvents: ParticipantData[] =
@@ -69,6 +61,21 @@ export default function AcessarPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get("email");
+    if (emailParam) {
+      setEmail(emailParam);
+      executarLogin(emailParam);
+    }
+    if (params.get("certificado") === "1") setDicaCertificado(true);
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executarLogin(email);
   };
 
   const handleAccessEvent = async (p: ParticipantData) => {

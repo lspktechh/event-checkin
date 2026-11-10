@@ -243,13 +243,14 @@ export class EmailService {
       day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
     });
     const local = params.eventLocation ?? evento.location ?? null;
+    const acessoCredencialUrl = `${s.siteUrl}/?email=${encodeURIComponent(params.to)}`;
 
     const corpo = `
       <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
         Olá, <strong>${escaparHtml(params.participantName)}</strong>!
       </p>
       <p style="font-size: 15px; line-height: 1.6; margin: 0 0 28px; color: #475569;">
-        Seu pagamento foi aprovado e sua inscrição está <strong>confirmada</strong>.
+        Sua inscrição no evento <strong>${escaparHtml(evento.name)}</strong> está <strong>confirmada</strong>!
       </p>
 
       <table role="presentation" width="100%" style="background-color: #F0FDF4; border: 2px dashed #86EFAC; border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 28px;">
@@ -270,7 +271,7 @@ export class EmailService {
       <table role="presentation" width="100%" style="background-color: #F8FAFC; border-radius: 12px; border: 1px solid #E2E8F0; padding: 18px; font-size: 14px; margin-bottom: 28px;">
         <tr><td style="padding: 6px 0; color: #64748B;">Identificador:</td>
             <td style="padding: 6px 0; font-weight: 700; text-align: right; font-family: monospace;">${escaparHtml(params.inscriptionId)}</td></tr>
-        <tr><td style="padding: 6px 0; color: #64748B;">Lote:</td>
+        <tr><td style="padding: 6px 0; color: #64748B;">Lote / Categoria:</td>
             <td style="padding: 6px 0; font-weight: 700; text-align: right; color: ${s.primaryColor};">${escaparHtml(params.batchName)}</td></tr>
         <tr><td style="padding: 6px 0; color: #64748B;">Valor pago:</td>
             <td style="padding: 6px 0; font-weight: 700; text-align: right; color: #16A34A;">${valor}</td></tr>
@@ -280,16 +281,25 @@ export class EmailService {
             <td style="padding: 6px 0; font-weight: 600; text-align: right;">${escaparHtml(local)}</td></tr>` : ""}
       </table>
 
+      <div style="background-color: #F8FAFC; border-radius: 12px; border: 1px solid #E2E8F0; padding: 22px; text-align: center; margin-bottom: 28px;">
+        <h4 style="margin: 0 0 8px; font-size: 15px; color: ${s.primaryColor}; font-weight: 700;">Acesse seus eventos e credenciais</h4>
+        <p style="margin: 0 0 18px; font-size: 13px; color: #64748B; line-height: 1.5;">
+          Clique no botão abaixo para abrir diretamente o portal de credenciamento com suas inscrições, QR Code e certificados:
+        </p>
+        ${botao(s, acessoCredencialUrl, "Acessar Minhas Inscrições e Credencial")}
+        <p style="margin: 14px 0 0; font-size: 11px; color: #94A3B8; word-break: break-all;">
+          Link direto: <a href="${acessoCredencialUrl}" style="color: ${s.primaryColor};">${acessoCredencialUrl}</a>
+        </p>
+      </div>
+
       <div style="border-left: 4px solid ${s.accentColor}; padding-left: 16px; margin-bottom: 28px;">
         <h4 style="margin: 0 0 6px; font-size: 14px; color: ${s.primaryColor};">Instruções para o dia:</h4>
         <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #475569; line-height: 1.6;">
           <li>Chegue com pelo menos 20 minutos de antecedência;</li>
           <li>Mantenha o brilho da tela alto ao aproximar do leitor;</li>
-          <li>Se preferir, imprima este e-mail.</li>
+          <li>Se preferir, apresente o QR Code deste e-mail.</li>
         </ul>
-      </div>
-
-      ${botao(s, s.siteUrl, "Acessar página do evento")}`;
+      </div>`;
 
     return this.enviar(
       s,

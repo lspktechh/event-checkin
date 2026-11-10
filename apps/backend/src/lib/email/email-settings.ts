@@ -113,7 +113,7 @@ export function resolveEmailSettings(stored: unknown): ResolvedEmailSettings {
       ? c.siteUrl.trim()
       : (env.PRE_COPOL_BASE_URL && env.PRE_COPOL_BASE_URL.trim().length > 0
           ? env.PRE_COPOL_BASE_URL.trim()
-          : "https://superinteligencia.tec.br"),
+          : "https://lspkeventos.com.br"),
     footerNote: c.footerNote || null,
 
     // Só o comprovante de inscrição já saía sozinho, e continua saindo.

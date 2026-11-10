@@ -59,6 +59,7 @@ export function buildApp() {
       // qualquer *.vercel.app evita ter que atualizar CORS_ORIGINS a cada
       // deploy novo do portal do participante.
       const isVercelPreview = !!origin && /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin);
+      const isLspkEventos = !!origin && /^https?:\/\/(www\.)?([a-z0-9-]+\.)?lspkeventos\.com\.br$/.test(origin);
       const isSslip = !!origin && /^https:\/\/[a-z0-9.-]+\.sslip\.io$/.test(origin);
       const isSuperInteligencia = !!origin && /^https:\/\/(www\.)?superinteligencia\.tec\.br$/.test(origin);
       const isGithubPages = !!origin && /^https:\/\/[a-z0-9-]+\.github\.io$/.test(origin);
@@ -69,6 +70,7 @@ export function buildApp() {
         ALLOWED_ORIGINS.length === 0 ||
         ALLOWED_ORIGINS.includes(origin) ||
         isVercelPreview ||
+        isLspkEventos ||
         isSslip ||
         isSuperInteligencia ||
         isGithubPages ||

@@ -1,4 +1,4 @@
-import type { Event } from "@prisma/client";
+import type { Event, EventStatus } from "@prisma/client";
 import { prisma } from "../../database/prisma.js";
 import { NotFoundError } from "../../shared/errors.js";
 import * as eventsRepository from "./events.repository.js";
@@ -10,7 +10,12 @@ import { resolveSiteContent } from "./site-content.js";
  * sempre prevalece, mesmo com prazo futuro — é o botão "Encerrar" do
  * admin. "Retomar" só limpa registrationsClosedAt; se o prazo automático
  * já passou, o evento continua fechado por causa dele. */
-export function isRegistrationOpen(event: Pick<Event, "registrationDeadline" | "registrationsClosedAt">): boolean {
+export function isRegistrationOpen(event: {
+  status?: EventStatus;
+  registrationDeadline?: Date | null;
+  registrationsClosedAt?: Date | null;
+}): boolean {
+  if (event.status === "CLOSED") return false;
   if (event.registrationsClosedAt) return false;
   if (event.registrationDeadline && new Date() >= event.registrationDeadline) return false;
   return true;
@@ -139,7 +144,11 @@ export async function getPublicEventOrThrow(eventId: string) {
 
 export async function updateEvent(eventId: string, input: UpdateEventInput) {
   await findEventOrThrow(eventId);
-  const event = await eventsRepository.updateEvent(eventId, input);
+  const data: UpdateEventInput = { ...input };
+  if (data.status === "CLOSED") {
+    data.registrationInPortal = false;
+  }
+  const event = await eventsRepository.updateEvent(eventId, data);
   return toAdminEvent(event);
 }
 

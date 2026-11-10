@@ -52,7 +52,7 @@ export async function createManualInscription(eventId: string, input: CreateManu
       eventId,
       name: input.name,
       email: input.email,
-      document: input.document,
+      document: input.document ?? "",
       phone: input.phone,
       institution: input.institution,
       category: activeBatch.name,

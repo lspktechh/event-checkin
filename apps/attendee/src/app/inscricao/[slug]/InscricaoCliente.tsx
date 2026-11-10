@@ -23,10 +23,12 @@ const VERSAO_DO_TERMO = "1.0";
 interface Evento {
   id: string;
   name: string;
+  description: string | null;
   location: string | null;
   startDate: string;
   endDate: string;
   registrationsOpen: boolean;
+  registrationInPortal?: boolean;
   siteContent: Conteudo | null;
 }
 
@@ -36,6 +38,18 @@ interface Tema {
   primariaClara?: string;
   acento?: string;
   gradiente?: string[];
+}
+
+interface RegistrationFormConfig {
+  fields?: {
+    name?: boolean;
+    email?: boolean;
+    cpf?: boolean;
+    phone?: boolean;
+  };
+  customTitle?: string | null;
+  customDescription?: string | null;
+  bannerUrl?: string | null;
 }
 
 interface Conteudo {
@@ -49,6 +63,9 @@ interface Conteudo {
   destaques?: { titulo: string; texto: string }[];
   /** Inscrição em equipe (ex.: maratonas de programação). Ausente = individual. */
   equipe?: { tamanho: number };
+  bannerUrl?: string | null;
+  imageUrl?: string | null;
+  registrationForm?: RegistrationFormConfig;
 }
 
 /** Máscara de CPF, aplicada enquanto digita. */
@@ -155,6 +172,13 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   const c: Conteudo = evento?.siteContent ?? {};
   const equipeConfig = c.equipe;
 
+  const formFields = c.registrationForm?.fields ?? { name: true, email: true, cpf: true, phone: false };
+  const exigeCpf = formFields.cpf !== false;
+
+  const banner = c.bannerUrl || c.registrationForm?.bannerUrl || c.imageUrl;
+  const tituloExibicao = c.registrationForm?.customTitle || c.heroTitulo || evento?.name || "";
+  const descricaoExibicao = c.registrationForm?.customDescription || c.heroTexto || evento?.description || null;
+
   const dataFormatada = evento
     ? new Date(evento.startDate).toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -164,7 +188,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
       })
     : "";
 
-  const horaFormatada = evento
+  const horaInicioFormatada = evento
     ? new Date(evento.startDate).toLocaleTimeString("pt-BR", {
         hour: "2-digit",
         minute: "2-digit",
@@ -172,12 +196,25 @@ export function InscricaoCliente({ slug }: { slug: string }) {
       })
     : "";
 
+  const horaFimFormatada = evento?.endDate
+    ? new Date(evento.endDate).toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "America/Sao_Paulo",
+      })
+    : "";
+
+  const horarioFormatado =
+    horaFimFormatada && horaFimFormatada !== horaInicioFormatada
+      ? `${horaInicioFormatada} às ${horaFimFormatada}`
+      : horaInicioFormatada;
+
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
     if (!evento) return;
     setErro(null);
 
-    if (!cpfValido(cpf)) {
+    if (exigeCpf && !cpfValido(cpf)) {
       setErro("Confira o CPF — os dígitos não batem.");
       return;
     }
@@ -207,7 +244,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
           // porque é como as pessoas esperam preencher.
           name: `${nome.trim()} ${sobrenome.trim()}`.replace(/\s+/g, " ").trim(),
           email: email.trim().toLowerCase(),
-          document: cpf.replace(/\D/g, ""),
+          document: exigeCpf ? cpf.replace(/\D/g, "") : null,
           phone: telefone.replace(/\D/g, "") || null,
           consentVersion: VERSAO_DO_TERMO,
           ...(equipeConfig
@@ -261,10 +298,12 @@ export function InscricaoCliente({ slug }: { slug: string }) {
     return (
       <PortalShell aba="inscricao">
         <section className={estilos.secao}>
-          <h1 className={estilos.titulo}>Evento não encontrado</h1>
-          {erroDaPagina && <p className={estilos.lead}>{erroDaPagina}</p>}
+          <h1 className={estilos.titulo}>Inscrições Indisponíveis</h1>
+          <p className={estilos.lead}>
+            Este evento não está disponível para inscrição ou já foi encerrado.
+          </p>
           <p className={estilos.centro}>
-            <Link href="/inscricao">Ver inscrições abertas</Link>
+            <Link href="/inscricao">Ver outras inscrições abertas</Link>
           </p>
         </section>
       </PortalShell>
@@ -287,6 +326,16 @@ export function InscricaoCliente({ slug }: { slug: string }) {
     <PortalShell aba="inscricao">
       <section className={estilos.secao} style={{ gap: 28 }}>
         <div className={estilos.cabecaSecao}>
+          {banner && (
+            <div style={{ width: "100%", borderRadius: "16px", overflow: "hidden", marginBottom: "16px", maxHeight: "320px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.04)" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={banner}
+                alt={tituloExibicao}
+                style={{ width: "100%", maxHeight: "320px", objectFit: "cover", display: "block" }}
+              />
+            </div>
+          )}
           {isEcohub && (
             <div className={estilos.logoParceiro}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -298,13 +347,13 @@ export function InscricaoCliente({ slug }: { slug: string }) {
             </div>
           )}
           <span className={estilos.rotuloMono}>{jaComecou ? "Inscrições abertas" : "Próximo evento"}</span>
-          <h1 className={estilos.titulo}>{c.heroTitulo ?? evento.name}</h1>
+          <h1 className={estilos.titulo}>{tituloExibicao}</h1>
           {c.heroSubtitulo && <p className={estilos.subtituloEvento}>{c.heroSubtitulo}</p>}
           <p className={estilos.metaEvento}>
-            {dataFormatada} · {horaFormatada} · {c.local ?? evento.location ?? "Local a confirmar"}
+            {dataFormatada} · {horarioFormatado} · {c.local ?? evento.location ?? "Local a confirmar"}
           </p>
           <p className={estilos.metaSecundaria}>{detalhes.join(" · ")}</p>
-          {c.heroTexto && <p className={estilos.lead}>{c.heroTexto}</p>}
+          {descricaoExibicao && <p className={estilos.lead}>{descricaoExibicao}</p>}
         </div>
 
         {c.destaques && c.destaques.length > 0 && (
@@ -318,8 +367,18 @@ export function InscricaoCliente({ slug }: { slug: string }) {
           </div>
         )}
 
-        {!evento.registrationsOpen ? (
-          <p className={estilos.fechado}>As inscrições para este evento estão encerradas.</p>
+        {(!evento.registrationsOpen || evento.registrationInPortal === false) ? (
+          <div style={{ textAlign: "center", padding: "28px 20px", background: "rgba(255,255,255,0.03)", borderRadius: "12px", border: "1px solid var(--border)" }}>
+            <p className={estilos.fechado} style={{ fontSize: "16px", fontWeight: 600, margin: "0 0 10px" }}>
+              As inscrições para este evento estão encerradas.
+            </p>
+            <p className={estilos.lead} style={{ fontSize: "14px", margin: "0 0 18px" }}>
+              Novas inscrições não estão sendo aceitas no momento.
+            </p>
+            <Link href="/" className={estilos.botao} style={{ display: "inline-block", textDecoration: "none", width: "auto", padding: "10px 24px" }}>
+              Já é inscrito? Acesse seu QR Code
+            </Link>
+          </div>
         ) : (
           <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
             <label className={estilos.campo}>
@@ -388,16 +447,18 @@ export function InscricaoCliente({ slug }: { slug: string }) {
               )}
             </label>
 
-            <label className={estilos.campo}>
-              CPF
-              <input
-                value={cpf}
-                onChange={(e) => setCpf(formatarCpf(e.target.value))}
-                required
-                inputMode="numeric"
-                placeholder="000.000.000-00"
-              />
-            </label>
+            {exigeCpf && (
+              <label className={estilos.campo}>
+                CPF
+                <input
+                  value={cpf}
+                  onChange={(e) => setCpf(formatarCpf(e.target.value))}
+                  required
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                />
+              </label>
+            )}
 
             <label className={estilos.campo}>
               Celular

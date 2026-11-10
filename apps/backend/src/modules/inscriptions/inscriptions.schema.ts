@@ -3,7 +3,7 @@ import { z } from "zod";
 export const createInscriptionSchema = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório").max(200),
   email: z.string().trim().email("E-mail inválido"),
-  document: z.string().trim().min(1, "CPF é obrigatório").max(20),
+  document: z.string().trim().max(20).optional().nullable(),
   phone: z.string().trim().max(20).optional().nullable(),
   // Opcional para suportar tanto o formulário novo (sem seleção) quanto chamadas legadas
   category: z.string().trim().max(50).optional(),
@@ -43,7 +43,7 @@ export type CreateInscriptionInput = z.infer<typeof createInscriptionSchema>;
 export const createManualInscriptionSchema = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório").max(200),
   email: z.string().trim().email("E-mail inválido"),
-  document: z.string().trim().min(1, "CPF é obrigatório").max(20),
+  document: z.string().trim().max(20).optional().nullable(),
   phone: z.string().trim().max(20).optional().nullable(),
   institution: z.string().trim().max(200).optional().nullable(),
   notes: z.string().trim().max(50000).optional().nullable(),

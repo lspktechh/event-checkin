@@ -2,7 +2,7 @@ import { prisma } from "../../database/prisma.js";
 import type { CreateEventInput, UpdateEventInput } from "./events.schema.js";
 
 export function createEvent(data: CreateEventInput) {
-  return prisma.event.create({ data });
+  return prisma.event.create({ data: data as any });
 }
 
 export function listEvents() {
@@ -73,7 +73,7 @@ export function findEventById(eventId: string) {
 }
 
 export function updateEvent(eventId: string, data: UpdateEventInput) {
-  return prisma.event.update({ where: { id: eventId }, data });
+  return prisma.event.update({ where: { id: eventId }, data: data as any });
 }
 
 export function setRegistrationsClosedAt(eventId: string, closedAt: Date | null) {

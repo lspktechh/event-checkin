@@ -287,6 +287,19 @@ export interface SiteContent {
   partnersTitle?: string;
   partnersText?: string;
   footerText?: string;
+  bannerUrl?: string | null;
+  imageUrl?: string | null;
+  registrationForm?: {
+    fields?: {
+      name?: boolean;
+      email?: boolean;
+      cpf?: boolean;
+      phone?: boolean;
+    };
+    customTitle?: string | null;
+    customDescription?: string | null;
+    bannerUrl?: string | null;
+  };
 }
 export interface CertificateSignatory {
   name: string;
@@ -329,6 +342,8 @@ export interface EventRecord {
   startDate: string;
   endDate: string;
   status: "ACTIVE" | "CLOSED";
+  slug?: string | null;
+  registrationInPortal?: boolean;
   registrationDeadline: string | null;
   registrationsClosedAt: string | null;
   registrationsOpen: boolean;
@@ -463,9 +478,16 @@ export function createEvent(input: {
 }) {
   return request<EventRecord>("/events", { method: "POST", body: input });
 }
+
+export type UpdateEventInput = Partial<Omit<EventRecord, "registrationDeadline">> & {
+  registrationDeadline?: string | null;
+  registrationInPortal?: boolean;
+  slug?: string | null;
+};
+
 export function updateEvent(
   eventId: string,
-  input: Partial<Omit<EventRecord, "registrationDeadline">> & { registrationDeadline?: string | null }
+  input: UpdateEventInput
 ) {
   return request<EventRecord>(`/events/${eventId}`, { method: "PATCH", body: input });
 }
