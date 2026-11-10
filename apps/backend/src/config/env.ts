@@ -84,6 +84,7 @@ const envSchema = z.object({
 
   // URLs públicas do sistema
   PRE_COPOL_BASE_URL: z.string().default("https://copol2026.com.br"),
+  PORTAL_BASE_URL: z.string().default("https://lspkeventos.com.br"),
   BACKEND_PUBLIC_URL: z.string().default("http://137.131.233.254:3000"),
 });
 

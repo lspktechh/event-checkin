@@ -112,7 +112,7 @@ export class EmailService {
   }
 
   private configuracao(evento: EventoParaEmail): ResolvedEmailSettings {
-    return resolveEmailSettings(evento.emailSettings);
+    return resolveEmailSettings(evento.emailSettings, { eventName: evento.name });
   }
 
   /**
@@ -224,6 +224,13 @@ export class EmailService {
     opcoes: { reenvio?: boolean } = {},
   ): Promise<ResultadoDoEnvio> {
     const s = this.configuracao(evento);
+    const isCopol = evento.name.toLowerCase().includes("copol");
+
+    const corFundoQr = isCopol ? "#F0FDF4" : "#EEF2FF";
+    const corBordaQr = isCopol ? "#86EFAC" : "#A5B4FC";
+    const corBadgeQr = isCopol ? "#22C55E" : (s.accentColor || "#3B5BFF");
+    const corTextoQr = isCopol ? "#166534" : "#4338CA";
+    const corQr = isCopol ? s.primaryColor : "#0F172A";
 
     // O QR VAI COMO ANEXO EMBUTIDO, e não como `data:` no `src`.
     //
@@ -235,7 +242,7 @@ export class EmailService {
       errorCorrectionLevel: "H",
       margin: 2,
       width: 280,
-      color: { dark: s.primaryColor, light: "#FFFFFF" },
+      color: { dark: corQr, light: "#FFFFFF" },
     });
 
     const valor = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(params.amount);
@@ -253,13 +260,13 @@ export class EmailService {
         Sua inscrição no evento <strong>${escaparHtml(evento.name)}</strong> está <strong>confirmada</strong>!
       </p>
 
-      <table role="presentation" width="100%" style="background-color: #F0FDF4; border: 2px dashed #86EFAC; border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 28px;">
+      <table role="presentation" width="100%" style="background-color: ${corFundoQr}; border: 2px dashed ${corBordaQr}; border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 28px;">
         <tr><td align="center">
-          <span style="background-color: #22C55E; color: #FFFFFF; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px; text-transform: uppercase; letter-spacing: 1px;">
+          <span style="background-color: ${corBadgeQr}; color: #FFFFFF; font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 999px; text-transform: uppercase; letter-spacing: 1px;">
             SEU ACESSO AO EVENTO
           </span>
-          <h3 style="margin: 14px 0 6px; font-size: 18px; color: ${s.primaryColor};">QR Code para Check-in</h3>
-          <p style="margin: 0 0 16px; font-size: 13px; color: #166534;">
+          <h3 style="margin: 14px 0 6px; font-size: 18px; color: ${isCopol ? s.primaryColor : "#0F172A"};">QR Code para Check-in</h3>
+          <p style="margin: 0 0 16px; font-size: 13px; color: ${corTextoQr};">
             Apresente este código na tela do celular no terminal de entrada:
           </p>
           <div style="background-color: #FFFFFF; padding: 12px; border-radius: 12px; display: inline-block;">
@@ -272,7 +279,7 @@ export class EmailService {
         <tr><td style="padding: 6px 0; color: #64748B;">Identificador:</td>
             <td style="padding: 6px 0; font-weight: 700; text-align: right; font-family: monospace;">${escaparHtml(params.inscriptionId)}</td></tr>
         <tr><td style="padding: 6px 0; color: #64748B;">Lote / Categoria:</td>
-            <td style="padding: 6px 0; font-weight: 700; text-align: right; color: ${s.primaryColor};">${escaparHtml(params.batchName)}</td></tr>
+            <td style="padding: 6px 0; font-weight: 700; text-align: right; color: ${s.accentColor};">${escaparHtml(params.batchName)}</td></tr>
         <tr><td style="padding: 6px 0; color: #64748B;">Valor pago:</td>
             <td style="padding: 6px 0; font-weight: 700; text-align: right; color: #16A34A;">${valor}</td></tr>
         <tr><td style="padding: 6px 0; color: #64748B;">Confirmado em:</td>
@@ -282,18 +289,18 @@ export class EmailService {
       </table>
 
       <div style="background-color: #F8FAFC; border-radius: 12px; border: 1px solid #E2E8F0; padding: 22px; text-align: center; margin-bottom: 28px;">
-        <h4 style="margin: 0 0 8px; font-size: 15px; color: ${s.primaryColor}; font-weight: 700;">Acesse seus eventos e credenciais</h4>
+        <h4 style="margin: 0 0 8px; font-size: 15px; color: ${isCopol ? s.primaryColor : "#0F172A"}; font-weight: 700;">Acesse seus eventos e credenciais</h4>
         <p style="margin: 0 0 18px; font-size: 13px; color: #64748B; line-height: 1.5;">
           Clique no botão abaixo para abrir diretamente o portal de credenciamento com suas inscrições, QR Code e certificados:
         </p>
         ${botao(s, acessoCredencialUrl, "Acessar Minhas Inscrições e Credencial")}
         <p style="margin: 14px 0 0; font-size: 11px; color: #94A3B8; word-break: break-all;">
-          Link direto: <a href="${acessoCredencialUrl}" style="color: ${s.primaryColor};">${acessoCredencialUrl}</a>
+          Link direto: <a href="${acessoCredencialUrl}" style="color: ${s.accentColor}; font-weight: 600;">${acessoCredencialUrl}</a>
         </p>
       </div>
 
       <div style="border-left: 4px solid ${s.accentColor}; padding-left: 16px; margin-bottom: 28px;">
-        <h4 style="margin: 0 0 6px; font-size: 14px; color: ${s.primaryColor};">Instruções para o dia:</h4>
+        <h4 style="margin: 0 0 6px; font-size: 14px; color: ${isCopol ? s.primaryColor : "#0F172A"};">Instruções para o dia:</h4>
         <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #475569; line-height: 1.6;">
           <li>Chegue com pelo menos 20 minutos de antecedência;</li>
           <li>Mantenha o brilho da tela alto ao aproximar do leitor;</li>

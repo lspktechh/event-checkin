@@ -9,12 +9,20 @@ import { escaparHtml, montarEmail } from "../src/lib/email/email-layout.js";
 import { chaveDeIdempotencia } from "../src/lib/email/email.service.js";
 
 describe("configuração de e-mail por evento", () => {
-  it("evento sem configuração continua com os valores do COPOL", () => {
-    // É a garantia de que a mudança não altera o evento que já envia
-    // e-mail hoje: nulo no banco significa "como sempre foi".
-    const s = resolveEmailSettings(null);
+  it("evento COPOL sem configuração continua com os valores do COPOL", () => {
+    // É a garantia de que a mudança não altera o evento COPOL
+    const s = resolveEmailSettings(null, { eventName: "3º COPOL" });
     expect(s.primaryColor).toBe("#0E3634");
     expect(s.accentColor).toBe("#C8A261");
+    expect(s.siteUrl).toBe("https://copol2026.com.br");
+    expect(s.fromEmail).toContain("@");
+  });
+
+  it("evento padrão sem configuração usa a identidade visual da LSPK Eventos", () => {
+    const s = resolveEmailSettings(null);
+    expect(s.primaryColor).toBe("#0F1115");
+    expect(s.accentColor).toBe("#3B5BFF");
+    expect(s.siteUrl).toBe("https://lspkeventos.com.br");
     expect(s.fromEmail).toContain("@");
   });
 
@@ -34,7 +42,7 @@ describe("configuração de e-mail por evento", () => {
   it("configuração corrompida cai no padrão em vez de derrubar o envio", () => {
     // Um JSON inválido no banco não pode impedir o comprovante de sair.
     const s = resolveEmailSettings({ primaryColor: "verde", fromEmail: "isso-não-é-email" });
-    expect(s.primaryColor).toBe("#0E3634");
+    expect(s.primaryColor).toBe("#0F1115");
     expect(s.fromEmail).toContain("@");
   });
 

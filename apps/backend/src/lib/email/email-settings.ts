@@ -98,22 +98,39 @@ function remetenteDoAmbiente(): { nome: string; endereco: string } {
   return { nome: "", endereco: bruto };
 }
 
-export function resolveEmailSettings(stored: unknown): ResolvedEmailSettings {
+export function resolveEmailSettings(
+  stored: unknown,
+  options: { eventName?: string; eventSlug?: string } = {},
+): ResolvedEmailSettings {
   const parsed = emailSettingsSchema.safeParse(stored ?? {});
   const c = parsed.success ? parsed.data : {};
   const ambiente = remetenteDoAmbiente();
 
+  const isCopol =
+    options.eventName?.toLowerCase().includes("copol") ||
+    options.eventSlug?.toLowerCase().includes("copol") ||
+    false;
+
+  const defaultSiteUrl = isCopol
+    ? (env.PRE_COPOL_BASE_URL && env.PRE_COPOL_BASE_URL.trim().length > 0
+        ? env.PRE_COPOL_BASE_URL.trim()
+        : "https://copol2026.com.br")
+    : (env.PORTAL_BASE_URL && env.PORTAL_BASE_URL.trim().length > 0
+        ? env.PORTAL_BASE_URL.trim()
+        : "https://lspkeventos.com.br");
+
+  const defaultPrimaryColor = isCopol ? "#0E3634" : "#0F1115";
+  const defaultAccentColor = isCopol ? "#C8A261" : "#3B5BFF";
+
   return {
-    fromName: c.fromName || ambiente.nome || "LSPK Eventos",
+    fromName: c.fromName || (isCopol ? "COPOL 2026" : (ambiente.nome || "LSPK Eventos")),
     fromEmail: c.fromEmail || ambiente.endereco || "lspkeventos@gmail.com",
     replyTo: c.replyTo || null,
-    primaryColor: c.primaryColor || "#0E3634",
-    accentColor: c.accentColor || "#C8A261",
+    primaryColor: c.primaryColor || defaultPrimaryColor,
+    accentColor: c.accentColor || defaultAccentColor,
     siteUrl: (c.siteUrl && c.siteUrl.trim().length > 0)
       ? c.siteUrl.trim()
-      : (env.PRE_COPOL_BASE_URL && env.PRE_COPOL_BASE_URL.trim().length > 0
-          ? env.PRE_COPOL_BASE_URL.trim()
-          : "https://lspkeventos.com.br"),
+      : defaultSiteUrl,
     footerNote: c.footerNote || null,
 
     // Só o comprovante de inscrição já saía sozinho, e continua saindo.
