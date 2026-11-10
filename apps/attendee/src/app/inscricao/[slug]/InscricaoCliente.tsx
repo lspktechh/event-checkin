@@ -174,7 +174,10 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   const equipeConfig = c.equipe;
 
   const formFields = c.registrationForm?.fields ?? { name: true, email: true, cpf: true, phone: false };
+  const exigeNome = formFields.name !== false;
+  const exigeEmail = formFields.email !== false;
   const exigeCpf = formFields.cpf !== false;
+  const exigeTelefone = formFields.phone === true;
 
   const banner = c.bannerUrl || c.registrationForm?.bannerUrl || c.imageUrl;
   const tituloExibicao = c.registrationForm?.customTitle || c.heroTitulo || evento?.name || "";
@@ -215,8 +218,20 @@ export function InscricaoCliente({ slug }: { slug: string }) {
     if (!evento) return;
     setErro(null);
 
+    if (exigeNome && !nome.trim()) {
+      setErro("Informe seu nome.");
+      return;
+    }
+    if (exigeEmail && !email.trim()) {
+      setErro("Informe seu e-mail.");
+      return;
+    }
     if (exigeCpf && !cpfValido(cpf)) {
       setErro("Confira o CPF — os dígitos não batem.");
+      return;
+    }
+    if (exigeTelefone && !telefone.trim()) {
+      setErro("Informe seu número de celular / WhatsApp.");
       return;
     }
     if (!aceite) {
@@ -424,71 +439,77 @@ export function InscricaoCliente({ slug }: { slug: string }) {
             </div>
           ) : (
             <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
-            <label className={estilos.campo}>
-              Nome
-              <input
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                required
-                autoComplete="given-name"
-                placeholder="Maria"
-              />
-            </label>
+            {exigeNome && (
+              <>
+                <label className={estilos.campo}>
+                  Nome
+                  <input
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    required
+                    autoComplete="given-name"
+                    placeholder="Maria"
+                  />
+                </label>
 
-            <label className={estilos.campo}>
-              Sobrenome
-              <input
-                value={sobrenome}
-                onChange={(e) => setSobrenome(e.target.value)}
-                required
-                autoComplete="family-name"
-                placeholder="Souza"
-              />
-              <small>Nome e sobrenome saem como você escrever no certificado.</small>
-            </label>
+                <label className={estilos.campo}>
+                  Sobrenome
+                  <input
+                    value={sobrenome}
+                    onChange={(e) => setSobrenome(e.target.value)}
+                    required
+                    autoComplete="family-name"
+                    placeholder="Souza"
+                  />
+                  <small>Nome e sobrenome saem como você escrever no certificado.</small>
+                </label>
+              </>
+            )}
 
-            <label className={estilos.campo}>
-              E-mail
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (emailError || emailSuggestion) {
-                    setEmailError(null);
-                    setEmailSuggestion(null);
-                  }
-                }}
-                onBlur={handleEmailBlur}
-                required
-                autoComplete="email"
-                inputMode="email"
-                placeholder="seu@email.com"
-              />
-              <small>É por ele que você acessa seu QR Code e o certificado.</small>
-              {emailSuggestion && (
-                <div className={estilos.sugestao}>
-                  <span>
-                    Você quis dizer <strong>{emailSuggestion}</strong>?
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail(emailSuggestion);
-                      setEmailSuggestion(null);
+            {exigeEmail && (
+              <label className={estilos.campo}>
+                E-mail
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailError || emailSuggestion) {
                       setEmailError(null);
-                    }}
-                  >
-                    Corrigir
-                  </button>
-                </div>
-              )}
-              {emailError && !emailSuggestion && (
-                <span role="alert" className={estilos.erroCampo}>
-                  {emailError}
-                </span>
-              )}
-            </label>
+                      setEmailSuggestion(null);
+                    }
+                  }}
+                  onBlur={handleEmailBlur}
+                  required
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="seu@email.com"
+                />
+                <small>É por ele que você acessa seu QR Code e o certificado.</small>
+                {emailSuggestion && (
+                  <div className={estilos.sugestao}>
+                    <span>
+                      Você quis dizer <strong>{emailSuggestion}</strong>?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail(emailSuggestion);
+                        setEmailSuggestion(null);
+                        setEmailError(null);
+                      }}
+                    >
+                      Corrigir
+                    </button>
+                  </div>
+                )}
+                {emailError && !emailSuggestion && (
+                  <span role="alert" className={estilos.erroCampo}>
+                    {emailError}
+                  </span>
+                )}
+              </label>
+            )}
 
             {exigeCpf && (
               <label className={estilos.campo}>
