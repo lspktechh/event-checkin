@@ -71,8 +71,11 @@ export const certificateLayoutSchema = z.object({
      *
      * "cursiva" é a Great Vibes (assets/certificates/fonts), para artes que
      * já trazem frases em letra cursiva e querem o nome no mesmo estilo.
+     *
+     * "figtree" é a Figtree ExtraBold (assets/certificates/fonts), a fonte
+     * das artes do SafeTeen — com ela o nome sai igual ao da arte original.
      */
-    fonte: z.enum(["serifada", "sem-serifa", "cursiva"]).optional(),
+    fonte: z.enum(["serifada", "sem-serifa", "cursiva", "figtree"]).optional(),
     /**
      * Cor do NOME, só dele.
      *
@@ -83,6 +86,27 @@ export const certificateLayoutSchema = z.object({
      */
     cor: corHex.optional(),
   }),
+
+  /**
+   * Linha "CPF 000.000.000-00" do participante. Segue o alinhamento do
+   * nome: centralizada no meio da caixa do nome, ou começando em
+   * `xEsquerda` quando o nome é alinhado à esquerda.
+   *
+   * Ausente = o certificado não mostra o CPF (o padrão de todo modelo que
+   * já existia). Participante sem CPF cadastrado também não ganha a linha.
+   * Usa a mesma família do nome em peso mais leve (Figtree SemiBold com
+   * "figtree"; Helvetica nas demais).
+   */
+  cpf: z
+    .object({
+      xEsquerda: z.number().int().min(0).max(5000),
+      yBase: z.number().int().min(0).max(5000),
+      /** Corpo do texto, em px da imagem. */
+      tamanho: z.number().int().min(6).max(200),
+      cor: corHex.optional(),
+    })
+    .nullable()
+    .optional(),
 
   /** Parágrafo descritivo. Ausente = a arte já o traz. */
   paragrafo: z

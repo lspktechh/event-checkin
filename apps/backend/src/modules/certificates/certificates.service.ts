@@ -288,6 +288,7 @@ export async function getOrGenerateCertificatePdf(eventId: string, participantId
 
   const buffer = await renderCertificatePdf({
     participantName: participant.name,
+    participantDocument: participant.document,
     eventName: event.name,
     locationLabel: settings.locationLabel,
     eventStartDate: event.startDate,
@@ -392,6 +393,8 @@ export async function generateTestCertificatePdf(eventId: string, participantNam
 
   return renderCertificatePdf({
     participantName,
+    // Só ilustra onde o CPF cai — o certificado de teste não é de ninguém.
+    participantDocument: "000.000.000-00",
     eventName: event.name,
     locationLabel: settings.locationLabel,
     eventStartDate: event.startDate,

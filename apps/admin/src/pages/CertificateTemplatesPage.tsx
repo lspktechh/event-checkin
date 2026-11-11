@@ -15,9 +15,9 @@ interface Ponto {
   y: number;
 }
 
-type Marcando = "nomeEsquerda" | "nomeDireita" | "nomeBase" | "qr" | null;
+type Marcando = "nomeEsquerda" | "nomeDireita" | "nomeBase" | "qr" | "cpf" | null;
 
-type Fonte = "serifada" | "sem-serifa" | "cursiva";
+type Fonte = "serifada" | "sem-serifa" | "cursiva" | "figtree";
 
 export function CertificateTemplatesPage() {
   const [modelos, setModelos] = useState<api.CertificateTemplateRecord[]>([]);
@@ -42,11 +42,16 @@ export function CertificateTemplatesPage() {
   const [qr, setQr] = useState<Ponto | null>(null);
   const [tamanhoQr, setTamanhoQr] = useState(120);
   const [fonte, setFonte] = useState<Fonte>("sem-serifa");
+  const [alinhamento, setAlinhamento] = useState<"esquerda" | "centro">("esquerda");
   // Cor própria do nome. Null = segue a cor de destaque do evento.
   const [corNome, setCorNome] = useState<string | null>(null);
   // Corpo máximo do nome, em px da arte. Null = padrão do sistema (55),
   // que é pequeno para artes grandes.
   const [tamanhoNome, setTamanhoNome] = useState<number | null>(null);
+  // Linha "CPF ..." abaixo do nome. Null = o certificado não mostra o CPF.
+  const [cpf, setCpf] = useState<Ponto | null>(null);
+  const [tamanhoCpf, setTamanhoCpf] = useState(30);
+  const [corCpf, setCorCpf] = useState<string | null>(null);
 
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -76,17 +81,34 @@ export function CertificateTemplatesPage() {
     });
 
     const l = (m.layout ?? {}) as {
-      nome?: { xEsquerda: number; xDireita: number; yBase: number; fonte?: string; cor?: string; tamanhoMaximo?: number };
+      nome?: {
+        xEsquerda: number;
+        xDireita: number;
+        yBase: number;
+        fonte?: string;
+        cor?: string;
+        tamanhoMaximo?: number;
+        alinhamento?: "esquerda" | "centro";
+      };
       qr?: { xEsquerda: number; yTopo: number; tamanho: number } | null;
+      cpf?: { xEsquerda: number; yBase: number; tamanho: number; cor?: string } | null;
     };
     setNomeEsq(l.nome?.xEsquerda ?? null);
     setNomeDir(l.nome?.xDireita ?? null);
     setNomeBase(l.nome?.yBase ?? null);
-    setFonte(l.nome?.fonte === "serifada" || l.nome?.fonte === "cursiva" ? l.nome.fonte : "sem-serifa");
+    setFonte(
+      l.nome?.fonte === "serifada" || l.nome?.fonte === "cursiva" || l.nome?.fonte === "figtree"
+        ? l.nome.fonte
+        : "sem-serifa",
+    );
     setCorNome(l.nome?.cor ?? null);
+    setAlinhamento(l.nome?.alinhamento === "centro" ? "centro" : "esquerda");
     setTamanhoNome(l.nome?.tamanhoMaximo ?? null);
     setQr(l.qr ? { x: l.qr.xEsquerda, y: l.qr.yTopo } : null);
     setTamanhoQr(l.qr?.tamanho ?? 120);
+    setCpf(l.cpf ? { x: l.cpf.xEsquerda, y: l.cpf.yBase } : null);
+    setTamanhoCpf(l.cpf?.tamanho ?? 30);
+    setCorCpf(l.cpf?.cor ?? null);
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -102,8 +124,12 @@ export function CertificateTemplatesPage() {
     setQr(null);
     setMarcando(null);
     setFonte("sem-serifa");
+    setAlinhamento("esquerda");
     setCorNome(null);
     setTamanhoNome(null);
+    setCpf(null);
+    setTamanhoCpf(30);
+    setCorCpf(null);
   }
 
   function aoEscolherArquivo(ev: ChangeEvent<HTMLInputElement>) {
@@ -133,6 +159,7 @@ export function CertificateTemplatesPage() {
         setNomeDir(null);
         setNomeBase(null);
         setQr(null);
+        setCpf(null);
       };
       img.src = dataUrl;
     };
@@ -156,6 +183,7 @@ export function CertificateTemplatesPage() {
     if (marcando === "nomeDireita") setNomeDir(x);
     if (marcando === "nomeBase") setNomeBase(y);
     if (marcando === "qr") setQr({ x, y });
+    if (marcando === "cpf") setCpf({ x, y });
     setMarcando(null);
   }
 
@@ -173,7 +201,7 @@ export function CertificateTemplatesPage() {
             xEsquerda: Math.min(nomeEsq, nomeDir),
             xDireita: Math.max(nomeEsq, nomeDir),
             yBase: nomeBase,
-            alinhamento: "esquerda",
+            alinhamento,
             fonte,
             ...(corNome ? { cor: corNome } : {}),
             ...(tamanhoNome ? { tamanhoMaximo: tamanhoNome } : {}),
@@ -184,6 +212,9 @@ export function CertificateTemplatesPage() {
           chipData: null,
           assinaturas: null,
           qr: qr ? { xEsquerda: qr.x, yTopo: qr.y, tamanho: tamanhoQr } : null,
+          cpf: cpf
+            ? { xEsquerda: cpf.x, yBase: cpf.y, tamanho: tamanhoCpf, ...(corCpf ? { cor: corCpf } : {}) }
+            : null,
       };
 
       if (editandoId) {
@@ -300,7 +331,47 @@ export function CertificateTemplatesPage() {
               {botaoMarcar("nomeDireita", "Fim do nome", nomeDir === null ? "—" : `x ${nomeDir}`)}
               {botaoMarcar("nomeBase", "Linha de base", nomeBase === null ? "—" : `y ${nomeBase}`)}
               {botaoMarcar("qr", "Canto do QR", qr === null ? "sem QR" : `${qr.x},${qr.y}`)}
+              {botaoMarcar("cpf", "Linha do CPF", cpf === null ? "sem CPF" : `${cpf.x},${cpf.y}`)}
+              {cpf && (
+                <button type="button" className="botao botao--fraco" onClick={() => setCpf(null)}>
+                  Tirar CPF
+                </button>
+              )}
             </div>
+
+            {cpf && (
+              <div className="row" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+                <label className="campo">
+                  Tamanho do CPF (px da arte)
+                  <input
+                    type="number"
+                    min={6}
+                    max={200}
+                    value={tamanhoCpf}
+                    onChange={(e) => setTamanhoCpf(Number(e.target.value))}
+                  />
+                </label>
+                <label className="campo">
+                  Cor do CPF
+                  <div className="row" style={{ gap: "0.5rem", alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={corCpf !== null}
+                      onChange={(e) => setCorCpf(e.target.checked ? corCpf ?? "#4D5E70" : null)}
+                    />
+                    {corCpf !== null && (
+                      <input
+                        type="color"
+                        aria-label="Cor do CPF"
+                        value={corCpf}
+                        onChange={(e) => setCorCpf(e.target.value.toUpperCase())}
+                      />
+                    )}
+                  </div>
+                  <small className="muted">Marque a linha de base do CPF. Com o nome à esquerda, o CPF começa nesse ponto; centralizado, só a altura conta.</small>
+                </label>
+              </div>
+            )}
 
             {qr && (
               <label className="campo">
@@ -321,8 +392,21 @@ export function CertificateTemplatesPage() {
                 <option value="sem-serifa">Sem serifa</option>
                 <option value="serifada">Serifada</option>
                 <option value="cursiva">Cursiva (Great Vibes)</option>
+                <option value="figtree">Figtree (SafeTeen)</option>
               </select>
               <small className="muted">Escolha a que combina com a arte.</small>
+            </label>
+
+            <label className="campo">
+              Posição do nome
+              <select
+                value={alinhamento}
+                onChange={(e) => setAlinhamento(e.target.value as "esquerda" | "centro")}
+              >
+                <option value="esquerda">Começa no início marcado</option>
+                <option value="centro">Centralizado entre o início e o fim</option>
+              </select>
+              <small className="muted">Centralizado, o CPF também fica no meio, embaixo do nome.</small>
             </label>
 
             <label className="campo">
@@ -400,6 +484,19 @@ export function CertificateTemplatesPage() {
                     width: `${(tamanhoQr / arquivo.largura) * 100}%`,
                     aspectRatio: "1",
                     border: "2px solid var(--acento)",
+                  }}
+                />
+              )}
+              {cpf && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${(cpf.x / arquivo.largura) * 100}%`,
+                    top: `${((cpf.y - tamanhoCpf) / arquivo.altura) * 100}%`,
+                    height: `${(tamanhoCpf / arquivo.altura) * 100}%`,
+                    width: `${((tamanhoCpf * 9) / arquivo.largura) * 100}%`,
+                    borderBottom: "2px solid var(--acento)",
+                    borderLeft: "2px solid var(--acento)",
                   }}
                 />
               )}
