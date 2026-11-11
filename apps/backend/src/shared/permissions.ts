@@ -38,6 +38,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { key: "events.view", description: "Ver eventos", category: "Eventos" },
   { key: "events.create", description: "Criar evento", category: "Eventos" },
   { key: "events.edit", description: "Editar evento (dados, status, conteúdo do site, inscrições)", category: "Eventos" },
+  { key: "events.delete", description: "Excluir evento e todos os dados vinculados", category: "Eventos" },
   // Separada de events.edit de propósito: publicar torna o evento visível
   // para fora e ligar/desligar módulo muda o que a equipe inteira enxerga.
   // Quem edita a descrição não precisa poder fazer nem uma coisa nem outra.
@@ -127,6 +128,30 @@ export async function syncPermissions(prisma: PrismaClient): Promise<void> {
         },
         update: {},
       });
+    }
+
+    // Garante que perfis que já têm events.edit também recebam events.delete
+    const eventsDeletePerm = await prisma.permission.findUnique({ where: { key: "events.delete" } });
+    const eventsEditPerm = await prisma.permission.findUnique({ where: { key: "events.edit" } });
+    if (eventsDeletePerm && eventsEditPerm) {
+      const rolesWithEdit = await prisma.rolePermission.findMany({
+        where: { permissionId: eventsEditPerm.id },
+      });
+      for (const rp of rolesWithEdit) {
+        await prisma.rolePermission.upsert({
+          where: {
+            roleId_permissionId: {
+              roleId: rp.roleId,
+              permissionId: eventsDeletePerm.id,
+            },
+          },
+          create: {
+            roleId: rp.roleId,
+            permissionId: eventsDeletePerm.id,
+          },
+          update: {},
+        });
+      }
     }
   } catch (err) {
     console.error("Erro ao sincronizar perfil Credenciamento:", err);

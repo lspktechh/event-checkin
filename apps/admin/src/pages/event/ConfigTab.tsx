@@ -1,5 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import * as api from "../../api/client";
+import { useAuth } from "../../auth/AuthContext";
+import { TrashIcon } from "../../components/Icons";
 
 /**
  * Configuração do evento: endereço público, fuso, idioma, visibilidade e
@@ -37,6 +40,28 @@ export function ConfigTab({ eventId }: { eventId: string }) {
   const [salvandoMp, setSalvandoMp] = useState(false);
   const [avisoMp, setAvisoMp] = useState<string | null>(null);
   const [errorMp, setErrorMp] = useState<string | null>(null);
+
+  const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canDelete = hasPermission("events.delete") || hasPermission("events.edit");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleConfirmDelete() {
+    if (!event) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.deleteEvent(eventId);
+      setShowDeleteModal(false);
+      navigate("/eventos");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Falha ao excluir evento");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function carregar() {
     api
@@ -451,6 +476,173 @@ export function ConfigTab({ eventId }: { eventId: string }) {
           })}
         </div>
       </section>
+
+      {canDelete ? (
+        <section
+          className="card"
+          style={{
+            border: "1px solid var(--danger)",
+            background: "rgba(239, 68, 68, 0.05)",
+            marginTop: 20,
+          }}
+        >
+          <h3 style={{ color: "var(--danger)", margin: "0 0 8px 0" }}>Zona de Perigo</h3>
+          <p className="muted" style={{ margin: "0 0 16px 0", fontSize: 14 }}>
+            Excluir este evento removerá permanentemente todos os seus dados vinculados (inscrições, presenças, credenciais de check-in, certificados gerados, lotes e programações). Esta ação não pode ser desfeita.
+          </p>
+          <button
+            type="button"
+            className="btn btn-danger"
+            style={{
+              width: "fit-content",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 600,
+            }}
+            onClick={() => {
+              setDeleteError(null);
+              setShowDeleteModal(true);
+            }}
+          >
+            <TrashIcon size={16} color="#ffffff" /> Excluir Evento
+          </button>
+        </section>
+      ) : null}
+
+      {showDeleteModal && event ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 16,
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={() => !deleting && setShowDeleteModal(false)}
+        >
+          <div
+            className="card stack"
+            style={{
+              width: "100%",
+              maxWidth: 480,
+              gap: 16,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: 24,
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="spread" style={{ alignItems: "center" }}>
+              <h3 style={{ margin: 0, fontSize: 18, color: "var(--danger)", fontWeight: 700 }}>
+                Excluir Evento
+              </h3>
+              <button
+                type="button"
+                onClick={() => !deleting && setShowDeleteModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  fontSize: 20,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  padding: "4px 8px",
+                }}
+                disabled={deleting}
+              >
+                ✕
+              </button>
+            </div>
+
+            {deleteError ? (
+              <div
+                className="error-text"
+                style={{
+                  margin: 0,
+                  padding: "8px 12px",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  borderRadius: 6,
+                }}
+              >
+                {deleteError}
+              </div>
+            ) : null}
+
+            <p style={{ margin: 0, fontSize: 14, color: "var(--text)", lineHeight: 1.5 }}>
+              Tem certeza de que deseja excluir o evento <strong>{event.name}</strong>?
+            </p>
+
+            <div
+              style={{
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid var(--danger)",
+                borderRadius: 8,
+                padding: 14,
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "#fca5a5",
+              }}
+            >
+              <strong style={{ color: "#ef4444", display: "block", marginBottom: 4 }}>
+                Atenção: Os dados serão perdidos!
+              </strong>
+              Ao excluir este evento, todos os dados vinculados serão permanentemente perdidos e não poderão ser recuperados. Isso inclui inscrições, presenças, credenciais de check-in, certificados gerados, lotes e programações.
+            </div>
+
+            <div className="row" style={{ justifyContent: "flex-end", gap: 12, marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                style={{
+                  padding: "8px 16px",
+                  fontSize: 14,
+                  cursor: deleting ? "not-allowed" : "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                style={{
+                  padding: "8px 20px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  background: "var(--danger)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: deleting ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                {deleting ? (
+                  "Excluindo..."
+                ) : (
+                  <>
+                    <TrashIcon size={14} color="#ffffff" /> Excluir
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -497,6 +497,9 @@ export function closeRegistrations(eventId: string) {
 export function reopenRegistrations(eventId: string) {
   return request<EventRecord>(`/events/${eventId}/registrations/reopen`, { method: "POST" });
 }
+export function deleteEvent(eventId: string) {
+  return request<{ id: string; name: string }>(`/events/${eventId}`, { method: "DELETE" });
+}
 
 // --- Participants ---
 export interface ParticipantRecord {

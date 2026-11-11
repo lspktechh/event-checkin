@@ -191,3 +191,85 @@ export async function reopenRegistrations(eventId: string) {
   const event = await eventsRepository.reopenRegistrations(eventId, deadlineExpired);
   return toAdminEvent(event);
 }
+
+export async function deleteEvent(eventId: string) {
+  const event = await findEventOrThrow(eventId);
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Sorteios
+    await tx.raffleDraw.deleteMany({ where: { eventId } });
+    await tx.raffleEntry.deleteMany({ where: { eventId } });
+
+    // 2. Credenciamento / Presenças / Provas de comparecimento / Tentativas
+    await tx.checkIn.deleteMany({ where: { eventId } });
+    await tx.checkInAttempt.deleteMany({ where: { eventId } });
+    await tx.attendanceProof.deleteMany({ where: { eventId } });
+    await tx.handsOnRegistration.deleteMany({ where: { eventId } });
+
+    // 3. Certificados
+    await tx.certificate.deleteMany({ where: { eventId } });
+
+    // 4. Inscrições e dependências vinculadas
+    const inscriptions = await tx.inscription.findMany({
+      where: { eventId },
+      select: { id: true },
+    });
+    const inscriptionIds = inscriptions.map((i) => i.id);
+    if (inscriptionIds.length > 0) {
+      await tx.teamMember.deleteMany({ where: { inscriptionId: { in: inscriptionIds } } });
+      await tx.inscription.deleteMany({ where: { eventId } });
+    }
+
+    // 5. Lotes
+    await tx.eventBatch.deleteMany({ where: { eventId } });
+
+    // 6. Submissões e anexos/autores
+    const submissions = await tx.submission.findMany({
+      where: { eventId },
+      select: { id: true },
+    });
+    const submissionIds = submissions.map((s) => s.id);
+    if (submissionIds.length > 0) {
+      await tx.submissionFile.deleteMany({ where: { submissionId: { in: submissionIds } } });
+      await tx.submissionAuthor.deleteMany({ where: { submissionId: { in: submissionIds } } });
+      await tx.submission.deleteMany({ where: { eventId } });
+    }
+
+    // Modalidades, tópicos e configurações de submissão
+    await tx.submissionModality.deleteMany({ where: { eventId } });
+    await tx.submissionTopic.deleteMany({ where: { eventId } });
+    await tx.submissionSettings.deleteMany({ where: { eventId } });
+
+    // 7. Cronograma / Programação
+    await tx.eventScheduleItem.deleteMany({ where: { eventId } });
+
+    // 8. Participantes
+    await tx.participant.deleteMany({ where: { eventId } });
+
+    // 9. Terminais
+    await tx.terminal.deleteMany({ where: { eventId } });
+
+    // 10. Módulos
+    await tx.eventModule.deleteMany({ where: { eventId } });
+
+    // 11. Limpar eventId de contas com allowedEventIds
+    const users = await tx.user.findMany({
+      select: { id: true, allowedEventIds: true },
+    });
+    for (const u of users) {
+      if (u.allowedEventIds.includes(eventId)) {
+        await tx.user.update({
+          where: { id: u.id },
+          data: {
+            allowedEventIds: u.allowedEventIds.filter((id) => id !== eventId),
+          },
+        });
+      }
+    }
+
+    // 12. O próprio evento
+    await tx.event.delete({ where: { id: eventId } });
+  });
+
+  return { id: eventId, name: event.name };
+}

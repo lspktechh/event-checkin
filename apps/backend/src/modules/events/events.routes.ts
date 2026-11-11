@@ -108,4 +108,15 @@ export async function eventsRoutes(app: FastifyInstance) {
       return ok(event);
     }
   );
+
+  app.delete(
+    "/events/:eventId",
+    { preHandler: requireAnyPermission("events.delete", "events.edit") },
+    async (request) => {
+      const { eventId } = eventIdParamsSchema.parse(request.params);
+      const result = await eventsService.deleteEvent(eventId);
+      await recordAudit(request, "event.delete", "Event", eventId, { name: result.name });
+      return ok(result);
+    }
+  );
 }
