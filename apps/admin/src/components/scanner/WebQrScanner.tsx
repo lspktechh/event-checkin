@@ -11,6 +11,48 @@ interface Props {
 
 const CONTAINER_ID = "web-qr-scanner-viewport";
 
+/**
+ * Seleciona a melhor câmera traseira (1x / Principal), evitando câmeras Ultra-Wide (0.5x)
+ * e Telefoto (3x/5x) que não conseguem focar em QR Codes a curta distância no iPhone.
+ */
+function pickBestBackCamera(devices: CameraDevice[]): CameraDevice | null {
+  if (!devices || devices.length === 0) return null;
+  if (devices.length === 1) return devices[0];
+
+  // Filtra câmeras com indício de serem traseiras
+  const backCandidates = devices.filter((d) => {
+    const label = d.label.toLowerCase();
+    const isBack =
+      label.includes("back") ||
+      label.includes("traseir") ||
+      label.includes("rear") ||
+      label.includes("environment");
+    const isFront =
+      label.includes("front") ||
+      label.includes("frontal") ||
+      label.includes("selfie") ||
+      label.includes("truedepth");
+    return isBack && !isFront;
+  });
+
+  if (backCandidates.length > 0) {
+    // Entre as traseiras, prioriza a lente principal (1x / Wide) e descarta Ultra-Wide e Telefoto
+    const primaryBack = backCandidates.find((d) => {
+      const label = d.label.toLowerCase();
+      const isUltraWide = label.includes("ultra") || label.includes("0.5") || label.includes("macro");
+      const isTele = label.includes("tele") || label.includes("3x") || label.includes("5x");
+      return !isUltraWide && !isTele;
+    });
+
+    if (primaryBack) return primaryBack;
+    return backCandidates[0];
+  }
+
+  // Se nenhuma câmera tiver rótulo de traseira identificado (ex: antes da permissão concedida),
+  // em celulares o primeiro dispositivo costuma ser a lente principal traseira ou a última
+  return devices[0];
+}
+
 export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Props) {
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [currentCameraId, setCurrentCameraId] = useState<string | null>(null);
@@ -21,15 +63,16 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [isInsecureOrigin, setIsInsecureOrigin] = useState(false);
+  const [isPermissionDenied, setIsPermissionDenied] = useState(false);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isRunningRef = useRef(false);
+  const isStartingRef = useRef(false);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
+  const observerRef = useRef<MutationObserver | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [isPermissionDenied, setIsPermissionDenied] = useState(false);
 
   // Checa se a origem é segura (HTTPS ou localhost)
   useEffect(() => {
@@ -42,28 +85,99 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     }
   }, []);
 
-  // Tenta iniciar câmera ao carregar (se estiver em HTTPS)
-  useEffect(() => {
-    if (manualMode) {
-      stopScanner();
-      return;
-    }
+  // Observa a inserção do elemento <video> no DOM para injetar playsinline ANTES que o Safari inicie o playback
+  const attachVideoObserver = () => {
+    if (observerRef.current) return;
+    const container = document.getElementById(CONTAINER_ID);
+    if (!container) return;
 
-    if (typeof window !== "undefined" && window.isSecureContext) {
-      // Tenta inicialização automática sem marcar erro ruidoso caso o navegador exija toque
-      startCamera(false);
-    } else {
-      setCameraError(
-        "Navegadores de celular bloqueiam a câmera em conexões HTTP. Acesse via HTTPS seguro para ler ao vivo ou use o botão de foto."
-      );
-    }
-
-    return () => {
-      stopScanner();
+    const configureVideo = (video: HTMLVideoElement) => {
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+      video.setAttribute("muted", "true");
+      video.muted = true;
+      video.setAttribute("autoplay", "true");
     };
-  }, [manualMode]);
+
+    // Aplica em qualquer vídeo já presente
+    const existing = container.querySelectorAll("video");
+    existing.forEach(configureVideo);
+
+    observerRef.current = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node instanceof HTMLVideoElement) {
+            configureVideo(node);
+          } else if (node instanceof HTMLElement) {
+            const nested = node.querySelectorAll("video");
+            nested.forEach(configureVideo);
+          }
+        });
+      });
+    });
+
+    observerRef.current.observe(container, { childList: true, subtree: true });
+  };
+
+  const detachVideoObserver = () => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+  };
+
+  /**
+   * Força a parada e liberação total de todos os tracks de MediaStream associados à câmera.
+   * Evita que o hardware da câmera continue travado em segundo plano no Safari / iOS.
+   */
+  async function stopScanner() {
+    detachVideoObserver();
+
+    // Libera qualquer stream nativo ativo no elemento video do container
+    const container = document.getElementById(CONTAINER_ID);
+    if (container) {
+      const videos = container.querySelectorAll("video");
+      videos.forEach((v) => {
+        if (v.srcObject && "getTracks" in v.srcObject) {
+          const stream = v.srcObject as MediaStream;
+          stream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch {
+              // Ignora
+            }
+          });
+          v.srcObject = null;
+        }
+      });
+    }
+
+    if (scannerRef.current) {
+      if (isRunningRef.current) {
+        try {
+          await scannerRef.current.stop();
+        } catch (err) {
+          console.warn("Aviso ao parar scanner:", err);
+        }
+      }
+      try {
+        await scannerRef.current.clear();
+      } catch {
+        // Ignora
+      }
+    }
+
+    isRunningRef.current = false;
+    isStartingRef.current = false;
+    setCameraStarted(false);
+    setInitializing(false);
+    setTorchOn(false);
+    setHasTorch(false);
+  }
 
   async function startCamera(fromUserGesture = true) {
+    if (isStartingRef.current || isRunningRef.current) return;
+    isStartingRef.current = true;
     setInitializing(true);
     setCameraError(null);
     setIsPermissionDenied(false);
@@ -75,17 +189,23 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         );
       }
 
+      // Garante que o observer capture a criação do elemento de vídeo antes do start
+      attachVideoObserver();
+
       if (!scannerRef.current) {
         scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
           formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
           verbose: false,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
         });
       }
 
       const scanner = scannerRef.current;
 
       const scanConfig = {
-        fps: 15,
+        fps: 10, // 10 fps é o padrão otimizado para não aquecer o processador de smartphones
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
           return { width: Math.max(edge, 200), height: Math.max(edge, 200) };
@@ -99,64 +219,95 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         }
       };
 
-      // Tenta iniciar direto pelo Html5Qrcode com a câmera traseira (sem probe manual que bloqueia o WebKit)
-      let started = false;
+      // Obtém lista de câmeras e identifica a melhor câmera traseira
+      let detectedDevices: CameraDevice[] = [];
       try {
-        await scanner.start(
-          { facingMode: "environment" },
-          scanConfig,
-          handleDecoded,
-          () => {}
-        );
-        started = true;
-      } catch (envErr) {
-        console.warn("Tentando câmera por lista de dispositivos:", envErr);
-        try {
-          const devices = await Html5Qrcode.getCameras();
-          if (devices && devices.length > 0) {
-            // Em smartphones, a câmera traseira costuma ser a última da lista
-            const backCam = devices.length > 1 ? devices[devices.length - 1] : devices[0];
-            setCurrentCameraId(backCam.id);
-            await scanner.start(backCam.id, scanConfig, handleDecoded, () => {});
-            started = true;
-          }
-        } catch (deviceErr) {
-          console.warn("Falha no fallback por ID de câmera:", deviceErr);
-        }
+        detectedDevices = await Html5Qrcode.getCameras();
+        setCameras(detectedDevices);
+      } catch (err) {
+        console.warn("Aviso ao listar câmeras:", err);
+      }
 
-        if (!started) {
-          // Último recurso: qualquer câmera disponível (user)
+      const preferredBackCam = pickBestBackCamera(detectedDevices);
+      let started = false;
+
+      // 1. Tenta iniciar pela câmera traseira identificada por ID
+      if (preferredBackCam) {
+        try {
+          setCurrentCameraId(preferredBackCam.id);
+          await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
+          started = true;
+        } catch (idErr) {
+          console.warn("Falha ao iniciar por ID de câmera preferencial, tentando constraint:", idErr);
+        }
+      }
+
+      // 2. Fallback: inicia com restrição ideal de facingMode "environment"
+      if (!started) {
+        try {
           await scanner.start(
-            { facingMode: "user" },
+            { facingMode: { ideal: "environment" } },
             scanConfig,
             handleDecoded,
             () => {}
           );
           started = true;
+        } catch (envIdealErr) {
+          console.warn("Falha com ideal environment, tentando environment direto:", envIdealErr);
+          try {
+            await scanner.start(
+              { facingMode: "environment" },
+              scanConfig,
+              handleDecoded,
+              () => {}
+            );
+            started = true;
+          } catch (envDirectErr) {
+            console.warn("Falha com facingMode environment:", envDirectErr);
+          }
         }
       }
 
-      // Garante suporte a reprodução inline no iOS WebKit / Safari
-      const videoElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
-      if (videoElem) {
-        videoElem.setAttribute("playsinline", "true");
-        videoElem.setAttribute("webkit-playsinline", "true");
-        videoElem.play().catch(() => {});
+      // 3. Último recurso: qualquer câmera disponível
+      if (!started && detectedDevices.length > 0) {
+        await scanner.start(detectedDevices[0].id, scanConfig, handleDecoded, () => {});
+        setCurrentCameraId(detectedDevices[0].id);
+        started = true;
+      }
+
+      if (!started) {
+        throw new Error("Não foi possível acessar a câmera do aparelho.");
+      }
+
+      // Garante atributos de reprodução inline no iOS WebKit / Safari
+      const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
+      if (vidElem) {
+        vidElem.setAttribute("playsinline", "true");
+        vidElem.setAttribute("webkit-playsinline", "true");
+        vidElem.setAttribute("muted", "true");
+        vidElem.muted = true;
+        vidElem.setAttribute("autoplay", "true");
+        vidElem.play().catch(() => {});
       }
 
       isRunningRef.current = true;
+      isStartingRef.current = false;
       setCameraStarted(true);
       setInitializing(false);
 
-      // Atualiza lista de câmeras detectadas
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        setCameras(devices);
-      } catch {
-        // Ignora
+      // Atualiza lista de câmeras se não estavam disponíveis antes da permissão
+      if (detectedDevices.length === 0) {
+        try {
+          const devs = await Html5Qrcode.getCameras();
+          setCameras(devs);
+          const best = pickBestBackCamera(devs);
+          if (best) setCurrentCameraId(best.id);
+        } catch {
+          // Ignora
+        }
       }
 
-      // Testa se há suporte a lanterna
+      // Verifica suporte a lanterna
       try {
         const capabilities = scanner.getRunningTrackCameraCapabilities();
         if (capabilities && "torch" in capabilities) {
@@ -166,8 +317,11 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         // Ignora
       }
     } catch (err) {
+      isStartingRef.current = false;
       setInitializing(false);
       setCameraStarted(false);
+      isRunningRef.current = false;
+
       const msg = err instanceof Error ? err.message : String(err);
       const isDenied =
         msg.includes("Permission denied") ||
@@ -176,14 +330,13 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         msg.includes("permission");
 
       if (isDenied) {
+        setIsPermissionDenied(true);
         if (fromUserGesture) {
-          setIsPermissionDenied(true);
           setCameraError(
-            "Permissão da câmera bloqueada pelo navegador. Siga as instruções abaixo para desbloquear ou use a câmera nativa por foto."
+            "Permissão da câmera bloqueada pelo navegador. No iPhone, acesse Ajustes > Safari > Câmera e marque 'Permitir', ou use o botão 'Foto com Câmera Nativa'."
           );
         } else {
-          // Se falhou apenas no carregamento automático (exigência de gesto do Safari/Android),
-          // não assusta o usuário com erro vermelho: apenas deixa pronto para o toque.
+          // Se falhou sem gesto do usuário, não exibe erro alarmante
           setCameraError(null);
         }
       } else if (msg.includes("NotFoundError") || msg.includes("DevicesNotFoundError")) {
@@ -194,17 +347,49 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     }
   }
 
-  async function stopScanner() {
-    if (scannerRef.current && isRunningRef.current) {
-      try {
-        await scannerRef.current.stop();
-      } catch {
-        // Ignora
-      }
-      isRunningRef.current = false;
-      setCameraStarted(false);
+  // Tenta iniciar câmera ao carregar (se estiver em HTTPS)
+  useEffect(() => {
+    if (manualMode) {
+      void stopScanner();
+      return;
     }
-  }
+
+    if (typeof window !== "undefined" && window.isSecureContext) {
+      void startCamera(false);
+    } else {
+      setCameraError(
+        "Navegadores de celular bloqueiam a câmera em conexões HTTP. Acesse via HTTPS seguro para ler ao vivo ou use o botão de foto."
+      );
+    }
+
+    return () => {
+      void stopScanner();
+    };
+  }, [manualMode]);
+
+  // Gerencia visibilidade da aba (quando o usuário minimiza o Safari ou troca de app)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (isRunningRef.current) {
+          void stopScanner();
+        }
+      } else {
+        if (!manualMode && !isRunningRef.current && window.isSecureContext) {
+          void startCamera(false);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", () => {
+      void stopScanner();
+    });
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [manualMode]);
 
   // Alternar entre câmeras disponíveis
   async function handleSwitchCamera() {
@@ -216,10 +401,20 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     try {
       await stopScanner();
       setCurrentCameraId(nextCamera.id);
+      attachVideoObserver();
+
+      if (!scannerRef.current) {
+        scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+          verbose: false,
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        });
+      }
+
       await scannerRef.current.start(
         nextCamera.id,
         {
-          fps: 15,
+          fps: 10,
           qrbox: (w, h) => {
             const edge = Math.floor(Math.min(w, h) * 0.72);
             return { width: Math.max(edge, 200), height: Math.max(edge, 200) };
@@ -231,6 +426,15 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         },
         () => {}
       );
+
+      const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
+      if (vidElem) {
+        vidElem.setAttribute("playsinline", "true");
+        vidElem.setAttribute("webkit-playsinline", "true");
+        vidElem.muted = true;
+        vidElem.play().catch(() => {});
+      }
+
       isRunningRef.current = true;
       setCameraStarted(true);
     } catch (err) {
@@ -290,7 +494,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     >
       <div id="temp-qr-file-scan" style={{ display: "none" }} />
 
-      {/* Aviso de HTTP não seguro com link de 1 clique para HTTPS */}
+      {/* Aviso de HTTP não seguro */}
       {isInsecureOrigin && (
         <div
           style={{
@@ -378,157 +582,152 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                   borderRadius: 12,
                 }}
               >
-                <div style={{ ...cornerStyle, top: 0, left: 0, borderTop: "4px solid #22c55e", borderLeft: "4px solid #22c55e" }} />
-                <div style={{ ...cornerStyle, top: 0, right: 0, borderTop: "4px solid #22c55e", borderRight: "4px solid #22c55e" }} />
-                <div style={{ ...cornerStyle, bottom: 0, left: 0, borderBottom: "4px solid #22c55e", borderLeft: "4px solid #22c55e" }} />
-                <div style={{ ...cornerStyle, bottom: 0, right: 0, borderBottom: "4px solid #22c55e", borderRight: "4px solid #22c55e" }} />
+                {/* 4 cantos estilizados */}
+                <div style={{ ...cornerStyle, top: 0, left: 0, borderTop: "3px solid #22c55e", borderLeft: "3px solid #22c55e" }} />
+                <div style={{ ...cornerStyle, top: 0, right: 0, borderTop: "3px solid #22c55e", borderRight: "3px solid #22c55e" }} />
+                <div style={{ ...cornerStyle, bottom: 0, left: 0, borderBottom: "3px solid #22c55e", borderLeft: "3px solid #22c55e" }} />
+                <div style={{ ...cornerStyle, bottom: 0, right: 0, borderBottom: "3px solid #22c55e", borderRight: "3px solid #22c55e" }} />
+
+                {/* Linha laser verde animada */}
                 <div className="laser-line" />
               </div>
             </div>
           )}
 
-          {/* Loading do leitor */}
+          {/* Estado: Carregando / Inicializando Câmera */}
           {initializing && (
             <div
               style={{
                 position: "absolute",
                 inset: 0,
-                backgroundColor: "rgba(16, 18, 20, 0.92)",
+                backgroundColor: "#000000",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 12,
+                color: "#ffffff",
                 zIndex: 10,
-              }}
-            >
-              <div className="spinner" style={{ width: 36, height: 36, borderWidth: 3 }} />
-              <p style={{ color: "var(--text)", fontSize: 14, margin: 0, fontWeight: 600 }}>
-                Solicitando acesso à câmera...
-              </p>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                Toque em "Permitir" quando o navegador perguntar
-              </span>
-            </div>
-          )}
-
-          {/* Estado: Câmera não iniciada ou Erro */}
-          {!cameraStarted && !initializing && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundColor: "rgba(16, 18, 20, 0.95)",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 24,
-                textAlign: "center",
-                gap: 16,
-                zIndex: 15,
               }}
             >
               <div
                 style={{
-                  width: 58,
-                  height: 58,
+                  width: 32,
+                  height: 32,
+                  border: "3px solid rgba(255, 255, 255, 0.2)",
+                  borderTopColor: "var(--primary)",
                   borderRadius: "50%",
-                  backgroundColor: cameraError ? "rgba(239, 68, 68, 0.15)" : "rgba(59, 130, 246, 0.15)",
-                  color: cameraError ? "var(--danger)" : "var(--primary)",
+                  animation: "spin 0.8s linear infinite",
+                }}
+              />
+              <span style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>
+                Iniciando câmera traseira...
+              </span>
+            </div>
+          )}
+
+          {/* Estado: Câmera Pausada temporariamente após leitura */}
+          {paused && cameraStarted && !initializing && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.6)",
+                backdropFilter: "blur(4px)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+              }}
+            >
+              <span style={{ fontSize: 14, fontWeight: 600, color: "#ffffff" }}>
+                Processando leitura...
+              </span>
+            </div>
+          )}
+
+          {/* Estado: Erro ao abrir câmera ou permissão pendente */}
+          {cameraError && !initializing && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundColor: "var(--surface)",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                gap: 14,
+                zIndex: 10,
+              }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: "50%",
+                  backgroundColor: isPermissionDenied ? "rgba(239, 68, 68, 0.12)" : "rgba(59, 130, 246, 0.12)",
+                  color: isPermissionDenied ? "var(--danger)" : "var(--primary)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 28,
-                  fontWeight: 700,
+                  fontSize: 22,
                 }}
               >
-                {cameraError ? "!" : <CameraIcon size={28} />}
+                <CameraIcon size="1.2em" />
               </div>
 
               <div>
-                <p style={{ color: "var(--text)", fontSize: 15, margin: "0 0 6px", lineHeight: 1.4, fontWeight: 700 }}>
-                  {cameraError ? (isPermissionDenied ? "Permissão de Câmera Bloqueada" : cameraError) : "Câmera Pronta para Credenciamento"}
+                <h4 style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+                  {isPermissionDenied ? "Permissão de Câmera Necessária" : "Iniciar Câmera de Leitura"}
+                </h4>
+                <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.4, maxWidth: 320 }}>
+                  {cameraError}
                 </p>
-                <span style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
-                  {isPermissionDenied ? (
-                    "O navegador não permitiu abrir a câmera automaticamente. Veja como liberar abaixo ou utilize a câmera nativa:"
-                  ) : cameraError ? (
-                    "Verifique a conexão segura ou use a câmera do aparelho."
-                  ) : (
-                    "Toque no botão abaixo para abrir a câmera e autorizar a leitura no seu celular."
-                  )}
-                </span>
               </div>
 
-              {isPermissionDenied && (
-                <div
-                  style={{
-                    width: "100%",
-                    backgroundColor: "rgba(239, 68, 68, 0.12)",
-                    border: "1px solid rgba(239, 68, 68, 0.3)",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    textAlign: "left",
-                    fontSize: 12,
-                    color: "var(--text)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--danger)" }}>
-                    Como liberar a câmera no seu aparelho:
-                  </div>
-                  <div style={{ marginBottom: 4 }}>
-                    <strong>iPhone (Safari):</strong> Toque no ícone <code>aA</code> ao lado do endereço › Ajustes do Site › Câmera › <strong>Permitir</strong>.
-                  </div>
-                  <div>
-                    <strong>Android (Chrome):</strong> Toque no ícone de cadeado/ajustes ao lado do endereço › Permissões › Câmera › <strong>Permitir</strong>.
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 280 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 260 }}>
                 <button
                   type="button"
-                  className="btn"
+                  className="btn btn-primary"
                   onClick={() => startCamera(true)}
-                  style={{
-                    padding: "12px 18px",
-                    fontSize: 15,
-                    fontWeight: 700,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    background: "#16a34a",
-                    boxShadow: "0 4px 14px rgba(22, 163, 74, 0.4)",
-                  }}
+                  style={{ width: "100%", fontSize: 14, padding: "10px 16px" }}
                 >
-                  <CameraIcon size="1.1em" /> Ativar Câmera ao Vivo
+                  <RefreshIcon size="1.1em" /> Tentar Novamente
                 </button>
 
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    padding: "11px 16px",
-                    fontSize: 13,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                  }}
+                  style={{ width: "100%", fontSize: 13, padding: "8px 14px" }}
                 >
-                  <CameraIcon size="1.1em" /> Tirar Foto com Câmera do Aparelho
+                  <CameraIcon size="1.1em" /> Foto com Câmera Nativa
                 </button>
 
+                <button
+                  type="button"
+                  onClick={onToggleManual}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--primary)",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    padding: "6px 8px",
+                  }}
+                >
+                  Digitar código manualmente
+                </button>
               </div>
             </div>
           )}
 
-          {/* Controles da Câmera quando ativa (Trocar Lente e Lanterna) */}
-          {cameraStarted && !initializing && (
+          {/* Botões flutuantes sobre o vídeo (Lanterna e Alternar Câmera) */}
+          {cameraStarted && !initializing && !cameraError && (
             <div
               style={{
                 position: "absolute",
@@ -536,14 +735,18 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                 right: 12,
                 display: "flex",
                 gap: 8,
-                zIndex: 20,
+                zIndex: 5,
               }}
             >
               {hasTorch && (
                 <button
                   type="button"
                   onClick={handleToggleTorch}
-                  style={cameraControlBtn}
+                  style={{
+                    ...cameraControlBtn,
+                    backgroundColor: torchOn ? "var(--warning)" : "rgba(0, 0, 0, 0.65)",
+                    color: torchOn ? "#000000" : "#ffffff",
+                  }}
                   title="Alternar lanterna"
                 >
                   {torchOn ? "Lanterna ligada" : "Lanterna"}
@@ -563,7 +766,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
           )}
         </div>
       ) : (
-        /* Modo Manual (digitar ou colar token / simulação) */
+        /* Modo Manual (digitar ou colar token) */
         <form
           onSubmit={handleManualSubmit}
           className="card"
@@ -688,9 +891,8 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
           50% { top: 96%; opacity: 1; }
           100% { top: 4%; opacity: 0.8; }
         }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: scale(0.97); }
-          to { opacity: 1; transform: scale(1); }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>

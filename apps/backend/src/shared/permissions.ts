@@ -69,6 +69,9 @@ export const PERMISSIONS: PermissionDef[] = [
   // Certificados
   { key: "certificates.view", description: "Ver status e estatísticas de certificados do evento", category: "Certificados" },
   { key: "certificates.issue", description: "Liberar, reprocessar e revogar certificados", category: "Certificados" },
+
+  // Credenciamento
+  { key: "checkin.perform", description: "Realizar credenciamento e check-in de participantes", category: "Credenciamento" },
 ];
 
 export const PERMISSION_KEYS = new Set(PERMISSIONS.map((p) => p.key));
@@ -88,5 +91,44 @@ export async function syncPermissions(prisma: PrismaClient): Promise<void> {
       create: p,
       update: { description: p.description, category: p.category },
     });
+  }
+
+  // Garante a existência do perfil de acesso "Credenciamento"
+  try {
+    const checkinPerm = await prisma.permission.findUnique({ where: { key: "checkin.perform" } });
+    if (checkinPerm) {
+      let credRole = await prisma.role.findFirst({
+        where: {
+          OR: [{ key: "CREDENCIAMENTO" }, { name: "Credenciamento" }],
+        },
+      });
+
+      if (!credRole) {
+        credRole = await prisma.role.create({
+          data: {
+            name: "Credenciamento",
+            key: "CREDENCIAMENTO",
+            description: "Acesso exclusivo ao módulo de credenciamento e realização de check-in.",
+            isSystem: false,
+          },
+        });
+      }
+
+      await prisma.rolePermission.upsert({
+        where: {
+          roleId_permissionId: {
+            roleId: credRole.id,
+            permissionId: checkinPerm.id,
+          },
+        },
+        create: {
+          roleId: credRole.id,
+          permissionId: checkinPerm.id,
+        },
+        update: {},
+      });
+    }
+  } catch (err) {
+    console.error("Erro ao sincronizar perfil Credenciamento:", err);
   }
 }

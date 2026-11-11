@@ -114,6 +114,7 @@ function computeCertificateContentHash(
     // neste ponto — editar a ARTE de um modelo em uso exige regerar, e
     // isso está dito na tela.
     certificateTemplateId: event.certificateTemplateId ?? null,
+    validationBaseUrl: env.CERTIFICATE_VALIDATION_BASE_URL,
   });
   return createHash("sha256").update(payload).digest("hex");
 }

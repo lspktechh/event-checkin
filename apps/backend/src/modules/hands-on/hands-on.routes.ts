@@ -7,7 +7,7 @@ import {
   handsOnCheckinSchema,
 } from "./hands-on.schema.js";
 import { ok, fail } from "../../shared/response.js";
-import { requirePermission } from "../../middleware/auth.js";
+import { requireAnyPermission, requirePermission } from "../../middleware/auth.js";
 import { attendeeRepository } from "../attendee/attendee.repository.js";
 
 const eventIdParams = z.object({
@@ -227,7 +227,7 @@ export async function handsOnRoutes(app: FastifyInstance) {
    */
   app.post(
     "/events/:eventId/hands-on/checkin",
-    { preHandler: requirePermission("participants.edit") },
+    { preHandler: requireAnyPermission("checkin.perform", "participants.edit") },
     async (request, reply) => {
       const body = handsOnCheckinSchema.parse(request.body);
       const idOrToken = body.qrToken || (request.body as { id?: string })?.id;

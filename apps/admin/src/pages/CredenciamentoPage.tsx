@@ -4,14 +4,16 @@ import * as api from "../api/client";
 import { WebQrScanner } from "../components/scanner/WebQrScanner";
 import { FeedbackOverlay, type FeedbackData } from "../components/scanner/FeedbackOverlay";
 import { initAudio, playCheckInFeedback } from "../utils/audioFeedback";
-import { ArrowLeftIcon } from "../components/Icons";
+import { ArrowLeftIcon, SignOutIcon } from "../components/Icons";
 import { DayBanner } from "../components/scanner/DayBanner";
 import { useCheckInStats } from "../hooks/useCheckInStats";
+import { useAuth } from "../auth/AuthContext";
 
 const FEEDBACK_DURATION_MS = 1800;
 
 export function CredenciamentoPage() {
   const { eventId } = useParams<{ eventId: string }>();
+  const { isCredenciamentoOnly, logout } = useAuth();
 
   const [event, setEvent] = useState<api.EventRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -197,8 +199,8 @@ export function CredenciamentoPage() {
       >
         <h2 style={{ color: "var(--danger)", margin: 0 }}>Erro ao abrir credenciamento</h2>
         <p style={{ color: "var(--text-muted)", margin: 0 }}>{error ?? "Evento não localizado."}</p>
-        <Link to="/eventos" className="btn btn-secondary">
-          <ArrowLeftIcon size="1.1em" /> Voltar aos eventos
+        <Link to={isCredenciamentoOnly ? "/credenciamento" : "/eventos"} className="btn btn-secondary">
+          <ArrowLeftIcon size="1.1em" /> {isCredenciamentoOnly ? "Trocar de evento" : "Voltar aos eventos"}
         </Link>
       </div>
     );
@@ -228,7 +230,7 @@ export function CredenciamentoPage() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Link
-            to={`/eventos/${event.id}`}
+            to={isCredenciamentoOnly ? "/credenciamento" : `/eventos/${event.id}`}
             style={{
               display: "flex",
               alignItems: "center",
@@ -242,7 +244,7 @@ export function CredenciamentoPage() {
               fontSize: 18,
               border: "1px solid var(--border)",
             }}
-            title="Voltar ao evento"
+            title={isCredenciamentoOnly ? "Trocar de evento" : "Voltar ao evento"}
           >
             <ArrowLeftIcon size="1.1em" />
           </Link>
@@ -268,29 +270,68 @@ export function CredenciamentoPage() {
         <div style={{ textAlign: "right" }}>
           <div
             style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "var(--success)",
-              backgroundColor: "rgba(34, 197, 94, 0.12)",
-              padding: "4px 10px",
-              borderRadius: 999,
+              gap: 8,
+              justifyContent: "flex-end",
               marginBottom: 4,
             }}
           >
-            <span
+            <Link
+              to="/credenciamento"
+              className="btn btn-secondary"
               style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                backgroundColor: "var(--success)",
-                display: "inline-block",
-                boxShadow: "0 0 6px var(--success)",
+                fontSize: 11,
+                padding: "3px 8px",
+                textDecoration: "none",
+                borderRadius: 6,
+                fontWeight: 600,
               }}
-            />
-            ONLINE
+              title="Trocar o evento sendo credenciado"
+            >
+              Trocar Evento
+            </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="btn btn-secondary"
+              style={{
+                fontSize: 11,
+                padding: "3px 8px",
+                borderRadius: 6,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+              title="Sair do credenciamento"
+            >
+              <SignOutIcon size="1em" /> Sair
+            </button>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                color: "var(--success)",
+                backgroundColor: "rgba(34, 197, 94, 0.12)",
+                padding: "4px 10px",
+                borderRadius: 999,
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  backgroundColor: "var(--success)",
+                  display: "inline-block",
+                  boxShadow: "0 0 6px var(--success)",
+                }}
+              />
+              ONLINE
+            </div>
           </div>
           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
             {sessionCount > 0 && (

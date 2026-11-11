@@ -40,7 +40,15 @@ function CertificateValidationContent() {
       return;
     }
     getPublicCertificate(code)
-      .then(setCertificate)
+      .then((cert) => {
+        // Redirecionamento permanente para o novo domínio oficial lspkeventos.com.br para eventos que não são COPOL
+        const isCopol = (cert.eventName || "").toLowerCase().includes("copol");
+        if (!isCopol && typeof window !== "undefined") {
+          window.location.replace(`https://lspkeventos.com.br/certificados?code=${encodeURIComponent(code)}`);
+          return;
+        }
+        setCertificate(cert);
+      })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [code]);

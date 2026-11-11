@@ -25,11 +25,11 @@ const envSchema = z.object({
   // só a implementação de CertificateStorage.
   STORAGE_DIR: z.string().min(1).default("./storage"),
 
-  // Base pública do portal pre-copol, usada só para montar a URL de
+  // Base pública do portal LSPK Eventos, usada só para montar a URL de
   // validação embutida no QR Code do certificado (ex.:
-  // "https://precopol.lspktecnology.com.br/certificados"). Sem barra no
+  // "https://lspkeventos.com.br/certificados"). Sem barra no
   // final.
-  CERTIFICATE_VALIDATION_BASE_URL: z.string().min(1).default("http://localhost:3002/certificados"),
+  CERTIFICATE_VALIDATION_BASE_URL: z.string().min(1).default("https://lspkeventos.com.br/certificados"),
 
   // Integração PicPay E-Commerce
   PICPAY_TOKEN: z.string().optional().default(""),

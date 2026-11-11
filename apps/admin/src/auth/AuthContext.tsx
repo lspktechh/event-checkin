@@ -9,6 +9,8 @@ interface AuthState {
   /** ADMINISTRADOR (permissions === "ALL") sempre retorna true, igual o
    * backend trata isSystem — ver requirePermission() em middleware/auth.ts. */
   hasPermission: (key: string) => boolean;
+  /** Verdadeiro quando o usuário tem perfil exclusivo de credenciamento (sem acesso ao painel admin). */
+  isCredenciamentoOnly: boolean;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -125,8 +127,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user.permissions.includes(key);
   }
 
+  const isCredenciamentoOnly = Boolean(
+    user &&
+      (user.role?.key === "CREDENCIAMENTO" ||
+        user.role?.name?.toLowerCase() === "credenciamento" ||
+        (Array.isArray(user.permissions) &&
+          user.permissions.includes("checkin.perform") &&
+          !user.permissions.includes("events.view") &&
+          !user.permissions.includes("events.create") &&
+          !user.permissions.includes("events.edit") &&
+          !user.permissions.includes("participants.view") &&
+          !user.permissions.includes("users.view")))
+  );
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission, isCredenciamentoOnly }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 
