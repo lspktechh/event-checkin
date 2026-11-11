@@ -116,7 +116,6 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   const [erroDaPagina, setErroDaPagina] = useState<string | null>(null);
 
   const [nome, setNome] = useState("");
-  const [sobrenome, setSobrenome] = useState("");
   const [email, setEmail] = useState("");
   const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -219,7 +218,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
     setErro(null);
 
     if (exigeNome && !nome.trim()) {
-      setErro("Informe seu nome.");
+      setErro("Informe seu nome completo.");
       return;
     }
     if (exigeEmail && !email.trim()) {
@@ -256,9 +255,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventId: evento.id,
-          // O backend guarda um nome só; o formulário pede separado
-          // porque é como as pessoas esperam preencher.
-          name: `${nome.trim()} ${sobrenome.trim()}`.replace(/\s+/g, " ").trim(),
+          name: nome.replace(/\s+/g, " ").trim(),
           email: email.trim().toLowerCase(),
           document: exigeCpf ? cpf.replace(/\D/g, "") : null,
           phone: telefone.replace(/\D/g, "") || null,
@@ -459,30 +456,17 @@ export function InscricaoCliente({ slug }: { slug: string }) {
           ) : (
             <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
             {exigeNome && (
-              <div className={estilos.gridCamposDuplo}>
-                <label className={estilos.campo}>
-                  Nome
-                  <input
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    required
-                    autoComplete="given-name"
-                    placeholder="Maria"
-                  />
-                </label>
-
-                <label className={estilos.campo}>
-                  Sobrenome
-                  <input
-                    value={sobrenome}
-                    onChange={(e) => setSobrenome(e.target.value)}
-                    required
-                    autoComplete="family-name"
-                    placeholder="Souza"
-                  />
-                  <small>Nome e sobrenome saem como você escrever no certificado.</small>
-                </label>
-              </div>
+              <label className={estilos.campo}>
+                Nome completo
+                <input
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  required
+                  autoComplete="name"
+                  placeholder="Seu nome completo"
+                />
+                <small>O nome sairá exatamente como você escrever no certificado.</small>
+              </label>
             )}
 
             {exigeEmail && (

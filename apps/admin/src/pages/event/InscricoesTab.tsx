@@ -393,7 +393,7 @@ export function InscricoesTab({ eventId }: { eventId: string }) {
                 <div>
                   <strong>Nome Completo</strong>
                   <div className="muted" style={{ fontSize: "12px", marginTop: 2 }}>
-                    Nome e sobrenome para emissão de credenciais e certificados.
+                    Nome para emissão de credenciais e certificados.
                   </div>
                 </div>
               </label>
