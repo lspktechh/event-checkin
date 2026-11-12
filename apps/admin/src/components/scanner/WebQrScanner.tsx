@@ -11,15 +11,40 @@ interface Props {
 
 const CONTAINER_ID = "web-qr-scanner-viewport";
 
+function formatCameraLabel(raw: string): string {
+  if (!raw) return "Trocar Lente";
+  const l = raw.toLowerCase();
+  if (l.includes("ultra") || l.includes("0.5")) return "Lente 0.5x (Ultra)";
+  if (l.includes("tele") || l.includes("3x") || l.includes("5x")) return "Lente Telefoto";
+  if (l.includes("front") || l.includes("selfie") || l.includes("frontal")) return "Lente Frontal";
+  if (l.includes("back") || l.includes("traseir") || l.includes("rear")) return "Lente 1x Traseira";
+  return `Lente ${raw.slice(0, 12)}`;
+}
+
 /**
- * Seleciona a melhor câmera traseira (1x / Principal), evitando câmeras Ultra-Wide (0.5x)
- * e Telefoto (3x/5x) que não conseguem focar em QR Codes a curta distância no iPhone.
+ * Seleciona a melhor câmera traseira (1x / Principal), evitando terminantemente câmeras Ultra-Wide (0.5x)
+ * e Telefoto (3x/5x) que não conseguem focar em QR Codes a curta distância no iPhone e Android.
  */
 function pickBestBackCamera(devices: CameraDevice[]): CameraDevice | null {
   if (!devices || devices.length === 0) return null;
   if (devices.length === 1) return devices[0];
 
-  // Filtra câmeras com indício de serem traseiras
+  // 1. Procura primeiro câmera com rótulo exato de 1x principal ("Back Camera" no iOS / "camera2 0" no Android)
+  const exactMain = devices.find((d) => {
+    const l = d.label.toLowerCase().trim();
+    return (
+      l === "back camera" ||
+      l === "câmera traseira" ||
+      l === "camera traseira" ||
+      l === "rear camera" ||
+      l === "main camera" ||
+      l === "camera 0, facing back" ||
+      l === "camera2 0, facing back"
+    );
+  });
+  if (exactMain) return exactMain;
+
+  // 2. Filtra câmeras traseiras descartando Ultra-Wide e Telefoto
   const backCandidates = devices.filter((d) => {
     const label = d.label.toLowerCase();
     const isBack =
@@ -36,20 +61,37 @@ function pickBestBackCamera(devices: CameraDevice[]): CameraDevice | null {
   });
 
   if (backCandidates.length > 0) {
-    // Entre as traseiras, prioriza a lente principal (1x / Wide) e descarta Ultra-Wide e Telefoto
     const primaryBack = backCandidates.find((d) => {
       const label = d.label.toLowerCase();
-      const isUltraWide = label.includes("ultra") || label.includes("0.5") || label.includes("macro");
+      const isUltraWide =
+        label.includes("ultra") ||
+        label.includes("0.5") ||
+        label.includes("macro") ||
+        label.includes("wide-angle");
       const isTele = label.includes("tele") || label.includes("3x") || label.includes("5x");
       return !isUltraWide && !isTele;
     });
 
     if (primaryBack) return primaryBack;
+
+    const nonUltra = backCandidates.find((d) => {
+      const label = d.label.toLowerCase();
+      return !label.includes("ultra") && !label.includes("0.5");
+    });
+    if (nonUltra) return nonUltra;
+
     return backCandidates[0];
   }
 
-  // Se nenhuma câmera tiver rótulo de traseira identificado (ex: antes da permissão concedida),
-  // em celulares o primeiro dispositivo costuma ser a lente principal traseira ou a última
+  // 3. Fallback: qualquer dispositivo que não seja frontal nem ultra-wide
+  const fallbackNonUltra = devices.find((d) => {
+    const l = d.label.toLowerCase();
+    const isFront = l.includes("front") || l.includes("frontal") || l.includes("selfie");
+    const isUltra = l.includes("ultra") || l.includes("0.5");
+    return !isFront && !isUltra;
+  });
+  if (fallbackNonUltra) return fallbackNonUltra;
+
   return devices[0];
 }
 
@@ -234,29 +276,29 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       const preferredBackCam = pickBestBackCamera(detectedDevices);
       let started = false;
 
-      // 1. Tenta iniciar prioritariamente com facingMode: "environment"
-      // No Android e no iOS, facingMode: "environment" instrui o HAL/SO a selecionar
-      // a lente traseira principal padrão 1x (wide), evitando lentes telefoto (zoom) ou macro.
-      try {
-        await scanner.start(
-          { facingMode: "environment" },
-          scanConfig,
-          handleDecoded,
-          () => {}
-        );
-        started = true;
-      } catch (envErr) {
-        console.warn("Falha ao iniciar com facingMode environment, tentando por ID:", envErr);
-      }
-
-      // 2. Se facingMode falhou, tenta pela câmera traseira identificada por ID
-      if (!started && preferredBackCam) {
+      // 1. Se identificamos a câmera preferencial 1x com rótulo (evitando ultra-wide), inicia diretamente por ela!
+      if (preferredBackCam && preferredBackCam.label) {
         try {
           setCurrentCameraId(preferredBackCam.id);
           await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
           started = true;
         } catch (idErr) {
-          console.warn("Falha ao iniciar por ID de câmera preferencial:", idErr);
+          console.warn("Falha ao iniciar pela câmera preferencial por ID:", idErr);
+        }
+      }
+
+      // 2. Fallback: inicia com facingMode "environment"
+      if (!started) {
+        try {
+          await scanner.start(
+            { facingMode: "environment" },
+            scanConfig,
+            handleDecoded,
+            () => {}
+          );
+          started = true;
+        } catch (envErr) {
+          console.warn("Falha com facingMode environment:", envErr);
         }
       }
 
@@ -296,12 +338,61 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         const devs = await Html5Qrcode.getCameras();
         if (devs && devs.length > 0) {
           setCameras(devs);
-          if (!currentCameraId && preferredBackCam) {
-            setCurrentCameraId(preferredBackCam.id);
+          const best1x = pickBestBackCamera(devs);
+
+          // Inspeciona a câmera que de fato está rodando no elemento de vídeo
+          const stream = vidElem?.srcObject as MediaStream | null;
+          const track = stream?.getVideoTracks()[0];
+          const runningLabel = (track?.label || "").toLowerCase();
+          const runningSettings = track?.getSettings ? track.getSettings() : undefined;
+          const runningDeviceId = runningSettings?.deviceId;
+
+          // Se a câmera ativa for a Ultra-Wide (0.5x), migra IMEDIATAMENTE para a lente 1x (best1x)
+          const isCurrentUltraWide = runningLabel.includes("ultra") || runningLabel.includes("0.5");
+          if (best1x && (isCurrentUltraWide || (runningDeviceId && runningDeviceId !== best1x.id && !currentCameraId))) {
+            console.log("Câmera 0.5x detectada. Migrando para lente 1x:", best1x.label);
+            setCurrentCameraId(best1x.id);
+            try {
+              await scanner.stop();
+              scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
+                formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                verbose: false,
+                experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+              });
+              await scannerRef.current.start(best1x.id, scanConfig, handleDecoded, () => {});
+              const newVid = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
+              if (newVid) {
+                newVid.setAttribute("playsinline", "true");
+                newVid.setAttribute("webkit-playsinline", "true");
+                newVid.muted = true;
+                newVid.play().catch(() => {});
+              }
+            } catch (switchErr) {
+              console.warn("Aviso ao migrar de 0.5x para 1x:", switchErr);
+            }
+          } else {
+            setCurrentCameraId(runningDeviceId || best1x?.id || devs[0].id);
+          }
+
+          // Se o sensor suportar controle de zoom nativo (PTZ), garante zoom mínimo em 1.0x (desfaz 0.5x se estiver ativo)
+          try {
+            const activeTrack = (document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null)
+              ?.srcObject as MediaStream | null;
+            const t = activeTrack?.getVideoTracks()[0];
+            if (t && t.getCapabilities) {
+              const caps = t.getCapabilities() as any;
+              if (caps && caps.zoom && caps.zoom.min < 1.0 && caps.zoom.max >= 1.0) {
+                await t.applyConstraints({
+                  advanced: [{ zoom: 1.0 } as any],
+                }).catch(() => {});
+              }
+            }
+          } catch {
+            // Ignora
           }
         }
-      } catch {
-        // Ignora
+      } catch (checkErr) {
+        console.warn("Aviso ao verificar câmeras pós-inicialização:", checkErr);
       }
 
       // Verifica suporte a lanterna
@@ -750,7 +841,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                   style={cameraControlBtn}
                   title="Alternar entre câmeras disponíveis"
                 >
-                  <RefreshIcon size="1.1em" /> Trocar Lente
+                  <RefreshIcon size="1.1em" /> {cameras.find((c) => c.id === currentCameraId)?.label ? formatCameraLabel(cameras.find((c) => c.id === currentCameraId)!.label) : "Trocar Lente"}
                 </button>
               )}
             </div>
