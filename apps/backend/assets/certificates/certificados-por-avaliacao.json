@@ -1,0 +1,53 @@
+{
+  "_leiame": "Eventos cujo certificado é liberado pela AVALIAÇÃO pós-evento (tabela event_evaluations), e não pelo check-in. A chave é o slug do evento; a arte e a carga horária são escolhidas pelas horas que a avaliação calculou (8 = só online, 16 = online + Demoday). Ver src/modules/certificates/certificate-por-avaliacao.ts e README.md desta pasta.",
+  "inova-saude-2026": {
+    "modelos": {
+      "8": {
+        "templateAssetKey": "inova-saude-2026-8h",
+        "layout": {
+          "_leiame": "Medido em inova-saude-2026-8h-base.png (1755x1241). O placeholder [NOME COMPLETO] foi apagado da arte (x 573-1067, y 430-477); a linha sob o nome está em y=503, de x=569 a x=1655. As assinaturas do Prof. Alex e do Prof. Helton já estão aplicadas na arte, sobre as linhas em y=1034. A região do QR (1500,790)-(1650,1000) foi conferida como 100% branca. paragrafo, chipData e assinaturas são null porque a arte já traz esse conteúdo.",
+          "imagemLargura": 1755,
+          "imagemAltura": 1241,
+          "nome": {
+            "xEsquerda": 569,
+            "xDireita": 1655,
+            "yBase": 475,
+            "tamanhoMaximo": 60,
+            "alinhamento": "esquerda",
+            "fonte": "figtree"
+          },
+          "paragrafo": null,
+          "chipData": null,
+          "assinaturas": null,
+          "cpf": null,
+          "qr": { "xEsquerda": 1515, "yTopo": 810, "tamanho": 135 },
+          "corPrincipal": "#072E55",
+          "corDoTexto": "#072E55"
+        }
+      },
+      "16": {
+        "templateAssetKey": "inova-saude-2026-16h",
+        "layout": {
+          "_leiame": "Mesma diagramação da arte de 8h (conferida pixel a pixel nas mesmas regiões).",
+          "imagemLargura": 1755,
+          "imagemAltura": 1241,
+          "nome": {
+            "xEsquerda": 569,
+            "xDireita": 1655,
+            "yBase": 475,
+            "tamanhoMaximo": 60,
+            "alinhamento": "esquerda",
+            "fonte": "figtree"
+          },
+          "paragrafo": null,
+          "chipData": null,
+          "assinaturas": null,
+          "cpf": null,
+          "qr": { "xEsquerda": 1515, "yTopo": 810, "tamanho": 135 },
+          "corPrincipal": "#072E55",
+          "corDoTexto": "#072E55"
+        }
+      }
+    }
+  }
+}

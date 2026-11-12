@@ -11,6 +11,14 @@ import { resolveCertificateLayout } from "./certificate-layout.js";
 import { loadBackground } from "./certificate-template.js";
 import { isEligible, resolveDisplayStatus, type EligibilityResult } from "./certificate-eligibility.service.js";
 import { resolveCertificateSettings, type CertificateSettings } from "./certificate-settings.js";
+import {
+  configPorAvaliacao,
+  horasDaAvaliacao,
+  horasPorEmail,
+  modeloParaHoras,
+  normalizarEmail,
+  type ConfigPorAvaliacao,
+} from "./certificate-por-avaliacao.js";
 
 // --- Imagens de assinatura dos signatários ---
 
@@ -98,9 +106,14 @@ async function resolveSignatoryImages(
  * considerado desatualizado — ver getOrGenerateCertificatePdf. */
 function computeCertificateContentHash(
   event: { name: string; startDate: Date; endDate: Date; certificateTemplateId?: string | null },
-  settings: ReturnType<typeof resolveCertificateSettings>
+  settings: ReturnType<typeof resolveCertificateSettings>,
+  // Certificado por avaliação: horas e arte de cada pessoa. Ausente nos
+  // demais eventos — JSON.stringify omite a chave, então o hash deles não
+  // muda e nenhum PDF já gerado é invalidado por esta feature.
+  porAvaliacao?: { horas: number; templateAssetKey: string },
 ): string {
   const payload = JSON.stringify({
+    porAvaliacao,
     eventName: event.name,
     startDate: event.startDate.toISOString(),
     endDate: event.endDate.toISOString(),
@@ -207,19 +220,51 @@ function verificationUrl(code: string): string {
   return `${env.CERTIFICATE_VALIDATION_BASE_URL}?code=${code}`;
 }
 
-async function computeEligibility(eventId: string, participantId: string): Promise<{ eligibility: EligibilityResult; checkIn: Awaited<ReturnType<typeof repo.findCheckIn>> }> {
+async function computeEligibility(eventId: string, participantId: string): Promise<{
+  eligibility: EligibilityResult;
+  checkIn: Awaited<ReturnType<typeof repo.findCheckIn>>;
+  config: ConfigPorAvaliacao | null;
+  horasAvaliacao: number | null;
+}> {
   const event = await loadEventOrThrow(eventId);
   const checkIn = await repo.findCheckIn(eventId, participantId);
   // A liberação manual é um critério de elegibilidade como qualquer
   // outro (ver isEligible), então é lida aqui — assim todo caminho que
   // já passa por computeEligibility a respeita de graça.
   const certificate = await repo.findCertificate(eventId, participantId);
+
+  // Evento com certificado por avaliação: a avaliação (mesmo e-mail da
+  // inscrição) substitui o check-in — ver certificate-por-avaliacao.ts.
+  const config = await configPorAvaliacao(event);
+  let horasAvaliacao: number | null = null;
+  if (config) {
+    const participant = await repo.findParticipantInEvent(eventId, participantId);
+    if (participant) horasAvaliacao = await horasDaAvaliacao(eventId, participant.email);
+  }
+
   const eligibility = isEligible({
     event,
     hasCheckIn: !!checkIn,
     manuallyReleased: !!certificate?.manuallyReleasedAt,
+    exigeAvaliacao: !!config,
+    temAvaliacao: horasAvaliacao !== null,
   });
-  return { eligibility, checkIn };
+  return { eligibility, checkIn, config, horasAvaliacao };
+}
+
+/** Menor carga horária configurada — usada quando o admin libera na mão
+ * alguém que não respondeu a avaliação (não há horas para escolher). */
+function menorHoraConfigurada(config: ConfigPorAvaliacao): number {
+  return Math.min(...Object.keys(config.modelos).map(Number));
+}
+
+/** Mensagem para quem tenta baixar sem ser elegível. */
+function mensagemNaoElegivel(reason: EligibilityResult["reason"]): string {
+  if (reason === "EVENT_NOT_ENDED") return "O certificado só fica disponível após o encerramento do evento";
+  if (reason === "NO_EVALUATION") {
+    return "Certificado disponível apenas para quem respondeu a avaliação do evento com este mesmo e-mail";
+  }
+  return "Certificado disponível apenas para quem teve presença confirmada";
 }
 
 // --- Área do participante ---
@@ -257,21 +302,33 @@ export async function getMyDocuments(eventId: string, participantId: string) {
 export async function getOrGenerateCertificatePdf(eventId: string, participantId: string): Promise<{ buffer: Buffer; certificateId: string; regenerated: boolean }> {
   const event = await loadEventOrThrow(eventId);
   const participant = await loadParticipantOrThrow(eventId, participantId);
-  const { eligibility } = await computeEligibility(eventId, participantId);
+  const { eligibility, config, horasAvaliacao } = await computeEligibility(eventId, participantId);
 
   const existing = await repo.findCertificate(eventId, participantId);
   if (existing?.status === "REVOKED") {
     throw new ForbiddenError("Este certificado foi revogado");
   }
   if (!eligibility.eligible) {
-    const message = eligibility.reason === "EVENT_NOT_ENDED"
-      ? "O certificado só fica disponível após o encerramento do evento"
-      : "Certificado disponível apenas para quem teve presença confirmada";
-    throw new ForbiddenError(message);
+    throw new ForbiddenError(mensagemNaoElegivel(eligibility.reason));
   }
 
   const settings = resolveCertificateSettings(event.certificateSettings);
-  const currentHash = computeCertificateContentHash(event, settings);
+
+  // Certificado por avaliação: arte e carga horária saem das horas da
+  // avaliação desta pessoa (8h online / 16h com Demoday).
+  const porAvaliacao = config
+    ? (() => {
+        const horas = horasAvaliacao ?? menorHoraConfigurada(config);
+        return { horas, ...modeloParaHoras(config, horas) };
+      })()
+    : null;
+  const workloadHours = porAvaliacao?.horas ?? settings.workloadHours;
+
+  const currentHash = computeCertificateContentHash(
+    event,
+    settings,
+    porAvaliacao ? { horas: porAvaliacao.horas, templateAssetKey: porAvaliacao.templateAssetKey } : undefined,
+  );
 
   const fileKey = certificateFileKey(eventId, participantId);
   const cacheIsFresh =
@@ -282,7 +339,9 @@ export async function getOrGenerateCertificatePdf(eventId: string, participantId
 
   const certificate = await repo.ensureCertificate(eventId, participantId);
 
-  const arte = await resolverArteELayout(event, settings);
+  const arte = porAvaliacao
+    ? { backgroundBytes: await loadBackground(porAvaliacao.templateAssetKey), layout: porAvaliacao.layout }
+    : await resolverArteELayout(event, settings);
 
   const cores = resolverCores(event, arte.layout, settings);
 
@@ -293,7 +352,7 @@ export async function getOrGenerateCertificatePdf(eventId: string, participantId
     locationLabel: settings.locationLabel,
     eventStartDate: event.startDate,
     eventEndDate: event.endDate,
-    workloadHours: settings.workloadHours,
+    workloadHours,
     paragraphSegments: settings.paragraphSegments,
     verificationUrl: verificationUrl(certificate.verificationCode),
     backgroundBytes: arte.backgroundBytes,
@@ -304,7 +363,7 @@ export async function getOrGenerateCertificatePdf(eventId: string, participantId
   });
 
   await certificateStorage.save(fileKey, buffer);
-  await repo.markCertificateGenerated(certificate.id, fileKey, settings.workloadHours, currentHash);
+  await repo.markCertificateGenerated(certificate.id, fileKey, workloadHours, currentHash);
 
   return { buffer, certificateId: certificate.id, regenerated: true };
 }
@@ -388,7 +447,15 @@ export async function generateTestCertificatePdf(eventId: string, participantNam
   const event = await loadEventOrThrow(eventId);
   const settings = resolveCertificateSettings(event.certificateSettings);
 
-  const arte = await resolverArteELayout(event, settings);
+  // Evento por avaliação: o teste mostra o modelo de menor carga horária.
+  const config = await configPorAvaliacao(event);
+  const porAvaliacao = config
+    ? { horas: menorHoraConfigurada(config), ...modeloParaHoras(config, menorHoraConfigurada(config)) }
+    : null;
+
+  const arte = porAvaliacao
+    ? { backgroundBytes: await loadBackground(porAvaliacao.templateAssetKey), layout: porAvaliacao.layout }
+    : await resolverArteELayout(event, settings);
   const cores = resolverCores(event, arte.layout, settings);
 
   return renderCertificatePdf({
@@ -399,7 +466,7 @@ export async function generateTestCertificatePdf(eventId: string, participantNam
     locationLabel: settings.locationLabel,
     eventStartDate: event.startDate,
     eventEndDate: event.endDate,
-    workloadHours: settings.workloadHours,
+    workloadHours: porAvaliacao?.horas ?? settings.workloadHours,
     paragraphSegments: settings.paragraphSegments,
     verificationUrl: verificationUrl("preview"),
     backgroundBytes: arte.backgroundBytes,
@@ -419,7 +486,18 @@ export async function getCertificateStats(eventId: string) {
     repo.countCertificatesByStatus(eventId, "REVOKED"),
   ]);
 
-  const eligible = hasEventEnded(event.endDate) ? present : 0;
+  // Evento por avaliação: elegível = participante ativo que respondeu a
+  // avaliação com o mesmo e-mail (a data e o check-in não contam).
+  const config = await configPorAvaliacao(event);
+  let eligible = hasEventEnded(event.endDate) ? present : 0;
+  if (config) {
+    const participantes = await prisma.participant.findMany({
+      where: { eventId, status: "ACTIVE" },
+      select: { email: true },
+    });
+    const avaliados = await horasPorEmail(eventId, participantes.map((p) => p.email));
+    eligible = participantes.filter((p) => avaliados.has(normalizarEmail(p.email))).length;
+  }
   const pending = Math.max(eligible - generated - revoked, 0);
 
   return { totalParticipants, present, eligible, generated, pending, revoked, eventEnded: hasEventEnded(event.endDate) };
@@ -446,12 +524,17 @@ export async function listParticipantsCertificateStatus(eventId: string) {
   const event = await loadEventOrThrow(eventId);
   const rows = await repo.listParticipantsWithCertificate(eventId);
 
+  const config = await configPorAvaliacao(event);
+  const avaliados = config ? await horasPorEmail(eventId, rows.map((r) => r.email)) : null;
+
   return rows.map((row) => {
     const certificate = row.certificates[0] ?? null;
     const eligibility = isEligible({
       event,
       hasCheckIn: row.checkIns.length > 0,
       manuallyReleased: !!certificate?.manuallyReleasedAt,
+      exigeAvaliacao: !!config,
+      temAvaliacao: !!avaliados?.has(normalizarEmail(row.email)),
     });
     return {
       participantId: row.id,

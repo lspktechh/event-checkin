@@ -1,7 +1,7 @@
 import type { CertificateStatus, Event } from "@prisma/client";
 import { hasEventEnded } from "../../shared/br-date.js";
 
-export type EligibilityReason = "EVENT_NOT_ENDED" | "NOT_PRESENT";
+export type EligibilityReason = "EVENT_NOT_ENDED" | "NOT_PRESENT" | "NO_EVALUATION";
 
 export interface EligibilityResult {
   eligible: boolean;
@@ -39,14 +39,24 @@ export function isEligible(params: {
   event: Pick<Event, "endDate">;
   hasCheckIn: boolean;
   manuallyReleased?: boolean;
+  /** Evento cujo certificado é liberado pela avaliação pós-evento, e não
+   * pelo check-in (ver certificate-por-avaliacao.ts — ex.: INOVA SAÚDE,
+   * que não teve credenciamento presencial). */
+  exigeAvaliacao?: boolean;
+  temAvaliacao?: boolean;
   now?: Date;
 }): EligibilityResult {
-  const { event, hasCheckIn, manuallyReleased, now } = params;
+  const { event, hasCheckIn, manuallyReleased, exigeAvaliacao, temAvaliacao, now } = params;
 
   // Verificado antes das demais regras: uma liberação manual existe
   // exatamente para os casos que elas reprovariam.
   if (manuallyReleased) {
     return { eligible: true, reason: null, manual: true };
+  }
+  // A avaliação substitui as regras de data e presença: quem respondeu
+  // participou, e o evento já acabou por definição (a avaliação é pós-evento).
+  if (exigeAvaliacao) {
+    return temAvaliacao ? { eligible: true, reason: null } : { eligible: false, reason: "NO_EVALUATION" };
   }
   if (!hasEventEnded(event.endDate, now)) {
     return { eligible: false, reason: "EVENT_NOT_ENDED" };

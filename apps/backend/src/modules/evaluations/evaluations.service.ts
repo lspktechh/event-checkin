@@ -40,10 +40,17 @@ export async function ensureEvaluationsTable() {
         meta JSONB NOT NULL DEFAULT '{}',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_evaluations_event_id ON event_evaluations(event_id);
-      CREATE INDEX IF NOT EXISTS idx_evaluations_email ON event_evaluations(email);
+      )
     `);
+    // Um comando por chamada: o Postgres recusa vários comandos num
+    // prepared statement ("cannot insert multiple commands"), e o erro
+    // era engolido abaixo — a tabela nunca era criada num banco novo.
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_evaluations_event_id ON event_evaluations(event_id)`
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_evaluations_email ON event_evaluations(email)`
+    );
     tableInitialized = true;
   } catch (err) {
     console.error("Erro ao inicializar tabela event_evaluations:", err);
