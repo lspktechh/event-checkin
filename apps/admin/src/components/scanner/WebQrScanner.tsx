@@ -97,6 +97,14 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       video.setAttribute("muted", "true");
       video.muted = true;
       video.setAttribute("autoplay", "true");
+
+      // No Android Chrome, o navegador pausa o vídeo quando elementos cobrem a tela ou há perda transitória de foco.
+      // Este listener garante que qualquer pausa involuntária seja desfeita enquanto a câmera estiver ativa.
+      video.onpause = () => {
+        if (!document.hidden && isRunningRef.current && !manualMode) {
+          video.play().catch(() => {});
+        }
+      };
     };
 
     // Aplica em qualquer vídeo já presente
@@ -204,13 +212,16 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
 
       const scanner = scannerRef.current;
 
-      const scanConfig = {
-        fps: 10, // 10 fps é o padrão otimizado para não aquecer o processador de smartphones
-        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
-          return { width: Math.max(edge, 200), height: Math.max(edge, 200) };
-        },
-        aspectRatio: 1.0,
+      const isIOS =
+        typeof navigator !== "undefined" &&
+        (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+
+      // Configuração de scan: NÃO define aspectRatio nem qrbox restritivo.
+      // Sem aspectRatio: 1.0, o sensor da câmera não sofre corte digital/zoom artificial no Android/iOS.
+      // Sem qrbox reduzido, o leitor decodifica o frame inteiro da câmera (de perto ou de longe).
+      const scanConfig: { fps: number } = {
+        fps: 10,
       };
 
       const handleDecoded = (decodedText: string) => {
@@ -231,18 +242,20 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       const preferredBackCam = pickBestBackCamera(detectedDevices);
       let started = false;
 
-      // 1. Tenta iniciar pela câmera traseira identificada por ID
-      if (preferredBackCam) {
+      // 1. No iOS/iPhone, prioriza a lente traseira principal identificada por ID ("Back Camera")
+      // para descartar a Ultra-Wide (0.5x) que não foca de perto.
+      if (isIOS && preferredBackCam) {
         try {
           setCurrentCameraId(preferredBackCam.id);
           await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
           started = true;
         } catch (idErr) {
-          console.warn("Falha ao iniciar por ID de câmera preferencial, tentando constraint:", idErr);
+          console.warn("Falha ao iniciar por ID no iOS, tentando constraint:", idErr);
         }
       }
 
-      // 2. Fallback: inicia com restrição ideal de facingMode "environment"
+      // 2. No Android e fallback no iOS: inicia com constraint ideal de facingMode "environment".
+      // No Android, isto instrui o HAL a escolher a câmera traseira padrão 1x wide com autofocus nativo.
       if (!started) {
         try {
           await scanner.start(
@@ -268,7 +281,18 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         }
       }
 
-      // 3. Último recurso: qualquer câmera disponível
+      // 3. Fallback adicional se não iniciou: tenta preferredBackCam por ID
+      if (!started && preferredBackCam) {
+        try {
+          setCurrentCameraId(preferredBackCam.id);
+          await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
+          started = true;
+        } catch (camIdErr) {
+          console.warn("Falha com preferredBackCam:", camIdErr);
+        }
+      }
+
+      // 4. Último recurso: qualquer câmera disponível
       if (!started && detectedDevices.length > 0) {
         await scanner.start(detectedDevices[0].id, scanConfig, handleDecoded, () => {});
         setCurrentCameraId(detectedDevices[0].id);
@@ -288,6 +312,24 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         vidElem.muted = true;
         vidElem.setAttribute("autoplay", "true");
         vidElem.play().catch(() => {});
+
+        // Reseta qualquer zoom digital forçado pelo hardware do Android
+        try {
+          const stream = vidElem.srcObject as MediaStream | null;
+          const tracks = stream?.getVideoTracks() || [];
+          if (tracks.length > 0) {
+            const track = tracks[0];
+            const caps = (track.getCapabilities ? track.getCapabilities() : {}) as any;
+            if (caps && caps.zoom) {
+              const minZoom = caps.zoom.min ?? 1.0;
+              await track.applyConstraints({
+                advanced: [{ zoom: minZoom } as any],
+              }).catch(() => {});
+            }
+          }
+        } catch (zoomErr) {
+          console.warn("Aviso ao resetar zoom do sensor:", zoomErr);
+        }
       }
 
       isRunningRef.current = true;
@@ -391,6 +433,18 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     };
   }, [manualMode]);
 
+  // Watchdog para Android Chrome: se o vídeo pausar inadvertidamente enquanto a câmera deve estar ativa, força play()
+  useEffect(() => {
+    if (!cameraStarted || manualMode) return;
+    const interval = setInterval(() => {
+      const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
+      if (vidElem && vidElem.paused && !document.hidden && isRunningRef.current) {
+        vidElem.play().catch(() => {});
+      }
+    }, 800);
+    return () => clearInterval(interval);
+  }, [cameraStarted, manualMode]);
+
   // Alternar entre câmeras disponíveis
   async function handleSwitchCamera() {
     if (cameras.length <= 1 || !scannerRef.current) return;
@@ -415,11 +469,6 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         nextCamera.id,
         {
           fps: 10,
-          qrbox: (w, h) => {
-            const edge = Math.floor(Math.min(w, h) * 0.72);
-            return { width: Math.max(edge, 200), height: Math.max(edge, 200) };
-          },
-          aspectRatio: 1.0,
         },
         (decodedText) => {
           if (!pausedRef.current) onScan(decodedText);
@@ -559,7 +608,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
           />
 
           {/* Mira e Laser decorativo (sobre o vídeo quando rodando) */}
-          {cameraStarted && !initializing && !cameraError && !paused && (
+          {cameraStarted && !initializing && !cameraError && (
             <div
               style={
                 {
@@ -574,22 +623,24 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
             >
               <div
                 style={{
-                  width: "68%",
+                  width: "76%",
                   aspectRatio: "1/1",
-                  maxWidth: 240,
+                  maxWidth: 280,
                   position: "relative",
-                  boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.45)",
-                  borderRadius: 12,
+                  borderRadius: 16,
+                  border: "2px dashed rgba(255, 255, 255, 0.2)",
+                  opacity: paused ? 0.4 : 1,
+                  transition: "opacity 0.2s ease",
                 }}
               >
                 {/* 4 cantos estilizados */}
-                <div style={{ ...cornerStyle, top: 0, left: 0, borderTop: "3px solid #22c55e", borderLeft: "3px solid #22c55e" }} />
-                <div style={{ ...cornerStyle, top: 0, right: 0, borderTop: "3px solid #22c55e", borderRight: "3px solid #22c55e" }} />
-                <div style={{ ...cornerStyle, bottom: 0, left: 0, borderBottom: "3px solid #22c55e", borderLeft: "3px solid #22c55e" }} />
-                <div style={{ ...cornerStyle, bottom: 0, right: 0, borderBottom: "3px solid #22c55e", borderRight: "3px solid #22c55e" }} />
+                <div style={{ ...cornerStyle, top: -2, left: -2, borderTop: "3px solid #22c55e", borderLeft: "3px solid #22c55e" }} />
+                <div style={{ ...cornerStyle, top: -2, right: -2, borderTop: "3px solid #22c55e", borderRight: "3px solid #22c55e" }} />
+                <div style={{ ...cornerStyle, bottom: -2, left: -2, borderBottom: "3px solid #22c55e", borderLeft: "3px solid #22c55e" }} />
+                <div style={{ ...cornerStyle, bottom: -2, right: -2, borderBottom: "3px solid #22c55e", borderRight: "3px solid #22c55e" }} />
 
-                {/* Linha laser verde animada */}
-                <div className="laser-line" />
+                {/* Linha laser verde animada quando ativo */}
+                {!paused && <div className="laser-line" />}
               </div>
             </div>
           )}
@@ -622,27 +673,6 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
               />
               <span style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)" }}>
                 Iniciando câmera traseira...
-              </span>
-            </div>
-          )}
-
-          {/* Estado: Câmera Pausada temporariamente após leitura */}
-          {paused && cameraStarted && !initializing && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundColor: "rgba(0, 0, 0, 0.6)",
-                backdropFilter: "blur(4px)",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 10,
-              }}
-            >
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#ffffff" }}>
-                Processando leitura...
               </span>
             </div>
           )}
@@ -876,6 +906,9 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
           border-radius: 14px;
           width: 100% !important;
           height: 100% !important;
+        }
+        #qr-shaded-region {
+          display: none !important;
         }
         .laser-line {
           position: absolute;
