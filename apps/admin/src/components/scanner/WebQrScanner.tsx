@@ -11,6 +11,50 @@ interface Props {
 
 const CONTAINER_ID = "web-qr-scanner-viewport";
 
+/**
+ * Zoom inicial aplicado na câmera quando o aparelho suporta (Chrome Android).
+ *
+ * O html5-qrcode reduz o quadro inteiro da câmera para o tamanho do visor na
+ * tela (~350px) antes de decodificar. Sem zoom, o QR fica minúsculo nessa
+ * imagem e o operador precisa encostar o celular no código. O zoom de
+ * hardware faz o QR ocupar mais do quadro e ser lido a uma distância normal.
+ */
+const DEFAULT_ZOOM = 2;
+const ZOOM_LEVELS = [1, 2, 3];
+
+/**
+ * Monta a configuração de leitura pedindo resolução maior que o padrão
+ * (640x480) do getUserMedia, para a imagem chegar nítida ao decodificador.
+ * Com `videoConstraints`, o html5-qrcode ignora o 1º argumento do start(),
+ * então a câmera (deviceId ou facingMode) precisa ir aqui dentro.
+ */
+function buildScanConfig(source: string | "environment") {
+  const resolution: MediaTrackConstraints = {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+  };
+  const videoConstraints: MediaTrackConstraints =
+    source === "environment"
+      ? { ...resolution, facingMode: "environment" }
+      : { ...resolution, deviceId: { exact: source } };
+  return { fps: 10, videoConstraints };
+}
+
+function getActiveVideoTrack(): MediaStreamTrack | null {
+  const video = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
+  const stream = video?.srcObject as MediaStream | null;
+  return stream?.getVideoTracks()[0] ?? null;
+}
+
+type ZoomRange = { min: number; max: number };
+
+function getZoomRange(track: MediaStreamTrack | null): ZoomRange | null {
+  if (!track || typeof track.getCapabilities !== "function") return null;
+  const caps = track.getCapabilities() as MediaTrackCapabilities & { zoom?: ZoomRange };
+  if (!caps.zoom || !(caps.zoom.max > caps.zoom.min)) return null;
+  return { min: caps.zoom.min, max: caps.zoom.max };
+}
+
 function formatCameraLabel(raw: string): string {
   if (!raw) return "Trocar Lente";
   const l = raw.toLowerCase();
@@ -106,6 +150,8 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
   const [hasTorch, setHasTorch] = useState(false);
   const [isInsecureOrigin, setIsInsecureOrigin] = useState(false);
   const [isPermissionDenied, setIsPermissionDenied] = useState(false);
+  const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number | null>(null);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isRunningRef = useRef(false);
@@ -215,6 +261,46 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     setInitializing(false);
     setTorchOn(false);
     setHasTorch(false);
+    setZoomRange(null);
+    setZoomLevel(null);
+  }
+
+  /**
+   * Aplica zoom de hardware na câmera ativa, se suportado. No Chrome Android
+   * as capabilities às vezes só aparecem alguns ms após o start, então tenta
+   * de novo uma vez. No iPhone/desktop sem suporte, não faz nada.
+   */
+  async function applyZoom(target: number, retry = true): Promise<void> {
+    const track = getActiveVideoTrack();
+    const range = getZoomRange(track);
+    if (!track || !range) {
+      if (retry) {
+        await new Promise((r) => setTimeout(r, 400));
+        return applyZoom(target, false);
+      }
+      setZoomRange(null);
+      setZoomLevel(null);
+      return;
+    }
+    const value = Math.min(range.max, Math.max(range.min, target));
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: value } as MediaTrackConstraintSet] });
+      setZoomRange(range);
+      setZoomLevel(value);
+    } catch (err) {
+      console.warn("Aviso ao aplicar zoom:", err);
+      setZoomRange(null);
+      setZoomLevel(null);
+    }
+  }
+
+  function handleCycleZoom() {
+    if (!zoomRange) return;
+    const levels = ZOOM_LEVELS.filter((z) => z >= zoomRange.min && z <= zoomRange.max);
+    if (levels.length < 2) return;
+    const idx = levels.findIndex((z) => z === zoomLevel);
+    const next = levels[(idx + 1) % levels.length];
+    void applyZoom(next, false);
   }
 
   async function startCamera(fromUserGesture = true) {
@@ -253,11 +339,6 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
 
       const scanner = scannerRef.current;
 
-      // Configuração de scan: decodifica o quadro total sem corte no sensor e sem restrição estreita de qrbox
-      const scanConfig = {
-        fps: 10,
-      };
-
       const handleDecoded = (decodedText: string) => {
         if (!pausedRef.current) {
           onScan(decodedText);
@@ -280,7 +361,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       if (preferredBackCam && preferredBackCam.label) {
         try {
           setCurrentCameraId(preferredBackCam.id);
-          await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
+          await scanner.start(preferredBackCam.id, buildScanConfig(preferredBackCam.id), handleDecoded, () => {});
           started = true;
         } catch (idErr) {
           console.warn("Falha ao iniciar pela câmera preferencial por ID:", idErr);
@@ -292,7 +373,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         try {
           await scanner.start(
             { facingMode: "environment" },
-            scanConfig,
+            buildScanConfig("environment"),
             handleDecoded,
             () => {}
           );
@@ -305,7 +386,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       // 3. Fallback: qualquer câmera detectada
       if (!started && detectedDevices.length > 0) {
         try {
-          await scanner.start(detectedDevices[0].id, scanConfig, handleDecoded, () => {});
+          await scanner.start(detectedDevices[0].id, buildScanConfig(detectedDevices[0].id), handleDecoded, () => {});
           setCurrentCameraId(detectedDevices[0].id);
           started = true;
         } catch (devErr) {
@@ -359,7 +440,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                 verbose: false,
                 experimentalFeatures: { useBarCodeDetectorIfSupported: true },
               });
-              await scannerRef.current.start(best1x.id, scanConfig, handleDecoded, () => {});
+              await scannerRef.current.start(best1x.id, buildScanConfig(best1x.id), handleDecoded, () => {});
               const newVid = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
               if (newVid) {
                 newVid.setAttribute("playsinline", "true");
@@ -374,23 +455,9 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
             setCurrentCameraId(runningDeviceId || best1x?.id || devs[0].id);
           }
 
-          // Se o sensor suportar controle de zoom nativo (PTZ), garante zoom mínimo em 1.0x (desfaz 0.5x se estiver ativo)
-          try {
-            const activeTrack = (document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null)
-              ?.srcObject as MediaStream | null;
-            const t = activeTrack?.getVideoTracks()[0];
-            if (t && t.getCapabilities) {
-              const caps = t.getCapabilities() as any;
-              if (caps && caps.zoom && caps.zoom.min < 1.0 && caps.zoom.max >= 1.0) {
-                await t.applyConstraints({
-                  advanced: [{ zoom: 1.0 } as any],
-                }).catch(() => {});
-              }
-            }
-          } catch {
-            // Ignora
-          }
         }
+        // Aproxima a imagem (zoom de hardware) para o QR ser lido à distância normal
+        await applyZoom(DEFAULT_ZOOM);
       } catch (checkErr) {
         console.warn("Aviso ao verificar câmeras pós-inicialização:", checkErr);
       }
@@ -517,9 +584,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
 
       await scannerRef.current.start(
         nextCamera.id,
-        {
-          fps: 10,
-        },
+        buildScanConfig(nextCamera.id),
         (decodedText) => {
           if (!pausedRef.current) onScan(decodedText);
         },
@@ -536,6 +601,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
 
       isRunningRef.current = true;
       setCameraStarted(true);
+      await applyZoom(DEFAULT_ZOOM);
     } catch (err) {
       console.warn("Erro ao alternar câmera:", err);
     }
@@ -832,6 +898,18 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                   title="Alternar lanterna"
                 >
                   {torchOn ? "Lanterna ligada" : "Lanterna"}
+                </button>
+              )}
+              {zoomRange && zoomLevel !== null &&
+                ZOOM_LEVELS.filter((z) => z >= zoomRange.min && z <= zoomRange.max).length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleCycleZoom}
+                  style={cameraControlBtn}
+                  title="Alterar zoom da câmera"
+                  aria-label={`Zoom atual ${Number(zoomLevel.toFixed(1))}x. Tocar para alterar`}
+                >
+                  {Number(zoomLevel.toFixed(1))}x
                 </button>
               )}
               {cameras.length > 1 && (
