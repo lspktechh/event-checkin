@@ -211,14 +211,9 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
 
       const scanner = scannerRef.current;
 
-      // Configuração de scan: NÃO define aspectRatio 1.0 para não causar corte/zoom no sensor.
-      // O qrbox amplo (85%) permite ler de perto ou de longe sem restrição estreita.
+      // Configuração de scan: decodifica o quadro total sem corte no sensor e sem restrição estreita de qrbox
       const scanConfig = {
         fps: 10,
-        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85);
-          return { width: Math.max(edge, 220), height: Math.max(edge, 220) };
-        },
       };
 
       const handleDecoded = (decodedText: string) => {
@@ -227,7 +222,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         }
       };
 
-      // Obtém lista de câmeras e identifica a melhor câmera traseira
+      // Obtém lista de câmeras disponíveis
       let detectedDevices: CameraDevice[] = [];
       try {
         detectedDevices = await Html5Qrcode.getCameras();
@@ -239,29 +234,29 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       const preferredBackCam = pickBestBackCamera(detectedDevices);
       let started = false;
 
-      // 1. Tenta iniciar pela câmera preferencial (traseira) identificada por ID
-      if (preferredBackCam) {
+      // 1. Tenta iniciar prioritariamente com facingMode: "environment"
+      // No Android e no iOS, facingMode: "environment" instrui o HAL/SO a selecionar
+      // a lente traseira principal padrão 1x (wide), evitando lentes telefoto (zoom) ou macro.
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          scanConfig,
+          handleDecoded,
+          () => {}
+        );
+        started = true;
+      } catch (envErr) {
+        console.warn("Falha ao iniciar com facingMode environment, tentando por ID:", envErr);
+      }
+
+      // 2. Se facingMode falhou, tenta pela câmera traseira identificada por ID
+      if (!started && preferredBackCam) {
         try {
           setCurrentCameraId(preferredBackCam.id);
           await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
           started = true;
         } catch (idErr) {
           console.warn("Falha ao iniciar por ID de câmera preferencial:", idErr);
-        }
-      }
-
-      // 2. Fallback: inicia com facingMode "environment"
-      if (!started) {
-        try {
-          await scanner.start(
-            { facingMode: "environment" },
-            scanConfig,
-            handleDecoded,
-            () => {}
-          );
-          started = true;
-        } catch (envErr) {
-          console.warn("Falha com facingMode environment:", envErr);
         }
       }
 
@@ -296,16 +291,17 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       setCameraStarted(true);
       setInitializing(false);
 
-      // Atualiza lista de câmeras se não estavam disponíveis antes da permissão
-      if (detectedDevices.length === 0) {
-        try {
-          const devs = await Html5Qrcode.getCameras();
+      // Sempre atualiza a lista de câmeras agora que a permissão foi concedida pelo usuário
+      try {
+        const devs = await Html5Qrcode.getCameras();
+        if (devs && devs.length > 0) {
           setCameras(devs);
-          const best = pickBestBackCamera(devs);
-          if (best) setCurrentCameraId(best.id);
-        } catch {
-          // Ignora
+          if (!currentCameraId && preferredBackCam) {
+            setCurrentCameraId(preferredBackCam.id);
+          }
         }
+      } catch {
+        // Ignora
       }
 
       // Verifica suporte a lanterna
@@ -432,10 +428,6 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         nextCamera.id,
         {
           fps: 10,
-          qrbox: (w, h) => {
-            const edge = Math.floor(Math.min(w, h) * 0.85);
-            return { width: Math.max(edge, 220), height: Math.max(edge, 220) };
-          },
         },
         (decodedText) => {
           if (!pausedRef.current) onScan(decodedText);
@@ -555,7 +547,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
             overflow: "hidden",
             backgroundColor: "#000000",
             position: "relative",
-            minHeight: 340,
+            minHeight: 280,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -569,8 +561,10 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
             id={CONTAINER_ID}
             style={{
               width: "100%",
-              height: "100%",
-              minHeight: 340,
+              minHeight: 280,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           />
 
@@ -590,12 +584,12 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
             >
               <div
                 style={{
-                  width: "76%",
+                  width: "82%",
                   aspectRatio: "1/1",
-                  maxWidth: 280,
+                  maxWidth: 300,
                   position: "relative",
                   borderRadius: 16,
-                  border: "2px dashed rgba(255, 255, 255, 0.2)",
+                  border: "2px dashed rgba(255, 255, 255, 0.25)",
                   opacity: paused ? 0.4 : 1,
                   transition: "opacity 0.2s ease",
                 }}
@@ -754,9 +748,9 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
                   type="button"
                   onClick={handleSwitchCamera}
                   style={cameraControlBtn}
-                  title="Alternar câmera"
+                  title="Alternar entre câmeras disponíveis"
                 >
-                  <RefreshIcon size="1.1em" /> Lente
+                  <RefreshIcon size="1.1em" /> Trocar Lente
                 </button>
               )}
             </div>
@@ -868,11 +862,20 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       </div>
 
       <style>{`
+        #${CONTAINER_ID} {
+          width: 100% !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: #000000;
+        }
         #${CONTAINER_ID} video {
-          object-fit: cover !important;
+          object-fit: contain !important;
           border-radius: 14px;
           width: 100% !important;
-          height: 100% !important;
+          max-height: 480px !important;
+          height: auto !important;
+          background-color: #000000;
         }
         #qr-shaded-region {
           display: none !important;
