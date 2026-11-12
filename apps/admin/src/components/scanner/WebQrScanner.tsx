@@ -160,6 +160,10 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
   pausedRef.current = paused;
 
   const observerRef = useRef<MutationObserver | null>(null);
+  // Autorrecuperação: último currentTime visto do vídeo e desde quando está parado
+  const healthRef = useRef({ lastTime: -1, stalledSince: 0 });
+  const recoveringRef = useRef(false);
+  const restartHistoryRef = useRef<number[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Checa se a origem é segura (HTTPS ou localhost)
@@ -552,17 +556,78 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     };
   }, [manualMode]);
 
-  // Watchdog para Android Chrome: se o vídeo pausar inadvertidamente enquanto a câmera deve estar ativa, força play()
+  /**
+   * Reinicia a câmera do zero (para + inicia). Usado quando o Android derruba
+   * ou congela o stream após uma leitura — antes isso deixava a tela preta
+   * até o operador atualizar a página. Limita a 3 reinícios em 30s para não
+   * entrar em loop se a câmera estiver realmente indisponível.
+   */
+  async function restartCamera(reason: string) {
+    if (recoveringRef.current || isStartingRef.current) return;
+    const now = Date.now();
+    restartHistoryRef.current = restartHistoryRef.current.filter((t) => now - t < 30000);
+    if (restartHistoryRef.current.length >= 3) {
+      await stopScanner();
+      setCameraError("A câmera parou de responder. Toque em 'Tentar Novamente'.");
+      return;
+    }
+    restartHistoryRef.current.push(now);
+    recoveringRef.current = true;
+    console.warn("Reiniciando câmera:", reason);
+    try {
+      await stopScanner();
+      await startCamera(false);
+    } finally {
+      healthRef.current = { lastTime: -1, stalledSince: Date.now() };
+      recoveringRef.current = false;
+    }
+  }
+
+  /** Confere se o vídeo está vivo; força play() se pausou e reinicia se morreu/congelou. */
+  function checkCameraHealth() {
+    if (document.hidden || !isRunningRef.current || recoveringRef.current || isStartingRef.current) return;
+    const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
+    const track = getActiveVideoTrack();
+
+    if (!vidElem || !track || track.readyState === "ended") {
+      void restartCamera("stream encerrado");
+      return;
+    }
+    if (vidElem.paused) {
+      vidElem.play().catch(() => {});
+    }
+
+    const now = Date.now();
+    const advancing = vidElem.currentTime !== healthRef.current.lastTime;
+    if (advancing && !track.muted) {
+      healthRef.current = { lastTime: vidElem.currentTime, stalledSince: now };
+      return;
+    }
+    if (now - healthRef.current.stalledSince > 2500) {
+      void restartCamera(track.muted ? "stream mudo" : "vídeo congelado");
+    }
+  }
+
+  // Watchdog para Android Chrome: mantém o vídeo rodando e se recupera de tela preta
   useEffect(() => {
     if (!cameraStarted || manualMode) return;
-    const interval = setInterval(() => {
-      const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
-      if (vidElem && vidElem.paused && !document.hidden && isRunningRef.current && !pausedRef.current) {
-        vidElem.play().catch(() => {});
-      }
-    }, 1200);
+    healthRef.current = { lastTime: -1, stalledSince: Date.now() };
+    const interval = setInterval(checkCameraHealth, 1000);
     return () => clearInterval(interval);
   }, [cameraStarted, manualMode]);
+
+  // Ao fechar o feedback de uma leitura, confere a câmera na hora
+  useEffect(() => {
+    if (!paused && cameraStarted && !manualMode) {
+      const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
+      const track = getActiveVideoTrack();
+      if (!vidElem || !track || track.readyState === "ended" || track.muted) {
+        void restartCamera("câmera inativa após leitura");
+      } else if (vidElem.paused) {
+        vidElem.play().catch(() => {});
+      }
+    }
+  }, [paused]);
 
   // Alternar entre câmeras disponíveis
   async function handleSwitchCamera() {
