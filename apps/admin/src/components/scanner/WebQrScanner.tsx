@@ -97,14 +97,6 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       video.setAttribute("muted", "true");
       video.muted = true;
       video.setAttribute("autoplay", "true");
-
-      // No Android Chrome, o navegador pausa o vídeo quando elementos cobrem a tela ou há perda transitória de foco.
-      // Este listener garante que qualquer pausa involuntária seja desfeita enquanto a câmera estiver ativa.
-      video.onpause = () => {
-        if (!document.hidden && isRunningRef.current && !manualMode) {
-          video.play().catch(() => {});
-        }
-      };
     };
 
     // Aplica em qualquer vídeo já presente
@@ -200,6 +192,13 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       // Garante que o observer capture a criação do elemento de vídeo antes do start
       attachVideoObserver();
 
+      if (scannerRef.current && !isRunningRef.current) {
+        try {
+          await scannerRef.current.clear();
+        } catch {}
+        scannerRef.current = null;
+      }
+
       if (!scannerRef.current) {
         scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
           formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
@@ -212,16 +211,14 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
 
       const scanner = scannerRef.current;
 
-      const isIOS =
-        typeof navigator !== "undefined" &&
-        (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
-          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
-
-      // Configuração de scan: NÃO define aspectRatio nem qrbox restritivo.
-      // Sem aspectRatio: 1.0, o sensor da câmera não sofre corte digital/zoom artificial no Android/iOS.
-      // Sem qrbox reduzido, o leitor decodifica o frame inteiro da câmera (de perto ou de longe).
-      const scanConfig: { fps: number } = {
+      // Configuração de scan: NÃO define aspectRatio 1.0 para não causar corte/zoom no sensor.
+      // O qrbox amplo (85%) permite ler de perto ou de longe sem restrição estreita.
+      const scanConfig = {
         fps: 10,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85);
+          return { width: Math.max(edge, 220), height: Math.max(edge, 220) };
+        },
       };
 
       const handleDecoded = (decodedText: string) => {
@@ -242,68 +239,48 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       const preferredBackCam = pickBestBackCamera(detectedDevices);
       let started = false;
 
-      // 1. No iOS/iPhone, prioriza a lente traseira principal identificada por ID ("Back Camera")
-      // para descartar a Ultra-Wide (0.5x) que não foca de perto.
-      if (isIOS && preferredBackCam) {
+      // 1. Tenta iniciar pela câmera preferencial (traseira) identificada por ID
+      if (preferredBackCam) {
         try {
           setCurrentCameraId(preferredBackCam.id);
           await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
           started = true;
         } catch (idErr) {
-          console.warn("Falha ao iniciar por ID no iOS, tentando constraint:", idErr);
+          console.warn("Falha ao iniciar por ID de câmera preferencial:", idErr);
         }
       }
 
-      // 2. No Android e fallback no iOS: inicia com constraint ideal de facingMode "environment".
-      // No Android, isto instrui o HAL a escolher a câmera traseira padrão 1x wide com autofocus nativo.
+      // 2. Fallback: inicia com facingMode "environment"
       if (!started) {
         try {
           await scanner.start(
-            { facingMode: { ideal: "environment" } },
+            { facingMode: "environment" },
             scanConfig,
             handleDecoded,
             () => {}
           );
           started = true;
-        } catch (envIdealErr) {
-          console.warn("Falha com ideal environment, tentando environment direto:", envIdealErr);
-          try {
-            await scanner.start(
-              { facingMode: "environment" },
-              scanConfig,
-              handleDecoded,
-              () => {}
-            );
-            started = true;
-          } catch (envDirectErr) {
-            console.warn("Falha com facingMode environment:", envDirectErr);
-          }
+        } catch (envErr) {
+          console.warn("Falha com facingMode environment:", envErr);
         }
       }
 
-      // 3. Fallback adicional se não iniciou: tenta preferredBackCam por ID
-      if (!started && preferredBackCam) {
-        try {
-          setCurrentCameraId(preferredBackCam.id);
-          await scanner.start(preferredBackCam.id, scanConfig, handleDecoded, () => {});
-          started = true;
-        } catch (camIdErr) {
-          console.warn("Falha com preferredBackCam:", camIdErr);
-        }
-      }
-
-      // 4. Último recurso: qualquer câmera disponível
+      // 3. Fallback: qualquer câmera detectada
       if (!started && detectedDevices.length > 0) {
-        await scanner.start(detectedDevices[0].id, scanConfig, handleDecoded, () => {});
-        setCurrentCameraId(detectedDevices[0].id);
-        started = true;
+        try {
+          await scanner.start(detectedDevices[0].id, scanConfig, handleDecoded, () => {});
+          setCurrentCameraId(detectedDevices[0].id);
+          started = true;
+        } catch (devErr) {
+          console.warn("Falha com fallback de câmera:", devErr);
+        }
       }
 
       if (!started) {
         throw new Error("Não foi possível acessar a câmera do aparelho.");
       }
 
-      // Garante atributos de reprodução inline no iOS WebKit / Safari
+      // Garante atributos de reprodução inline no iOS WebKit / Safari e Android
       const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
       if (vidElem) {
         vidElem.setAttribute("playsinline", "true");
@@ -312,24 +289,6 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
         vidElem.muted = true;
         vidElem.setAttribute("autoplay", "true");
         vidElem.play().catch(() => {});
-
-        // Reseta qualquer zoom digital forçado pelo hardware do Android
-        try {
-          const stream = vidElem.srcObject as MediaStream | null;
-          const tracks = stream?.getVideoTracks() || [];
-          if (tracks.length > 0) {
-            const track = tracks[0];
-            const caps = (track.getCapabilities ? track.getCapabilities() : {}) as any;
-            if (caps && caps.zoom) {
-              const minZoom = caps.zoom.min ?? 1.0;
-              await track.applyConstraints({
-                advanced: [{ zoom: minZoom } as any],
-              }).catch(() => {});
-            }
-          }
-        } catch (zoomErr) {
-          console.warn("Aviso ao resetar zoom do sensor:", zoomErr);
-        }
       }
 
       isRunningRef.current = true;
@@ -389,19 +348,25 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     }
   }
 
-  // Tenta iniciar câmera ao carregar (se estiver em HTTPS)
+  // Tenta iniciar câmera ao carregar (se estiver em HTTPS ou contexto com suporte a mediaDevices)
   useEffect(() => {
     if (manualMode) {
       void stopScanner();
       return;
     }
 
-    if (typeof window !== "undefined" && window.isSecureContext) {
+    const hasGetUserMedia =
+      typeof navigator !== "undefined" &&
+      Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function");
+
+    if (hasGetUserMedia) {
       void startCamera(false);
-    } else {
+    } else if (typeof window !== "undefined" && !window.isSecureContext) {
       setCameraError(
         "Navegadores de celular bloqueiam a câmera em conexões HTTP. Acesse via HTTPS seguro para ler ao vivo ou use o botão de foto."
       );
+    } else {
+      void startCamera(false);
     }
 
     return () => {
@@ -417,7 +382,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
           void stopScanner();
         }
       } else {
-        if (!manualMode && !isRunningRef.current && window.isSecureContext) {
+        if (!manualMode && !isRunningRef.current) {
           void startCamera(false);
         }
       }
@@ -438,10 +403,10 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     if (!cameraStarted || manualMode) return;
     const interval = setInterval(() => {
       const vidElem = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
-      if (vidElem && vidElem.paused && !document.hidden && isRunningRef.current) {
+      if (vidElem && vidElem.paused && !document.hidden && isRunningRef.current && !pausedRef.current) {
         vidElem.play().catch(() => {});
       }
-    }, 800);
+    }, 1200);
     return () => clearInterval(interval);
   }, [cameraStarted, manualMode]);
 
@@ -457,18 +422,20 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       setCurrentCameraId(nextCamera.id);
       attachVideoObserver();
 
-      if (!scannerRef.current) {
-        scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
-          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-          verbose: false,
-          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-        });
-      }
+      scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false,
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      });
 
       await scannerRef.current.start(
         nextCamera.id,
         {
           fps: 10,
+          qrbox: (w, h) => {
+            const edge = Math.floor(Math.min(w, h) * 0.85);
+            return { width: Math.max(edge, 220), height: Math.max(edge, 220) };
+          },
         },
         (decodedText) => {
           if (!pausedRef.current) onScan(decodedText);
