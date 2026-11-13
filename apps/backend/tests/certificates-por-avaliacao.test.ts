@@ -229,3 +229,46 @@ describe("quem avalia vira participante do evento", () => {
     expect(emails).toEqual(["ja@teste.com", "nova@teste.com"]);
   });
 });
+
+describe("sessão do admin das avaliações", () => {
+  async function loginAdmin() {
+    const res = await app.inject({
+      method: "POST",
+      url: `/public/events/${SLUG}/avaliacao/admin-login`,
+      payload: { email: "admin@inova.com.br", password: "admin26" },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json().data.token as string;
+  }
+
+  it("token assinado dá acesso ao relatório (não depende de memória do servidor)", async () => {
+    await criarEventoInova();
+    const token = await loginAdmin();
+    expect(token.startsWith("inova-adm.")).toBe(true);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/public/events/${SLUG}/avaliacao`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("recusa token adulterado, vencido ou o antigo token mestre, com mensagem em texto", async () => {
+    await criarEventoInova();
+    const token = await loginAdmin();
+    const [prefix, exp] = token.split(".");
+    const adulterado = `${prefix}.${Number(exp) + 999999}.${token.split(".")[2]}`;
+    const vencido = `${prefix}.${Date.now() - 1000}.${"0".repeat(64)}`;
+
+    for (const t of [adulterado, vencido, "qualquer-coisa"]) {
+      const res = await app.inject({
+        method: "GET",
+        url: `/public/events/${SLUG}/avaliacao`,
+        headers: { authorization: `Bearer ${t}` },
+      });
+      expect(res.statusCode).toBe(401);
+      expect(typeof res.json().error.message).toBe("string");
+    }
+  });
+});

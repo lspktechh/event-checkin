@@ -2,12 +2,21 @@ import crypto from "crypto";
 import { prisma } from "../../database/prisma.js";
 import { BadRequestError, NotFoundError, UnauthorizedError } from "../../shared/errors.js";
 import { generateQrToken } from "../../shared/tokens.js";
+import { env } from "../../config/env.js";
 
 const ADMIN_EMAIL = "admin@inova.com.br";
 const ADMIN_PASSWORD = "admin26";
 
-// Tokens de admin ativos em memória com expiração de 7 dias
-const activeAdminTokens = new Map<string, { email: string; expiresAt: number }>();
+// Sessão do admin das avaliações: token ASSINADO (HMAC com JWT_SECRET), sem
+// estado no servidor. Antes ficava num Map em memória e todo deploy/reinício
+// derrubava a sessão — o painel do INOVA mostrava "[object Object]" e 0 respostas.
+const ADMIN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const ADMIN_TOKEN_PREFIX = "inova-adm";
+
+function signAdminToken(expiresAt: number): string {
+  const sig = crypto.createHmac("sha256", env.JWT_SECRET).update(`${ADMIN_TOKEN_PREFIX}:${expiresAt}`).digest("hex");
+  return `${ADMIN_TOKEN_PREFIX}.${expiresAt}.${sig}`;
+}
 
 let tableInitialized = false;
 
@@ -288,9 +297,8 @@ export async function adminLogin(emailInput: string, passwordInput: string) {
     throw new UnauthorizedError("Credenciais inválidas. Verifique o e-mail e senha.");
   }
 
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 dias
-  activeAdminTokens.set(token, { email: ADMIN_EMAIL, expiresAt });
+  const expiresAt = Date.now() + ADMIN_TOKEN_TTL_MS; // 7 dias
+  const token = signAdminToken(expiresAt);
 
   return {
     token,
@@ -304,23 +312,14 @@ export function verifyAdminToken(token?: string): boolean {
   if (!token) return false;
   const clean = token.replace(/^Bearer\s+/i, "").trim();
 
-  // Aceita token em memória ou token fixo baseado em hash da senha
-  const expectedMasterToken = crypto
-    .createHash("sha256")
-    .update(`${ADMIN_EMAIL}:${ADMIN_PASSWORD}:inova-2026`)
-    .digest("hex");
+  const parts = clean.split(".");
+  if (parts.length !== 3 || parts[0] !== ADMIN_TOKEN_PREFIX) return false;
+  const expiresAt = Number(parts[1]);
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return false;
 
-  if (clean === expectedMasterToken) {
-    return true;
-  }
-
-  const session = activeAdminTokens.get(clean);
-  if (!session) return false;
-  if (Date.now() > session.expiresAt) {
-    activeAdminTokens.delete(clean);
-    return false;
-  }
-  return true;
+  const expected = Buffer.from(signAdminToken(expiresAt));
+  const given = Buffer.from(clean);
+  return expected.length === given.length && crypto.timingSafeEqual(expected, given);
 }
 
 export async function getEvaluationsReport(slugOrId: string, token?: string) {
