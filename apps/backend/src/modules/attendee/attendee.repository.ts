@@ -19,6 +19,9 @@ export const attendeeRepository = {
           select: {
             id: true,
             name: true,
+            // O portal usa o slug para abrir direto o evento do link
+            // (ex.: ?evento=inova-saude-2026 vindo do site do INOVA).
+            slug: true,
             location: true,
             startDate: true,
             endDate: true,
@@ -55,6 +58,9 @@ export const attendeeRepository = {
           select: {
             id: true,
             name: true,
+            // O portal usa o slug para abrir direto o evento do link
+            // (ex.: ?evento=inova-saude-2026 vindo do site do INOVA).
+            slug: true,
             location: true,
             startDate: true,
             endDate: true,

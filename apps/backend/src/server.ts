@@ -3,6 +3,7 @@ import { buildApp } from "./app.js";
 import { prisma } from "./database/prisma.js";
 import { syncPermissions } from "./shared/permissions.js";
 import { bootstrapUsers } from "./shared/bootstrap-users.js";
+import { syncParticipantsFromEvaluations } from "./modules/evaluations/evaluations.service.js";
 
 const app = buildApp();
 
@@ -11,6 +12,11 @@ syncPermissions(prisma)
   .then(() =>
     app.listen({ port: env.PORT, host: "0.0.0.0" }).then((address) => {
       app.log.info(`event-checkin backend ouvindo em ${address}`);
+      // Depois de subir (não atrasa o servidor): cadastra como participante
+      // quem respondeu avaliação antes do cadastro automático existir.
+      syncParticipantsFromEvaluations()
+        .then((created) => app.log.info(`[Avaliações] participantes criados a partir de avaliações: ${created}`))
+        .catch((error) => app.log.error(error));
     })
   )
   .catch((error) => {

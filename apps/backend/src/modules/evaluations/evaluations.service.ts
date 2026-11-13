@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "../../database/prisma.js";
 import { BadRequestError, NotFoundError, UnauthorizedError } from "../../shared/errors.js";
+import { generateQrToken } from "../../shared/tokens.js";
 
 const ADMIN_EMAIL = "admin@inova.com.br";
 const ADMIN_PASSWORD = "admin26";
@@ -55,6 +56,69 @@ export async function ensureEvaluationsTable() {
   } catch (err) {
     console.error("Erro ao inicializar tabela event_evaluations:", err);
   }
+}
+
+/**
+ * Garante que quem respondeu a avaliação é participante do evento.
+ *
+ * O portal (lspkeventos.com.br) encontra o evento e libera o certificado a
+ * partir do PARTICIPANTE com aquele e-mail. Quem não se inscreveu antes (ou
+ * se inscreveu com outro e-mail) respondia a avaliação e não via o evento
+ * nem o certificado. Idempotente: se já existe participante com o e-mail
+ * (sem diferenciar maiúsculas), não cria outro. Devolve true se criou.
+ */
+export async function ensureParticipantForEvaluation(eventId: string, nome: string, email: string): Promise<boolean> {
+  const cleanEmail = (email || "").trim().toLowerCase();
+  if (!cleanEmail) return false;
+
+  const existing = await prisma.participant.findFirst({
+    where: { eventId, email: { equals: cleanEmail, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) return false;
+
+  await prisma.participant.create({
+    data: {
+      eventId,
+      name: (nome || "").trim() || cleanEmail,
+      email: cleanEmail,
+      qrToken: generateQrToken(),
+      status: "ACTIVE",
+    },
+  });
+  return true;
+}
+
+/**
+ * Cadastra como participante todo mundo que já respondeu alguma avaliação e
+ * ainda não é participante do evento. Roda na subida do backend (server.ts):
+ * corrige quem avaliou antes de existir o cadastro automático. Idempotente.
+ */
+export async function syncParticipantsFromEvaluations(): Promise<number> {
+  await ensureEvaluationsTable();
+  let rows: { event_id: string; nome: string; email: string }[] = [];
+  try {
+    rows = await prisma.$queryRawUnsafe(
+      `SELECT DISTINCT ON (event_id, lower(trim(email))) event_id, nome, lower(trim(email)) AS email
+         FROM event_evaluations
+        ORDER BY event_id, lower(trim(email)), created_at DESC`
+    );
+  } catch (err) {
+    console.error("[Avaliações] Falha ao listar avaliações para sincronizar participantes:", err);
+    return 0;
+  }
+
+  let created = 0;
+  for (const row of rows) {
+    try {
+      const eventExists = await prisma.event.findUnique({ where: { id: row.event_id }, select: { id: true } });
+      if (!eventExists) continue;
+      if (await ensureParticipantForEvaluation(row.event_id, row.nome, row.email)) created++;
+    } catch (err) {
+      console.error(`[Avaliações] Falha ao cadastrar participante (${row.event_id}):`, err);
+    }
+  }
+  return created;
 }
 
 async function getEventBySlugOrId(slugOrId: string) {
@@ -195,6 +259,16 @@ export async function submitEvaluation(
     respostasJson,
     metaJson
   );
+
+  // Quem avaliou vira participante do evento (se ainda não for), para o
+  // evento e o certificado aparecerem no portal ao consultar pelo e-mail.
+  // A avaliação já está salva: uma falha aqui é recuperada na próxima
+  // subida do backend (syncParticipantsFromEvaluations), não perde nada.
+  try {
+    await ensureParticipantForEvaluation(event.id, cleanNome, cleanEmail);
+  } catch (err) {
+    console.error("[Avaliações] Avaliação salva, mas falhou ao cadastrar o participante:", err);
+  }
 
   return {
     id,

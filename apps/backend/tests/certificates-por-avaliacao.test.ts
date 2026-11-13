@@ -3,7 +3,7 @@ import { buildApp } from "../src/app.js";
 import { prisma } from "../src/database/prisma.js";
 import { createAttendeeToken, createTestEvent, createTestParticipant, resetDatabase } from "./helpers.js";
 import { isEligible } from "../src/modules/certificates/certificate-eligibility.service.js";
-import { ensureEvaluationsTable } from "../src/modules/evaluations/evaluations.service.js";
+import { ensureEvaluationsTable, syncParticipantsFromEvaluations } from "../src/modules/evaluations/evaluations.service.js";
 
 /**
  * Certificado liberado pela avaliação pós-evento (INOVA SAÚDE 2026): sem
@@ -153,5 +153,79 @@ describe("download do certificado por avaliação", () => {
 
     const res = await baixar(event, participant);
     expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("quem avalia vira participante do evento", () => {
+  const avaliacao = (email: string, esteveDemoday = false) => ({
+    nome: "Carla Avaliadora",
+    email,
+    cursoPeriodo: "ADS 3º",
+    nps: 9,
+    oQueAjudou: ["mentoria"],
+    mentoriaNota: "otima",
+    aprendizado: "muito",
+    continuarEcohub: "sim",
+    depoimento: "top",
+    autorizaDepoimento: "sim",
+    esteveDemoday,
+    ...(esteveDemoday
+      ? {
+          papelDemoday: "plateia",
+          demodayOrganizacao: 5,
+          demodayHorario: 5,
+          demodayFeedbackBanca: 5,
+          demodayApresentacao: "Equipe 3",
+          demodayGravarVideo: "sim",
+        }
+      : {}),
+  });
+
+  it("sem inscrição prévia: avaliar cadastra, o e-mail encontra o INOVA (com slug) e o certificado sai", async () => {
+    const event = await criarEventoInova();
+
+    const envio = await app.inject({
+      method: "POST",
+      url: `/public/events/${SLUG}/avaliacao`,
+      payload: avaliacao("Carla@Teste.com", true),
+    });
+    expect(envio.statusCode).toBe(200);
+
+    const participantes = await prisma.participant.findMany({ where: { eventId: event.id } });
+    expect(participantes).toHaveLength(1);
+    expect(participantes[0]).toMatchObject({ email: "carla@teste.com", name: "Carla Avaliadora", status: "ACTIVE" });
+
+    const login = await app.inject({ method: "POST", url: "/attendee/login", payload: { email: "carla@teste.com" } });
+    expect(login.statusCode).toBe(200);
+    const corpo = login.json().data;
+    expect(corpo.participant.event).toMatchObject({ id: event.id, slug: SLUG });
+
+    const res = await baixar(event, participantes[0]);
+    expect(res.statusCode).toBe(200);
+    const cert = await prisma.certificate.findFirstOrThrow({ where: { eventId: event.id } });
+    expect(cert.workloadHours).toBe(16);
+  });
+
+  it("já inscrito com o mesmo e-mail: não duplica o participante", async () => {
+    const event = await criarEventoInova();
+    await criarParticipante(event.id, "maria@teste.com");
+
+    await app.inject({ method: "POST", url: `/public/events/${SLUG}/avaliacao`, payload: avaliacao("MARIA@teste.com") });
+    await app.inject({ method: "POST", url: `/public/events/${SLUG}/avaliacao`, payload: avaliacao("maria@teste.com") });
+
+    expect(await prisma.participant.count({ where: { eventId: event.id } })).toBe(1);
+  });
+
+  it("sincronização cadastra quem avaliou antes do cadastro automático, sem duplicar", async () => {
+    const event = await criarEventoInova();
+    await criarParticipante(event.id, "ja@teste.com");
+    await criarAvaliacao(event.id, "ja@teste.com", 8);
+    await criarAvaliacao(event.id, "nova@teste.com", 8);
+    await criarAvaliacao(event.id, "Nova@Teste.com", 16);
+
+    expect(await syncParticipantsFromEvaluations()).toBe(1);
+    expect(await syncParticipantsFromEvaluations()).toBe(0);
+    const emails = (await prisma.participant.findMany({ where: { eventId: event.id } })).map((p) => p.email).sort();
+    expect(emails).toEqual(["ja@teste.com", "nova@teste.com"]);
   });
 });
