@@ -423,7 +423,7 @@ export function EventDetailPage() {
       {activeTab === "inscricoes" ? <InscricoesTab eventId={eventId} /> : null}
       {activeTab === "credenciamento" ? <CredenciamentoTab eventId={eventId} /> : null}
       {activeTab === "raffle" ? <RaffleTab eventId={eventId} /> : null}
-      {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} /> : null}
+      {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} isCopol={isCopol} /> : null}
       {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "teams" && eventId ? <TeamsTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "evaluation" && eventId ? <EvaluationTab eventId={eventId} eventName={event?.name} /> : null}

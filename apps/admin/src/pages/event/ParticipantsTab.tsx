@@ -21,7 +21,16 @@ const CERT_BADGE_CLASS: Record<api.CertificateRowStatus, string> = {
   REVOKED: "badge badge-danger",
 };
 
-export function ParticipantsTab({ eventId, eventName }: { eventId: string; eventName?: string }) {
+export function ParticipantsTab({
+  eventId,
+  eventName,
+  isCopol = false,
+}: {
+  eventId: string;
+  eventName?: string;
+  /** Evento do COPOL: a cortesia daqui também entra em Inscritos (e-mail obrigatório). */
+  isCopol?: boolean;
+}) {
   const { hasPermission } = useAuth();
   const canIssue = hasPermission("certificates.issue");
   // Botão que o perfil não pode usar não aparece — antes aparecia e dava
@@ -39,6 +48,14 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
   const [qrTarget, setQrTarget] = useState<api.ParticipantRecord | null>(null);
   const [editTarget, setEditTarget] = useState<api.ParticipantRecord | null>(null);
   const [busyCertId, setBusyCertId] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // COPOL: cortesia que só existe como participante (criada quando esta aba
+  // não gerava inscrição) não aparece em Inscritos.
+  const cortesiasForaDeInscritos = isCopol
+    ? (participants ?? []).filter((p) => p.isCourtesy && !p.hasInscription && p.status === "ACTIVE").length
+    : 0;
 
   function reload() {
     api
@@ -106,6 +123,32 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
     }
   }
 
+  async function handleLinkCourtesies() {
+    if (
+      !window.confirm(
+        `Incluir ${cortesiasForaDeInscritos} cortesia(s) na lista de Inscritos?\n\nO QR de cada pessoa continua o mesmo. Elas aparecem em Inscritos como cortesia, sem ocupar vaga do lote. Quem não tem e-mail é avisado para completar.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setLinking(true);
+    try {
+      const result = await api.linkCourtesiesToInscriptions(eventId);
+      const puladas = result.skipped.length;
+      setNotice(
+        `${result.linked} cortesia(s) incluída(s) em Inscritos.` +
+          (puladas > 0 ? ` ${puladas} não incluída(s): ${result.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}.` : ""),
+      );
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao incluir as cortesias em Inscritos");
+    } finally {
+      setLinking(false);
+    }
+  }
+
   async function handleToggleStatus(participant: api.ParticipantRecord) {
     setError(null);
     try {
@@ -164,6 +207,16 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
           >
             Baixar PDF
           </button>
+          {canCreate && cortesiasForaDeInscritos > 0 ? (
+            <button
+              className="btn"
+              onClick={handleLinkCourtesies}
+              disabled={linking}
+              title="Estas cortesias só existem como participante. Isto as inclui também na lista de Inscritos."
+            >
+              {linking ? "Incluindo..." : `Incluir cortesias em Inscritos (${cortesiasForaDeInscritos})`}
+            </button>
+          ) : null}
           {canCreate ? (
             <>
               <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
@@ -180,6 +233,7 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
       {showForm ? (
         <CreateParticipantForm
           eventId={eventId}
+          isCopol={isCopol}
           onCreated={() => {
             setShowForm(false);
             reload();
@@ -188,6 +242,21 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
       ) : null}
 
       {error ? <p className="error-text">{error}</p> : null}
+      {notice ? (
+        <p
+          role="status"
+          style={{
+            background: "rgba(34, 197, 94, 0.15)",
+            border: "1px solid var(--success)",
+            borderRadius: "var(--radius)",
+            padding: "10px 14px",
+            margin: 0,
+            fontSize: 13,
+          }}
+        >
+          {notice}
+        </p>
+      ) : null}
 
       {participants && participants.length > 0 ? (
         <div className="card" style={{ padding: 0 }}>
@@ -292,7 +361,11 @@ export function ParticipantsTab({ eventId, eventName }: { eventId: string; event
               Colunas esperadas: <code>nome,email,telefone,documento</code>
             </>
           }
-          courtesyHint="Marca todos os participantes do arquivo como convidados da organização."
+          courtesyHint={
+            isCopol
+              ? "Cortesia do COPOL: cada pessoa também entra em Inscritos, ocupa uma vaga do lote e recebe QR. E-mail e CPF passam a ser obrigatórios."
+              : "Marca todos os participantes do arquivo como convidados da organização."
+          }
           run={(csv, confirm, cortesia) => api.importParticipants(eventId, csv, confirm, cortesia)}
           onClose={() => setShowImport(false)}
           onImported={() => {
@@ -365,7 +438,15 @@ function CertificateCell({
   );
 }
 
-function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCreated: () => void }) {
+function CreateParticipantForm({
+  eventId,
+  isCopol,
+  onCreated,
+}: {
+  eventId: string;
+  isCopol: boolean;
+  onCreated: () => void;
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -373,6 +454,8 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
   const [cortesia, setCortesia] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // No COPOL a cortesia vira inscrição, e a inscrição exige e-mail (o CPF é opcional).
+  const exigeContato = isCopol && cortesia;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -412,6 +495,7 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
             label="E-mail"
             value={email}
             onChange={setEmail}
+            required={exigeContato}
           />
         </div>
         <div className="field" style={{ flex: 1 }}>
@@ -426,7 +510,11 @@ function CreateParticipantForm({ eventId, onCreated }: { eventId: string; onCrea
       <label className="switch-row" style={{ margin: "12px 0" }}>
         <span className="switch-text">
           <strong>Cortesia</strong>
-          <small>Convidado da organização, sem pagamento. Fica marcado na lista.</small>
+          <small>
+            {isCopol
+              ? "Convidado da organização, sem pagamento. Entra também em Inscritos, ocupa uma vaga do lote e recebe QR (e-mail obrigatório)."
+              : "Convidado da organização, sem pagamento. Fica marcado na lista."}
+          </small>
         </span>
         <input
           type="checkbox"

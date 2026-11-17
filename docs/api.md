@@ -68,12 +68,13 @@ tela *Perfis*; sem nenhum perfil marcado, nada é gravado.
 
 | Método | Path | Descrição |
 |---|---|---|
-| POST | `/events/:eventId/participants` | Cria participante. Body: `name, email?, phone?, document?, cortesia?` (`cortesia: true` só marca o participante como convidado da organização; participante não tem valor) |
+| POST | `/events/:eventId/participants` | Cria participante. Body: `name, email?, phone?, document?, cortesia?` (`cortesia: true` só marca o participante como convidado da organização; participante não tem valor). **No COPOL**, `cortesia: true` cria uma inscrição de cortesia (ver "Cortesia no COPOL" abaixo) |
 | GET | `/events/:eventId/participants` | Lista participantes do evento |
 | PATCH | `/events/:eventId/participants/:participantId` | Atualiza dados/status (`ACTIVE`\|`CANCELLED`) |
 | POST | `/events/:eventId/participants/:participantId/rotate-qr-token` | Revoga o QR atual e gera um novo |
 | DELETE | `/events/:eventId/participants/:participantId` | Exclui o participante (204). Diferente de excluir terminal, aqui o histórico de check-ins dele é apagado junto (cascade) — não tem como preservar, o dono do registro deixou de existir |
 | POST | `/events/:eventId/participants/import` | Importação em lote via CSV (ver abaixo) |
+| POST | `/events/:eventId/participants/courtesies-to-inscriptions` | **Só COPOL** (`participants.create`). Inclui em Inscritos as cortesias que só existem como participante (ver "Cortesia no COPOL") |
 
 ### Importação CSV
 
@@ -81,7 +82,8 @@ Colunas esperadas (cabeçalho, case-insensitive): `nome,email,telefone,documento
 
 Body: `{ "csv": "<conteúdo do arquivo>", "confirm": boolean, "cortesia"?: boolean }`
 (`cortesia: true` marca todos os participantes gravados como convidados da
-organização).
+organização. **No COPOL**, `cortesia: true` grava cada linha como inscrição de
+cortesia — ver "Cortesia no COPOL" abaixo).
 
 - `confirm: false` (ou omitido) → **modo preview**: valida, normaliza e
   detecta duplicados (dentro do próprio arquivo e contra participantes já
@@ -337,3 +339,33 @@ Só leitura: lê contagens agrupadas por evento e não grava nada.
   um novo terminal.
 - Rate limit é global (100 req/min por IP, `@fastify/rate-limit`), não
   diferenciado por endpoint.
+
+### Cortesia no COPOL
+
+Regras que valem **só para o evento do COPOL** (nome ou slug com "copol", ou
+credenciamento por dia ligado). Os demais eventos seguem como antes.
+
+- **Toda cortesia é credenciável e entra em Inscritos.** Cortesia lançada pela
+  aba Participantes (`POST /participants` ou `/participants/import` com
+  `cortesia: true`) passa pelo mesmo caminho da cortesia de Inscritos: cria a
+  inscrição confirmada (valor zero, ocupa vaga do lote) **e** o participante
+  com QR. Por isso o cadastro exige e-mail (`422` sem ele; o CPF é opcional,
+  como na inscrição manual), a importação por CSV exige e-mail e CPF (`invalid`
+  no preview), recusa quem já está no evento (`409 JA_INSCRITO`) e respeita
+  o teto do lote. Sem `cortesia`, o participante continua sendo criado solto.
+- **`POST /participants/courtesies-to-inscriptions`** traz para Inscritos as
+  cortesias que só existem como participante (criadas quando a aba
+  Participantes não gerava inscrição). Cria, para cada participante `ACTIVE`
+  com `isCourtesy` e sem inscrição, uma inscrição `CONFIRMED` de valor zero
+  (`category: "Cortesia"`) **ligada ao mesmo participante** — o QR continua o
+  mesmo. **Não ocupa vaga do lote** (`batchId` vazio): são pessoas que já
+  estavam no evento e contá-las agora poderia esgotar o lote e fechar as
+  vendas. Exige e-mail (o CPF é opcional); quem não tem, ou já consta no evento por outra
+  inscrição/participante, vem em `skipped` com o motivo. Idempotente.
+  Resposta: `{ linked, skipped: [{ id, name, reason }] }`. Fora do COPOL:
+  `409 SO_COPOL`.
+- **Pendente não gera QR.** Inscrição ou Hands On `PENDING` (inclusive o
+  "Aguardando Pix") não tem QR de acesso no site de credenciamento nem entra
+  na porta; só quem está confirmado. Não existe ação em lote que confirme
+  pendentes: a confirmação de uma inscrição pendente é manual, pelo botão da
+  linha em Inscritos.
