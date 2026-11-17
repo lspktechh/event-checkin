@@ -41,6 +41,8 @@ declare module "fastify" {
       roleId: string;
       isSystem: boolean;
       permissions: Set<string>;
+      /** O perfil da pessoa tem a auditoria ligada (Role.auditEnabled)? */
+      auditEnabled: boolean;
       /** Vazio = todos os eventos. Ver User.allowedEventIds. */
       allowedEventIds: string[];
     };
@@ -87,6 +89,9 @@ export async function loadAdminSession(request: FastifyRequest) {
     roleId: user.role.id,
     isSystem: user.useCustomPermissions ? false : user.role.isSystem,
     permissions,
+    // Lido do banco a cada requisição, como as permissões: ligar ou desligar
+    // pela tela de Perfis vale na hora, sem a pessoa entrar de novo.
+    auditEnabled: user.role.auditEnabled,
     allowedEventIds: user.allowedEventIds,
   };
 

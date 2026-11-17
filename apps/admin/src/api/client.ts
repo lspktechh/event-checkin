@@ -128,6 +128,8 @@ export interface RoleRecord {
   name: string;
   description: string | null;
   isSystem: boolean;
+  /** As ações das pessoas deste perfil são registradas na auditoria. */
+  auditEnabled: boolean;
   userCount: number;
   permissionKeys: string[];
   createdAt: string;
@@ -139,10 +141,10 @@ export function listRoles() {
 export function listPermissions() {
   return request<PermissionDef[]>("/permissions");
 }
-export function createRole(input: { name: string; description?: string }) {
+export function createRole(input: { name: string; description?: string; auditEnabled?: boolean }) {
   return request<RoleRecord>("/roles", { method: "POST", body: input });
 }
-export function updateRole(roleId: string, input: { name?: string; description?: string }) {
+export function updateRole(roleId: string, input: { name?: string; description?: string; auditEnabled?: boolean }) {
   return request<RoleRecord>(`/roles/${roleId}`, { method: "PATCH", body: input });
 }
 export function deleteRole(roleId: string) {

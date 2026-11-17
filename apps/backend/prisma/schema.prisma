@@ -113,6 +113,10 @@ model Role {
   name        String // nome de exibição, editável
   description String?
   isSystem    Boolean  @default(false)
+  // Auditoria por perfil: ligada, as ações administrativas das pessoas deste
+  // perfil são registradas em audit_logs. Desligada por padrão — a organização
+  // escolhe quais perfis auditar (ver audit.service.ts).
+  auditEnabled Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

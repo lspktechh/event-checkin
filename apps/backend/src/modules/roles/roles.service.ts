@@ -32,6 +32,7 @@ function serializeRole(role: NonNullable<Awaited<ReturnType<typeof rolesReposito
     name: role.name,
     description: role.description,
     isSystem: role.isSystem,
+    auditEnabled: role.auditEnabled,
     userCount: role._count.users,
     permissionKeys: role.permissions.map((rp) => rp.permission.key),
     createdAt: role.createdAt,

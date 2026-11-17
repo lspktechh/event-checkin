@@ -36,6 +36,7 @@ export function RolesPage() {
   const canCreate = hasPermission("roles.create");
   const canDelete = hasPermission("roles.delete");
   const canManagePermissions = hasPermission("roles.manage_permissions");
+  const canEditRole = hasPermission("roles.edit");
 
   return (
     <div className="stack">
@@ -88,6 +89,7 @@ export function RolesPage() {
                     <td>
                       {role.name}
                       {role.isSystem ? <span className="badge badge-success" style={{ marginLeft: 8 }}>Protegido</span> : null}
+                      {role.auditEnabled ? <span className="badge badge-info" style={{ marginLeft: 8 }}>Auditoria ligada</span> : null}
                       {role.description ? (
                         <p className="muted" style={{ margin: "2px 0 0", fontSize: 12 }}>
                           {role.description}
@@ -116,12 +118,15 @@ export function RolesPage() {
 
           <div style={{ flex: "1 1 380px", minWidth: 320 }}>
             {selectedRole ? (
-              <PermissionEditor
-                role={selectedRole}
-                permissions={permissions}
-                readOnly={!canManagePermissions}
-                onSaved={reload}
-              />
+              <div className="stack">
+                <AuditSwitch role={selectedRole} canEdit={canEditRole} onSaved={reload} />
+                <PermissionEditor
+                  role={selectedRole}
+                  permissions={permissions}
+                  readOnly={!canManagePermissions}
+                  onSaved={reload}
+                />
+              </div>
             ) : (
               <div className="card">
                 <p className="muted" style={{ margin: 0 }}>
@@ -139,6 +144,7 @@ export function RolesPage() {
 function RoleForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [auditEnabled, setAuditEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -147,7 +153,7 @@ function RoleForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => 
     setError(null);
     setSaving(true);
     try {
-      await api.createRole({ name, description: description || undefined });
+      await api.createRole({ name, description: description || undefined, auditEnabled });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao criar perfil");
@@ -172,6 +178,21 @@ function RoleForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => 
       <div className="field">
         <label htmlFor="role-description">Descrição (opcional)</label>
         <input id="role-description" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <label className="switch-row" style={{ margin: "12px 0" }}>
+        <span className="switch-text">
+          <strong>Registrar auditoria deste perfil</strong>
+          <small>As ações das pessoas deste perfil ficam registradas (quem fez o quê e quando).</small>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={auditEnabled}
+          onChange={(e) => setAuditEnabled(e.target.checked)}
+        />
+      </label>
+      <div>
       </div>
       {error ? <p className="error-text">{error}</p> : null}
       <div className="row" style={{ gap: 8 }}>
@@ -288,6 +309,61 @@ function PermissionEditor({
           {saving ? "Salvando..." : "Salvar permissões"}
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/** Liga ou desliga o registro de auditoria das ações das pessoas deste perfil.
+ * Vale na hora: o servidor lê a opção a cada ação, sem a pessoa entrar de novo. */
+function AuditSwitch({ role, canEdit, onSaved }: { role: api.RoleRecord; canEdit: boolean; onSaved: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // A chave responde na hora; se o servidor recusar, volta ao que estava.
+  const [enabled, setEnabled] = useState(role.auditEnabled);
+  useEffect(() => setEnabled(role.auditEnabled), [role.id, role.auditEnabled]);
+
+  async function handleToggle(next: boolean) {
+    setError(null);
+    setSaving(true);
+    setEnabled(next);
+    try {
+      await api.updateRole(role.id, { auditEnabled: next });
+      onSaved();
+    } catch (err) {
+      setEnabled(!next);
+      setError(err instanceof Error ? err.message : "Falha ao alterar a auditoria do perfil");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card stack">
+      <label className="switch-row" style={{ margin: 0 }}>
+        <span className="switch-text">
+          <strong>Registrar auditoria deste perfil</strong>
+          <small>
+            {enabled
+              ? `As ações das pessoas do perfil "${role.name}" estão sendo registradas. Vale na hora.`
+              : `Desligado: nada do que as pessoas do perfil "${role.name}" fazem é registrado.`}
+          </small>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          aria-label={`Registrar auditoria do perfil ${role.name}`}
+          checked={enabled}
+          disabled={!canEdit || saving}
+          onChange={(e) => handleToggle(e.target.checked)}
+        />
+      </label>
+      {!canEdit ? (
+        <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+          Você não tem permissão para alterar perfis.
+        </p>
+      ) : null}
+      {error ? <p className="error-text" style={{ margin: 0 }}>{error}</p> : null}
     </div>
   );
 }

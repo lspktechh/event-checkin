@@ -20,7 +20,7 @@ export function findRoleByKey(key: string) {
 
 export function createRole(data: CreateRoleInput & { key: string }) {
   return prisma.role.create({
-    data: { key: data.key, name: data.name, description: data.description },
+    data: { key: data.key, name: data.name, description: data.description, auditEnabled: data.auditEnabled },
     include: withPermissions,
   });
 }
