@@ -30,6 +30,31 @@ Sem autenticação.
 Body: `{ "email": string, "password": string }`
 Resposta: `{ token, user: { id, name, email, role } }`
 
+## Auditoria por perfil
+
+A auditoria registra **quem fez o quê** nas ações administrativas, mas **só para
+os perfis que a organização marcar**. Em cada perfil (`Role.auditEnabled`,
+**desligado por padrão**) há uma opção "Registrar auditoria deste perfil" na
+tela *Perfis*; sem nenhum perfil marcado, nada é gravado.
+
+- A opção vem em `GET /roles`, `GET /roles/:id` e é alterada em `POST /roles` /
+  `PATCH /roles/:roleId` com `{ "auditEnabled": true|false }`. Alterar exige
+  `roles.edit`; qualquer perfil pode ser marcado, inclusive o ADMINISTRADOR.
+- A opção é lida do banco **a cada ação**: ligar ou desligar vale na hora, sem a
+  pessoa entrar de novo. O perfil usado é o da pessoa, mesmo que ela tenha
+  permissões personalizadas.
+- `GET /audit-logs?limit=` (máx. 500, mais recentes primeiro) exige a permissão
+  **`audit.view`** ("Ver o registro de auditoria"), que pode ser dada a qualquer
+  perfil. No painel: item **Auditoria** no menu, para quem tiver a permissão.
+- Cada registro: pessoa (id e e-mail), ação (`participant.create`,
+  `certificate.revoked`…), tipo e id do alvo e um resumo (`metadata`). O resumo
+  **não leva dados pessoais de terceiros**: a importação de participantes grava
+  só as contagens (linhas, válidas, inválidas, duplicadas, importadas).
+- Ações do próprio participante (portal do participante) não pertencem a nenhum
+  perfil e **não são registradas**.
+- Gravar o log nunca derruba a ação: se a escrita falhar, o erro vai para o log do
+  servidor e a ação segue normalmente.
+
 ## Eventos (requer token de admin)
 
 | Método | Path | Descrição |
@@ -269,31 +294,6 @@ lote. Resposta:
 Reenviar o mesmo `localCheckInId` é idempotente: o backend identifica que
 aquele registro específico já foi sincronizado por aquele terminal e
 devolve o mesmo resultado, sem duplicar.
-
-## Auditoria por perfil
-
-A auditoria registra **quem fez o quê** nas ações administrativas, mas **só para
-os perfis que a organização marcar**. Em cada perfil (`Role.auditEnabled`,
-**desligado por padrão**) há uma opção "Registrar auditoria deste perfil" na
-tela *Perfis*; sem nenhum perfil marcado, nada é gravado.
-
-- A opção vem em `GET /roles`, `GET /roles/:id` e é alterada em `POST /roles` /
-  `PATCH /roles/:roleId` com `{ "auditEnabled": true|false }`. Alterar exige
-  `roles.edit`; qualquer perfil pode ser marcado, inclusive o ADMINISTRADOR.
-- A opção é lida do banco **a cada ação**: ligar ou desligar vale na hora, sem a
-  pessoa entrar de novo. O perfil usado é o da pessoa, mesmo que ela tenha
-  permissões personalizadas.
-- `GET /audit-logs?limit=` (máx. 500, mais recentes primeiro) exige a permissão
-  **`audit.view`** ("Ver o registro de auditoria"), que pode ser dada a qualquer
-  perfil. No painel: item **Auditoria** no menu, para quem tiver a permissão.
-- Cada registro: pessoa (id e e-mail), ação (`participant.create`,
-  `certificate.revoked`…), tipo e id do alvo e um resumo (`metadata`). O resumo
-  **não leva dados pessoais de terceiros**: a importação de participantes grava
-  só as contagens (linhas, válidas, inválidas, duplicadas, importadas).
-- Ações do próprio participante (portal do participante) não pertencem a nenhum
-  perfil e **não são registradas**.
-- Gravar o log nunca derruba a ação: se a escrita falhar, o erro vai para o log do
-  servidor e a ação segue normalmente.
 
 ## Limitações conhecidas desta fase
 
