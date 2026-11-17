@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { filterAllowedEvents, requirePermission } from "../../middleware/auth.js";
+import { filterAllowedEvents, requireAnyPermission, requirePermission } from "../../middleware/auth.js";
 import { ok } from "../../shared/response.js";
 import { recordAudit } from "../audit/audit.service.js";
 import * as eventsService from "./events.service.js";
@@ -16,7 +16,7 @@ export async function eventsRoutes(app: FastifyInstance) {
     return reply.status(201).send(ok(event));
   });
 
-  app.get("/events", { preHandler: requirePermission("events.view") }, async (request) => {
+  app.get("/events", { preHandler: requireAnyPermission("events.view", "checkin.perform") }, async (request) => {
     const events = await eventsService.listEvents();
     // Conta restrita a eventos só vê os seus — ver User.allowedEventIds.
     return ok(filterAllowedEvents(request, events));
@@ -34,6 +34,12 @@ export async function eventsRoutes(app: FastifyInstance) {
     return ok(await eventsService.listOpenRegistrationEvents());
   });
 
+  // Público — eventos Encerrados no painel (aba "Realizados" do portal).
+  // Rota estática: tem precedência sobre /public/events/:slug.
+  app.get("/public/events/closed", async () => {
+    return ok(await eventsService.listClosedEvents());
+  });
+
   // Público — o evento pelo endereço divulgado (/inscricao/<slug>).
   app.get("/public/events/:slug", async (request) => {
     const { slug } = z.object({ slug: z.string().trim().min(1).max(80) }).parse(request.params);
@@ -46,7 +52,7 @@ export async function eventsRoutes(app: FastifyInstance) {
     return ok(event);
   });
 
-  app.get("/events/:eventId", { preHandler: requirePermission("events.view") }, async (request) => {
+  app.get("/events/:eventId", { preHandler: requireAnyPermission("events.view", "checkin.perform") }, async (request) => {
     const { eventId } = eventIdParamsSchema.parse(request.params);
     const event = await eventsService.getEventOrThrow(eventId);
     return ok(event);
@@ -100,6 +106,17 @@ export async function eventsRoutes(app: FastifyInstance) {
       const event = await eventsService.reopenRegistrations(eventId);
       await recordAudit(request, "event.reopen_registrations", "Event", eventId);
       return ok(event);
+    }
+  );
+
+  app.delete(
+    "/events/:eventId",
+    { preHandler: requireAnyPermission("events.delete", "events.edit") },
+    async (request) => {
+      const { eventId } = eventIdParamsSchema.parse(request.params);
+      const result = await eventsService.deleteEvent(eventId);
+      await recordAudit(request, "event.delete", "Event", eventId, { name: result.name });
+      return ok(result);
     }
   );
 }

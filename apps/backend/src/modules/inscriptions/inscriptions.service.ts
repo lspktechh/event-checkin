@@ -117,7 +117,7 @@ export async function createInscription(
       eventId,
       name: input.name,
       email: input.email,
-      document: input.document,
+      document: input.document?.trim() || "",
       phone: input.phone,
       institution: input.institution,
       category,
@@ -209,7 +209,7 @@ export async function createInscription(
         amount,
         description: `${event.name} — ${category}`,
         expiresAt,
-        payer: { firstName, lastName, document: input.document, email: input.email },
+        payer: { firstName, lastName, document: input.document ?? "", email: input.email },
       });
 
       paymentUrl = pagamento.paymentUrl;
@@ -225,7 +225,7 @@ export async function createInscription(
             amount,
             description: `${event.name} — ${category}`,
             expiresAt,
-            payer: { firstName, lastName, document: input.document, email: input.email },
+            payer: { firstName, lastName, document: input.document ?? "", email: input.email },
             returnUrl: `${env.PRE_COPOL_BASE_URL}/confirmacao?id=${inscription.id}`,
           });
           paymentUrl = checkout.checkoutUrl;
@@ -255,7 +255,7 @@ export async function createInscription(
         amount,
         description: `${event.name} — ${category}`,
         expiresAt,
-        payer: { firstName, lastName, document: input.document, email: input.email },
+        payer: { firstName, lastName, document: input.document ?? "", email: input.email },
         returnUrl: `${env.PRE_COPOL_BASE_URL}/confirmacao?id=${inscription.id}`,
       });
 
@@ -285,7 +285,7 @@ export async function createInscription(
         buyer: {
           firstName,
           lastName,
-          document: input.document,
+          document: input.document ?? "",
           email: input.email,
           phone: input.phone,
         },

@@ -246,7 +246,7 @@ export default function TrabalhosPage() {
               Já enviou seu trabalho e precisa ver o parecer ou enviar correções da comissão?
             </span>
             <a
-              href="https://lspkeventos.vercel.app/copol/trabalhos"
+              href="https://lspkeventos.com.br/copol/trabalhos"
               style={{
                 fontSize: 13,
                 fontWeight: 600,

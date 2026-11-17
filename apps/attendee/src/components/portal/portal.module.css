@@ -1,0 +1,706 @@
+/*
+ * Design System LSPK Eventos — Mobile First & Desktop Experience.
+ * Paleta refinada: Grafite espacial, acentos luminosos e legibilidade máxima.
+ */
+
+.pagina {
+  --fundo: #0c0e12;
+  --cartao-fundo: rgba(19, 23, 31, 0.78);
+  --cartao-borda: rgba(255, 255, 255, 0.08);
+  --cartao-borda-hover: rgba(59, 91, 255, 0.4);
+  --campo-fundo: rgba(22, 26, 35, 0.85);
+  --campo-borda: rgba(255, 255, 255, 0.12);
+  --tinta: #f3f4f6;
+  --tinta-media: #9ca3af;
+  --tinta-fraca: #6b7280;
+  --tinta-apagada: #4b5563;
+  --azul: #3b5bff;
+  --azul-hover: #2b4bef;
+  --azul-foco: #6079ff;
+  --azul-glow: rgba(59, 91, 255, 0.22);
+  --verde: #10b981;
+  --verde-fundo: rgba(16, 185, 129, 0.12);
+  --verde-borda: rgba(16, 185, 129, 0.28);
+  --linha: rgba(255, 255, 255, 0.08);
+  --link: #818cf8;
+  --link-hover: #a5b4fc;
+
+  min-height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 48px;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--fonte-titulo), system-ui, -apple-system, sans-serif;
+  position: relative;
+  overflow-x: hidden;
+}
+
+@media (min-width: 640px) {
+  .pagina {
+    padding: 40px 24px 64px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .pagina {
+    padding: 56px 32px 80px;
+  }
+}
+
+.coluna {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  transition: max-width 0.25s ease;
+}
+
+.larga {
+  max-width: 960px;
+}
+
+.extraLarga {
+  max-width: 1080px;
+}
+
+.pagina a {
+  color: var(--link);
+  transition: color 0.15s ease;
+}
+
+.pagina a:hover {
+  color: var(--link-hover);
+}
+
+.pagina :where(a, button, input):focus-visible {
+  outline: 2px solid var(--azul-foco);
+  outline-offset: 2px;
+}
+
+/* ───────── Cabeçalho ───────── */
+
+.cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--tinta);
+  text-decoration: none;
+  padding: 4px 0;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  .cabecalho {
+    justify-content: flex-start;
+    width: fit-content;
+    margin: 0;
+  }
+}
+
+.pagina a.cabecalho,
+.pagina a.cabecalho:hover {
+  color: var(--tinta);
+}
+
+.marca {
+  flex: none;
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.nomes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nomeMarca {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.rotuloMono {
+  font-family: var(--fonte-mono-portal), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+  font-weight: 600;
+}
+
+/* ───────── Abas / Segmented Control ───────── */
+
+.abas {
+  margin-top: 28px;
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 5px;
+  border-radius: 14px;
+  border: 1px solid var(--linha);
+  backdrop-filter: blur(8px);
+}
+
+@media (min-width: 640px) {
+  .abas {
+    margin-top: 36px;
+    width: fit-content;
+    align-self: flex-start;
+  }
+}
+
+.pagina a.aba {
+  flex: 1;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border-radius: 10px;
+  color: var(--tinta-media);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .pagina a.aba {
+    flex: initial;
+    min-width: 110px;
+  }
+}
+
+.pagina a.aba:hover {
+  color: var(--tinta);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pagina a.abaAtiva,
+.pagina a.abaAtiva:hover {
+  color: #ffffff;
+  background: var(--azul);
+  box-shadow: 0 2px 10px var(--azul-glow);
+  font-weight: 600;
+}
+
+.conteudo {
+  padding-top: 32px;
+  width: 100%;
+}
+
+.rodape {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--linha);
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+@media (min-width: 640px) {
+  .rodape {
+    justify-content: flex-start;
+  }
+}
+
+/* ───────── Tipografia e Estrutura ───────── */
+
+.secao {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+.cabecaSecao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--tinta);
+}
+
+.lead {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--tinta-media);
+}
+
+.lead strong {
+  color: var(--tinta);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dica {
+  margin: 0;
+  padding: 12px 16px;
+  background: rgba(59, 91, 255, 0.1);
+  border: 1px solid rgba(59, 91, 255, 0.25);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--link);
+}
+
+.centro {
+  margin: 0;
+  font-size: 14px;
+  color: var(--tinta-media);
+  text-align: center;
+}
+
+.estado {
+  margin: 0;
+  padding: 32px 20px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--tinta-media);
+  text-align: center;
+  background: var(--cartao-fundo);
+  border: 1px dashed var(--cartao-borda);
+  border-radius: 16px;
+}
+
+/* ───────── Cards Modernos (Glassmorphism) ───────── */
+
+.cartaoModerno {
+  background: var(--cartao-fundo);
+  border: 1px solid var(--cartao-borda);
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6);
+  padding: 24px 20px;
+  transition: all 0.2s ease;
+}
+
+@media (min-width: 640px) {
+  .cartaoModerno {
+    padding: 32px 28px;
+  }
+}
+
+/* ───────── Grade e Cards de Eventos Abertos ───────── */
+
+.gradeEventos {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .gradeEventos {
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 24px;
+  }
+}
+
+.cartaoEvento {
+  background: var(--cartao-fundo);
+  border: 1px solid var(--cartao-borda);
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.cartaoEvento:hover {
+  transform: translateY(-2px);
+  border-color: var(--cartao-borda-hover);
+  box-shadow: 0 16px 36px -8px var(--azul-glow);
+}
+
+.bannerCard {
+  width: 100%;
+  height: 170px;
+  background: #161a22;
+  position: relative;
+  overflow: hidden;
+}
+
+.bannerCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.corpoCard {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 14px;
+}
+
+.badgeAberto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--verde);
+  background: var(--verde-fundo);
+  border: 1px solid var(--verde-borda);
+  padding: 4px 10px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.pontoAberto {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--verde);
+  box-shadow: 0 0 8px var(--verde);
+}
+
+.tituloCard {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--tinta);
+}
+
+.chipsContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--tinta-media);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--linha);
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+
+.descricaoCard {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--tinta-media);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.botaoCard {
+  margin-top: auto;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  background: var(--azul);
+  color: #ffffff !important;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none !important;
+  transition: all 0.15s ease;
+  padding: 0 16px;
+}
+
+.botaoCard:hover {
+  background: var(--azul-hover);
+  box-shadow: 0 4px 14px var(--azul-glow);
+}
+
+/* ───────── Formulários ───────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tinta-media);
+}
+
+.campo input {
+  height: 52px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  background: var(--campo-fundo);
+  border: 1px solid var(--campo-borda);
+  border-radius: 12px;
+  color: var(--tinta);
+  font-family: inherit;
+  font-size: 16px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.campo input::placeholder {
+  color: #555963;
+}
+
+.campo input:focus {
+  outline: none;
+  border-color: var(--azul-foco);
+  box-shadow: 0 0 0 3px var(--azul-glow);
+}
+
+.campo small {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--tinta-fraca);
+  font-weight: 400;
+}
+
+.aceite {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--tinta-media);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--linha);
+  padding: 14px;
+  border-radius: 12px;
+  margin-top: 4px;
+}
+
+.aceite input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--azul);
+}
+
+.botao {
+  height: 52px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--azul);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.botao:hover:not(:disabled) {
+  background: var(--azul-hover);
+  box-shadow: 0 4px 16px var(--azul-glow);
+}
+
+.botao:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.erro {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ───────── Tela de Inscrição Dividida (Desktop) ───────── */
+
+.layoutInscricao {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.gridCamposDuplo {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 480px) {
+  .gridCamposDuplo {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.painelDetalhes {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bannerHero {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  max-height: 280px;
+  background: #141720;
+  border: 1px solid var(--cartao-borda);
+}
+
+.bannerHero img {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  display: block;
+}
+
+/* ───────── Lista Antiga (compatibilidade para Realizados) ───────── */
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 16px 20px;
+  background: var(--cartao-fundo);
+  border: 1px solid var(--cartao-borda);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.15s ease;
+}
+
+.linha:hover {
+  border-color: var(--cartao-borda-hover);
+}
+
+.linhaData {
+  flex: none;
+  min-width: 90px;
+  font-family: var(--fonte-mono-portal), ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--tinta-media);
+  font-weight: 500;
+}
+
+.linhaInfo {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.linhaNome {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  color: var(--tinta);
+}
+
+.linhaLocal {
+  font-size: 13px;
+  color: var(--tinta-fraca);
+}
+
+.pagina .acao,
+.pagina a.acao {
+  flex: none;
+  height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  background: rgba(59, 91, 255, 0.12);
+  border: 1px solid rgba(59, 91, 255, 0.3);
+  color: #c7d2fe !important;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pagina .acao:hover:not(:disabled),
+.pagina a.acao:hover {
+  background: var(--azul);
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px var(--azul-glow);
+}
+
+/* ───────── Sugestão de E-mail ───────── */
+
+.sugestao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+  font-size: 13px;
+}
+
+.sugestao button {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #d97706;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.erroCampo {
+  font-size: 13px;
+  color: #fca5a5;
+}

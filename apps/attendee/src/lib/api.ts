@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://137.131.233.254:3000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://painel.lspk.com.br";
 
 export interface ParticipantData {
   id: string;
@@ -403,4 +403,28 @@ export async function verifyEmail(email: string, checkMx = true): Promise<EmailV
     reason: json.error?.message || "E-mail inválido.",
     details: { syntax: false, disposable: false, typo: false, hasMx: false },
   };
+}
+
+// --- Validação pública de certificados ---
+
+export interface PublicCertificate {
+  code: string;
+  valid: boolean;
+  revoked: boolean;
+  participantName: string;
+  eventName: string;
+  eventStartDate: string;
+  eventEndDate: string;
+  eventLocation: string | null;
+  workloadHours: number | null;
+  issuedAt: string;
+}
+
+export async function getPublicCertificate(code: string): Promise<PublicCertificate> {
+  const res = await fetch(`${API_URL}/public/certificates/${encodeURIComponent(code)}`);
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data?.error?.message ?? "Certificado não encontrado");
+  }
+  return data.data;
 }

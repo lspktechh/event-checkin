@@ -4,13 +4,15 @@ import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 
 export function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, isCredenciamentoOnly } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/eventos" replace />;
+  if (user) {
+    return <Navigate to={isCredenciamentoOnly ? "/credenciamento" : "/eventos"} replace />;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

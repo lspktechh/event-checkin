@@ -121,6 +121,12 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
     setFeedback(null);
     setPaused(false);
     processingRef.current = false;
+
+    // Garante que o elemento de vídeo continue reproduzindo no Android Chrome
+    const vid = document.querySelector("#web-qr-scanner-viewport video") as HTMLVideoElement | null;
+    if (vid && vid.paused) {
+      vid.play().catch(() => {});
+    }
   }
 
   return (

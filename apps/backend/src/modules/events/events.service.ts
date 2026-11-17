@@ -1,6 +1,7 @@
-import type { Event } from "@prisma/client";
+import type { Event, EventStatus } from "@prisma/client";
 import { prisma } from "../../database/prisma.js";
 import { NotFoundError } from "../../shared/errors.js";
+import { slugify } from "../../shared/slugify.js";
 import * as eventsRepository from "./events.repository.js";
 import type { CreateEventInput, UpdateEventInput } from "./events.schema.js";
 import { resolveSiteContent } from "./site-content.js";
@@ -10,7 +11,12 @@ import { resolveSiteContent } from "./site-content.js";
  * sempre prevalece, mesmo com prazo futuro — é o botão "Encerrar" do
  * admin. "Retomar" só limpa registrationsClosedAt; se o prazo automático
  * já passou, o evento continua fechado por causa dele. */
-export function isRegistrationOpen(event: Pick<Event, "registrationDeadline" | "registrationsClosedAt">): boolean {
+export function isRegistrationOpen(event: {
+  status?: EventStatus;
+  registrationDeadline?: Date | null;
+  registrationsClosedAt?: Date | null;
+}): boolean {
+  if (event.status === "CLOSED") return false;
   if (event.registrationsClosedAt) return false;
   if (event.registrationDeadline && new Date() >= event.registrationDeadline) return false;
   return true;
@@ -71,12 +77,48 @@ export async function listActiveEvents() {
 export async function listOpenRegistrationEvents() {
   const events = await eventsRepository.listEventsWithOpenRegistration();
   return events
-    .filter((e) => isRegistrationOpen(e))
-    .map((e) => ({ slug: e.slug, name: e.name, startDate: e.startDate }));
+    .filter((e) => isRegistrationOpen(e) && Boolean(e.slug))
+    .map((e) => {
+      const site = (e.siteContent as any) || {};
+      const reg = site.registrationForm || {};
+      return {
+        slug: e.slug!,
+        name: reg.customTitle || e.name,
+        description: reg.customDescription || e.description || null,
+        location: e.location || null,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        bannerUrl: reg.bannerUrl || site.bannerUrl || site.imageUrl || null,
+      };
+    });
+}
+
+/**
+ * Eventos realizados, para a aba "Realizados" do portal.
+ *
+ * "Realizado" é o que o organizador marcou como Encerrado no painel
+ * (status CLOSED) — e não "a data passou" — E escolheu mostrar no site
+ * (showInPortal). Assim o evento só aparece ali por decisão de alguém, e
+ * um evento ainda Ativo nunca é listado como acabado.
+ *
+ * Devolve só o que a lista mostra: nome, data e local (mais o endereço,
+ * quando houver). Nada de configuração interna.
+ */
+export async function listClosedEvents() {
+  return eventsRepository.listClosedEvents();
 }
 
 export async function getPublicEventBySlug(slug: string) {
-  const event = await prisma.event.findUnique({ where: { slug } });
+  let event = await prisma.event.findUnique({ where: { slug } });
+  if (!event || event.status !== "ACTIVE") {
+    // Tenta fallback comparando slugify(name) dos eventos ativos
+    const active = await prisma.event.findMany({ where: { status: "ACTIVE" } });
+    const matched = active.find((e) => e.slug === slug || slugify(e.name) === slug);
+    if (matched) {
+      event = matched;
+    }
+  }
+
   if (!event || event.status !== "ACTIVE") {
     throw new NotFoundError("Evento não encontrado");
   }
@@ -89,9 +131,11 @@ export async function getPublicEventBySlug(slug: string) {
     location: publico.location,
     startDate: publico.startDate,
     endDate: publico.endDate,
-    slug: publico.slug,
+    slug: publico.slug || slugify(publico.name),
     timezone: publico.timezone,
     registrationsOpen: publico.registrationsOpen,
+    // O site LSPK Eventos só aceita inscrição de quem o organizador ligou.
+    registrationInPortal: event.registrationInPortal,
     pixKey: event.pixKey,
     pixKeyType: event.pixKeyType,
     pixReceiverName: event.pixReceiverName,
@@ -122,7 +166,11 @@ export async function getPublicEventOrThrow(eventId: string) {
 
 export async function updateEvent(eventId: string, input: UpdateEventInput) {
   await findEventOrThrow(eventId);
-  const event = await eventsRepository.updateEvent(eventId, input);
+  const data: UpdateEventInput = { ...input };
+  if (data.status === "CLOSED") {
+    data.registrationInPortal = false;
+  }
+  const event = await eventsRepository.updateEvent(eventId, data);
   return toAdminEvent(event);
 }
 
@@ -142,4 +190,86 @@ export async function reopenRegistrations(eventId: string) {
 
   const event = await eventsRepository.reopenRegistrations(eventId, deadlineExpired);
   return toAdminEvent(event);
+}
+
+export async function deleteEvent(eventId: string) {
+  const event = await findEventOrThrow(eventId);
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Sorteios
+    await tx.raffleDraw.deleteMany({ where: { eventId } });
+    await tx.raffleEntry.deleteMany({ where: { eventId } });
+
+    // 2. Credenciamento / Presenças / Provas de comparecimento / Tentativas
+    await tx.checkIn.deleteMany({ where: { eventId } });
+    await tx.checkInAttempt.deleteMany({ where: { eventId } });
+    await tx.attendanceProof.deleteMany({ where: { eventId } });
+    await tx.handsOnRegistration.deleteMany({ where: { eventId } });
+
+    // 3. Certificados
+    await tx.certificate.deleteMany({ where: { eventId } });
+
+    // 4. Inscrições e dependências vinculadas
+    const inscriptions = await tx.inscription.findMany({
+      where: { eventId },
+      select: { id: true },
+    });
+    const inscriptionIds = inscriptions.map((i) => i.id);
+    if (inscriptionIds.length > 0) {
+      await tx.teamMember.deleteMany({ where: { inscriptionId: { in: inscriptionIds } } });
+      await tx.inscription.deleteMany({ where: { eventId } });
+    }
+
+    // 5. Lotes
+    await tx.eventBatch.deleteMany({ where: { eventId } });
+
+    // 6. Submissões e anexos/autores
+    const submissions = await tx.submission.findMany({
+      where: { eventId },
+      select: { id: true },
+    });
+    const submissionIds = submissions.map((s) => s.id);
+    if (submissionIds.length > 0) {
+      await tx.submissionFile.deleteMany({ where: { submissionId: { in: submissionIds } } });
+      await tx.submissionAuthor.deleteMany({ where: { submissionId: { in: submissionIds } } });
+      await tx.submission.deleteMany({ where: { eventId } });
+    }
+
+    // Modalidades, tópicos e configurações de submissão
+    await tx.submissionModality.deleteMany({ where: { eventId } });
+    await tx.submissionTopic.deleteMany({ where: { eventId } });
+    await tx.submissionSettings.deleteMany({ where: { eventId } });
+
+    // 7. Cronograma / Programação
+    await tx.eventScheduleItem.deleteMany({ where: { eventId } });
+
+    // 8. Participantes
+    await tx.participant.deleteMany({ where: { eventId } });
+
+    // 9. Terminais
+    await tx.terminal.deleteMany({ where: { eventId } });
+
+    // 10. Módulos
+    await tx.eventModule.deleteMany({ where: { eventId } });
+
+    // 11. Limpar eventId de contas com allowedEventIds
+    const users = await tx.user.findMany({
+      select: { id: true, allowedEventIds: true },
+    });
+    for (const u of users) {
+      if (u.allowedEventIds.includes(eventId)) {
+        await tx.user.update({
+          where: { id: u.id },
+          data: {
+            allowedEventIds: u.allowedEventIds.filter((id) => id !== eventId),
+          },
+        });
+      }
+    }
+
+    // 12. O próprio evento
+    await tx.event.delete({ where: { id: eventId } });
+  });
+
+  return { id: eventId, name: event.name };
 }

@@ -120,6 +120,61 @@ describe("endereço público (slug)", () => {
   });
 });
 
+describe("inscrição pelo site LSPK Eventos (registrationInPortal)", () => {
+  it("evento novo NÃO oferece inscrição pelo site — é o organizador quem liga", async () => {
+    const cfg = (await get(`/events/${eventId}/config`)).json().data;
+    expect(cfg.registrationInPortal).toBe(false);
+  });
+
+  it("liga e desliga, e a leitura devolve o valor salvo", async () => {
+    const ligou = await patch(`/events/${eventId}/config`, { registrationInPortal: true });
+    expect(ligou.statusCode).toBe(200);
+    expect((await get(`/events/${eventId}/config`)).json().data.registrationInPortal).toBe(true);
+
+    await patch(`/events/${eventId}/config`, { registrationInPortal: false });
+    expect((await get(`/events/${eventId}/config`)).json().data.registrationInPortal).toBe(false);
+  });
+
+  it("recusa valor que não é verdadeiro/falso", async () => {
+    const res = await patch(`/events/${eventId}/config`, { registrationInPortal: "sim" });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it("é independente de showInPortal (Realizados)", async () => {
+    await patch(`/events/${eventId}/config`, { registrationInPortal: true });
+    const cfg = (await get(`/events/${eventId}/config`)).json().data;
+    expect(cfg.showInPortal).toBe(false);
+  });
+});
+
+describe("mostrar no site LSPK Eventos (showInPortal)", () => {
+  it("evento novo NÃO vai para o site — é o organizador quem liga", async () => {
+    // Contrato da migração: aplicar não divulga nenhum evento que já existia.
+    const cfg = (await get(`/events/${eventId}/config`)).json().data;
+    expect(cfg.showInPortal).toBe(false);
+  });
+
+  it("liga e desliga, e a leitura devolve o valor salvo", async () => {
+    const ligou = await patch(`/events/${eventId}/config`, { showInPortal: true });
+    expect(ligou.statusCode).toBe(200);
+    expect((await get(`/events/${eventId}/config`)).json().data.showInPortal).toBe(true);
+
+    await patch(`/events/${eventId}/config`, { showInPortal: false });
+    expect((await get(`/events/${eventId}/config`)).json().data.showInPortal).toBe(false);
+  });
+
+  it("recusa valor que não é verdadeiro/falso", async () => {
+    const res = await patch(`/events/${eventId}/config`, { showInPortal: "sim" });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it("salvar outro campo não desliga a marca", async () => {
+    await patch(`/events/${eventId}/config`, { showInPortal: true });
+    await patch(`/events/${eventId}/config`, { timezone: "America/Manaus" });
+    expect((await get(`/events/${eventId}/config`)).json().data.showInPortal).toBe(true);
+  });
+});
+
 describe("fuso horário", () => {
   it("aceita um fuso IANA de verdade", async () => {
     const res = await patch(`/events/${eventId}/config`, {

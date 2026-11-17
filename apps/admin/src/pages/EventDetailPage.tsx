@@ -21,10 +21,12 @@ import { HandsOnTab } from "./event/HandsOnTab";
 import { TeamsTab } from "./event/TeamsTab";
 import { RaffleTab } from "./event/RaffleTab";
 import { EvaluationTab } from "./event/EvaluationTab";
+import { InscricoesTab } from "./event/InscricoesTab";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, SmartphoneIcon } from "../components/Icons";
 import { Sheet } from "../components/Sheet";
 
 type Tab =
+  | "inscricoes"
   | "credenciamento"
   | "participants"
   | "inscriptions"
@@ -49,6 +51,7 @@ type Tab =
  * permissões de gestão; para as demais contas, nada muda.
  */
 const TABS: { key: Tab; label: string; permission: string; gestao?: string[] }[] = [
+  { key: "inscricoes", label: "Inscrições", permission: "events.view", gestao: ["events.edit"] },
   { key: "inscriptions", label: "Inscritos", permission: "participants.view" },
   { key: "submissions", label: "Trabalhos", permission: "submissions.view" },
   { key: "certificates", label: "Certificados", permission: "certificates.view" },
@@ -225,7 +228,11 @@ export function EventDetailPage() {
 
   async function handleStatusChange(status: api.EventRecord["status"]) {
     if (!eventId) return;
-    const updated = await api.updateEvent(eventId, { status });
+    const payload: api.UpdateEventInput = { status };
+    if (status === "CLOSED") {
+      payload.registrationInPortal = false;
+    }
+    const updated = await api.updateEvent(eventId, payload);
     setEvent(updated);
   }
 
@@ -413,6 +420,7 @@ export function EventDetailPage() {
         </div>
       ) : null}
 
+      {activeTab === "inscricoes" ? <InscricoesTab eventId={eventId} /> : null}
       {activeTab === "credenciamento" ? <CredenciamentoTab eventId={eventId} /> : null}
       {activeTab === "raffle" ? <RaffleTab eventId={eventId} /> : null}
       {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} /> : null}

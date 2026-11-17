@@ -1,5 +1,6 @@
 import { prisma } from "../../database/prisma.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors.js";
+import { slugify } from "../../shared/slugify.js";
 import {
   EVENT_MODULES,
   dependentsOf,
@@ -52,6 +53,8 @@ export async function getConfig(eventId: string) {
     timezone: event.timezone,
     language: event.language,
     visibility: event.visibility,
+    showInPortal: event.showInPortal,
+    registrationInPortal: event.registrationInPortal,
     // O catálogo vem do código; o banco só diz o que está ligado. Assim a
     // tela lista sempre todos os módulos possíveis, mesmo os desligados —
     // sem isso o organizador não descobre que existe um módulo novo.
@@ -70,7 +73,7 @@ export async function getConfig(eventId: string) {
 }
 
 export async function updateConfig(eventId: string, input: UpdateEventConfigInput) {
-  await findEventOrThrow(eventId);
+  const event = await findEventOrThrow(eventId);
 
   if (input.timezone !== undefined && !timezoneValida(input.timezone)) {
     throw new ValidationError(
@@ -78,14 +81,38 @@ export async function updateConfig(eventId: string, input: UpdateEventConfigInpu
     );
   }
 
+  // Se registrationInPortal estiver sendo ligado (ou já estiver ligado) e slug estiver vazio,
+  // gera o slug automaticamente a partir do nome do evento.
+  let resolvedSlug: string | null | undefined = input.slug !== undefined ? input.slug : undefined;
+  if (resolvedSlug !== undefined && resolvedSlug !== null) {
+    resolvedSlug = resolvedSlug.trim() === "" ? null : slugify(resolvedSlug);
+  }
+
+  const willHaveRegistrationInPortal =
+    input.registrationInPortal !== undefined
+      ? input.registrationInPortal
+      : event.registrationInPortal;
+
+  if (
+    willHaveRegistrationInPortal &&
+    (!resolvedSlug || resolvedSlug === "") &&
+    (!event.slug || event.slug === "")
+  ) {
+    resolvedSlug = slugify(event.name);
+  }
+
   try {
     return await prisma.event.update({
       where: { id: eventId },
       data: {
-        ...(input.slug !== undefined ? { slug: input.slug } : {}),
+        ...(resolvedSlug !== undefined ? { slug: resolvedSlug } : {}),
         ...(input.timezone !== undefined ? { timezone: input.timezone } : {}),
         ...(input.language !== undefined ? { language: input.language } : {}),
         ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
+        ...(input.showInPortal !== undefined ? { showInPortal: input.showInPortal } : {}),
+        ...(input.registrationInPortal !== undefined
+          ? { registrationInPortal: input.registrationInPortal }
+          : {}),
       },
       select: {
         id: true,
@@ -93,6 +120,8 @@ export async function updateConfig(eventId: string, input: UpdateEventConfigInpu
         timezone: true,
         language: true,
         visibility: true,
+        showInPortal: true,
+        registrationInPortal: true,
       },
     });
   } catch (err) {

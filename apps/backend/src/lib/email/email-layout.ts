@@ -79,12 +79,13 @@ export function montarEmail({ settings, eventName, eyebrow, subtitle, body }: La
 
 /** Botão que leva ao site do evento. */
 export function botao(settings: ResolvedEmailSettings, url: string, texto: string): string {
-  const fallback = settings.siteUrl || "https://superinteligencia.tec.br";
+  const fallback = settings.siteUrl || "https://lspkeventos.com.br";
   const destino = (url && url.trim().length > 0) ? url.trim() : fallback;
+  const corBotao = settings.accentColor || "#3B5BFF";
 
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
   <tr><td align="center">
-    <a href="${escaparHtml(destino)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: ${settings.primaryColor}; color: #FFFFFF !important; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 8px; text-decoration: none;">
+    <a href="${escaparHtml(destino)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: ${corBotao}; color: #FFFFFF !important; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 10px; text-decoration: none; box-shadow: 0 4px 14px rgba(59, 91, 255, 0.35);">
       ${escaparHtml(texto)}
     </a>
   </td></tr>
