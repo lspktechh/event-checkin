@@ -1,5 +1,6 @@
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "../../shared/errors.js";
 import { generateQrToken } from "../../shared/tokens.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../database/prisma.js";
 import { getEventOrThrow } from "../events/events.service.js";
@@ -29,6 +30,17 @@ export async function createInscription(
 
   if (!event.registrationsOpen) {
     throw new ForbiddenError("As inscrições para este evento estão encerradas");
+  }
+
+  input.email = await assertValidEmail(input.email, { fieldName: "E-mail de inscrição" });
+  if (input.teamMembers && Array.isArray(input.teamMembers)) {
+    for (const member of input.teamMembers as any[]) {
+      if (typeof member === "object" && member && member.email) {
+        member.email = await assertValidEmail(member.email, {
+          fieldName: `E-mail do integrante (${member.name || "equipe"})`,
+        });
+      }
+    }
   }
 
   // Inscrição em equipe: só quando o evento pede (Event.siteContent.equipe).
@@ -105,7 +117,7 @@ export async function createInscription(
       eventId,
       name: input.name,
       email: input.email,
-      document: input.document,
+      document: input.document?.trim() || "",
       phone: input.phone,
       institution: input.institution,
       category,
@@ -197,7 +209,7 @@ export async function createInscription(
         amount,
         description: `${event.name} — ${category}`,
         expiresAt,
-        payer: { firstName, lastName, document: input.document, email: input.email },
+        payer: { firstName, lastName, document: input.document ?? "", email: input.email },
       });
 
       paymentUrl = pagamento.paymentUrl;
@@ -213,7 +225,7 @@ export async function createInscription(
             amount,
             description: `${event.name} — ${category}`,
             expiresAt,
-            payer: { firstName, lastName, document: input.document, email: input.email },
+            payer: { firstName, lastName, document: input.document ?? "", email: input.email },
             returnUrl: `${env.PRE_COPOL_BASE_URL}/confirmacao?id=${inscription.id}`,
           });
           paymentUrl = checkout.checkoutUrl;
@@ -243,7 +255,7 @@ export async function createInscription(
         amount,
         description: `${event.name} — ${category}`,
         expiresAt,
-        payer: { firstName, lastName, document: input.document, email: input.email },
+        payer: { firstName, lastName, document: input.document ?? "", email: input.email },
         returnUrl: `${env.PRE_COPOL_BASE_URL}/confirmacao?id=${inscription.id}`,
       });
 
@@ -273,7 +285,7 @@ export async function createInscription(
         buyer: {
           firstName,
           lastName,
-          document: input.document,
+          document: input.document ?? "",
           email: input.email,
           phone: input.phone,
         },

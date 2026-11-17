@@ -26,6 +26,12 @@ import {
   parseInscriptionNotes,
 } from "../../utils/inscriptionMarkdown";
 import { copyTextToClipboard, downloadTextAsFile } from "../../utils/clipboard";
+import {
+  exportTeamsEvaluationZip,
+  generateAnonymousTeamPdf,
+} from "../../utils/teamAnonymousPdf";
+import { BANCA_CRITERIOS_DEF, type CriteriosBanca } from "./EvaluationTab";
+import { TeamCriterionInfoBox } from "./TeamCriterionInfoBox";
 
 interface TeamsTabProps {
   eventId: string;
@@ -75,21 +81,54 @@ export interface TeamMemberDetail {
   isLeader?: boolean;
 }
 
+export function getValidExternalUrl(url?: string): string {
+  if (!url) return "";
+  const trimmed = String(url).trim();
+  if (
+    !trimmed ||
+    trimmed === "#" ||
+    trimmed.toLowerCase() === "undefined" ||
+    trimmed.toLowerCase() === "null"
+  ) {
+    return "";
+  }
+  // Se for caminho relativo para o backend
+  if (
+    trimmed.startsWith("/api/") ||
+    trimmed.startsWith("/inscriptions/") ||
+    trimmed.startsWith("/uploads/") ||
+    trimmed.startsWith("/trabalhos/")
+  ) {
+    const apiBase = (import.meta.env.VITE_API_URL ?? "https://137-131-233-254.sslip.io").replace(/\/$/, "");
+    return `${apiBase}${trimmed}`;
+  }
+  // Se já tiver protocolo http/https
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  // Se for domínio sem protocolo (ex: drive.google.com, figma.com, youtube.com)
+  return `https://${trimmed}`;
+}
+
 export interface TrabalhoItem {
   origem: "inscricao" | "submissao_posterior";
   data: string;
   protocoloEnvio?: string;
   videoUrl?: string;
   prototipoUrl?: string;
-  itens?: Array<{ tipo: string; titulo: string; linkUrl?: string; arquivoNome?: string }>;
+  itens?: Array<{ tipo: string; titulo: string; linkUrl?: string; url?: string; arquivoNome?: string }>;
   observacoes?: string;
   acessoLiberado?: boolean;
 }
 
+export type TeamAvaliacaoCriterios = CriteriosBanca;
+
 export interface TeamAvaliacao {
-  nota: number; // 1 a 10
+  nota: number; // total (5 a 25) ou nota legada
+  criterios?: CriteriosBanca;
   posicao?: string;
   comentario?: string;
+  anotacoesDeliberacao?: string;
   avaliadorNome?: string;
   atualizadoEm?: string;
 }
@@ -187,13 +226,15 @@ export interface TeamRecord {
   vagasRestantes: number;
   trabalhos: TrabalhoItem[];
   createdAt: string;
+  ultimaEdicaoEm?: string;
+  historicoEdicoes?: any[];
   rawInscription: api.InscriptionReportItem;
   avaliacao?: TeamAvaliacao;
 }
 
-type ModalSubTab = "todos" | "integrantes" | "problema" | "solucao" | "escopo" | "prototipo" | "ods" | "entregas";
+type ModalSubTab = "todos" | "integrantes" | "problema" | "solucao" | "escopo" | "prototipo" | "ods" | "entregas" | "historico";
 
-export function TeamsTab({ eventId }: TeamsTabProps) {
+export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabProps) {
   const [inscriptions, setInscriptions] = useState<api.InscriptionReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -205,12 +246,24 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
   const [copiedToast, setCopiedToast] = useState<string | null>(null);
   const [mainView, setMainView] = useState<"equipes" | "talentos">("equipes");
 
+  // Estado de Exportação de ZIP Anônimo para a Banca
+  const [exportingZip, setExportingZip] = useState(false);
+  const [exportProgress, setExportProgress] = useState("");
+
   // Estado da Avaliação da Ideia / Banca
   const [evaluatingTeam, setEvaluatingTeam] = useState<TeamRecord | null>(null);
   const [savingEvaluation, setSavingEvaluation] = useState(false);
   const [evaluationNota, setEvaluationNota] = useState<number | null>(null);
+  const [evaluationCriterios, setEvaluationCriterios] = useState<CriteriosBanca>({
+    problema: 0,
+    inovacao: 0,
+    viabilidade: 0,
+    impacto: 0,
+    prototipoApresentacao: 0,
+  });
   const [evaluationPosicao, setEvaluationPosicao] = useState<string>("");
   const [evaluationComentario, setEvaluationComentario] = useState<string>("");
+  const [evaluationAnotacoesDeliberacao, setEvaluationAnotacoesDeliberacao] = useState<string>("");
   const [evaluationAvaliadorNome, setEvaluationAvaliadorNome] = useState<string>("");
 
   // Estado do Modal de Adição/Edição de Trabalho da Equipe
@@ -253,6 +306,15 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
     }
   }
 
+  function abrirFichaDaEquipe(team: TeamRecord) {
+    setSelectedTeam(team);
+    setModalTab("todos");
+    // Recarrega silenciosamente os dados para exibir imediatamente alterações recentes feitas no portal
+    api.getInscriptionsReport(eventId).then((freshData) => {
+      setInscriptions(freshData);
+    }).catch(() => {});
+  }
+
   // Processa as inscrições e une os dados completos submetidos pelos líderes
   const teams: TeamRecord[] = useMemo(() => {
     // 1. Mapeia submissões de trabalho posteriores
@@ -278,7 +340,15 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
           origem: "submissao_posterior",
           data: parsedNotes?.data_envio || ins.createdAt,
           protocoloEnvio: parsedNotes?.protocolo_envio,
-          itens: parsedNotes?.itens || [],
+          itens: Array.isArray(parsedNotes?.itens)
+            ? parsedNotes.itens.map((it: any) => ({
+                tipo: it.tipo || "link",
+                titulo: it.titulo || "Artefato Complementar",
+                linkUrl: it.linkUrl || it.url || it.link || "",
+                url: it.url || it.linkUrl || it.link || "",
+                arquivoNome: it.arquivoNome || it.name || "",
+              }))
+            : [],
           observacoes: parsedNotes?.observacoes,
           acessoLiberado: parsedNotes?.acesso_liberado,
         };
@@ -342,8 +412,14 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       if (trilha === "desafio_real") trilhaLabel = "Desafio Real de Saúde (HU/UEL)";
       else if (trilha === "sem_ideia") trilhaLabel = "Banco de Talentos Individual";
 
-      // ─── Dados do Líder ───
-      const liderObj = payload.lider || parsedNotes?.lider || parsedNotes?.membros_detalhes?.[0];
+      // ─── Dados do Líder (prioriza membros_detalhes editado no portal) ───
+      const liderDoArray = parsedNotes?.membros_detalhes?.find((m: any) => m.isLeader);
+      const liderObj =
+        liderDoArray ||
+        parsedNotes?.membros_detalhes?.[0] ||
+        parsedNotes?.lider ||
+        payload.lider;
+
       const lider: TeamMemberDetail = {
         nome: liderObj?.nome?.trim() || ins.name,
         cpf: liderObj?.cpf || ins.document,
@@ -357,13 +433,19 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         isLeader: true,
       };
 
-      // ─── Demais Integrantes ───
+      // ─── Demais Integrantes (prioriza membros_detalhes editado no portal) ───
       const integrantes: TeamMemberDetail[] = [];
-      const rawMembers = payload.membros || parsedNotes?.membros_detalhes?.slice(1) || [];
+      const rawMembers = parsedNotes?.membros_detalhes || payload.membros || [];
 
       if (Array.isArray(rawMembers) && rawMembers.length > 0) {
         rawMembers.forEach((m: any, idx: number) => {
-          if (m.isLeader || m.nome?.trim() === lider.nome.trim()) return;
+          if (
+            m.isLeader ||
+            (m.nome && m.nome.trim().toLowerCase() === lider.nome.trim().toLowerCase()) ||
+            (m.email && lider.email && m.email.trim().toLowerCase() === lider.email.trim().toLowerCase())
+          ) {
+            return;
+          }
           integrantes.push({
             id: m.id || `m-${idx}`,
             nome: m.nome?.trim() || "Integrante",
@@ -380,7 +462,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         });
       } else if (ins.teamMembers && ins.teamMembers.length > 0) {
         ins.teamMembers.forEach((mName, idx) => {
-          if (mName.trim() !== lider.nome.trim()) {
+          if (mName.trim().toLowerCase() !== lider.nome.trim().toLowerCase()) {
             integrantes.push({
               id: `leg-${idx}`,
               nome: mName.trim(),
@@ -395,8 +477,8 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
 
       const totalIntegrantes = 1 + integrantes.length;
 
-      // ─── Etapa 1 - Empatizar ───
-      const empatizarRaw = payload.empatizar || parsedNotes?.empatizar || {};
+      // ─── Etapa 1 - Empatizar (prioriza parsedNotes editado no portal) ───
+      const empatizarRaw = parsedNotes?.empatizar || payload.empatizar || {};
       const empatizar = {
         quem_vive: empatizarRaw.quem_vive || payload.ficha_prototipo?.usuario,
         o_que_perde: empatizarRaw.o_que_perde || payload.ficha_prototipo?.dor,
@@ -408,7 +490,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       };
 
       // ─── Etapa 2 - Definir ───
-      const definirRaw = payload.definir || parsedNotes?.definir || {};
+      const definirRaw = parsedNotes?.definir || payload.definir || {};
       const definir = {
         eixo: definirRaw.eixo || payload.ficha_prototipo?.eixo || "Eixo Geral de Saúde",
         frequencia: definirRaw.frequencia,
@@ -418,7 +500,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       };
 
       // ─── Etapa 3 - Idear ───
-      const idearRaw = payload.idear || parsedNotes?.idear || {};
+      const idearRaw = parsedNotes?.idear || payload.idear || {};
       const idear = {
         nome_solucao: idearRaw.nome_solucao || payload.ficha_prototipo?.funcao || teamName,
         categoria: idearRaw.categoria || "Dispositivo / Solução em Saúde",
@@ -427,7 +509,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       };
 
       // ─── Etapa 4 - Escopo ───
-      const escopoRaw = payload.escopo || parsedNotes?.escopo || {};
+      const escopoRaw = parsedNotes?.escopo || payload.escopo || {};
       const escopo = {
         e: escopoRaw.e,
         nao_e: escopoRaw.nao_e,
@@ -436,8 +518,8 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       };
 
       // ─── Etapa 5 - Forma & Ficha Protótipo ───
-      const formaRaw = payload.forma || parsedNotes?.forma || {};
-      const fichaRaw = payload.ficha_prototipo || parsedNotes?.ficha_prototipo || {};
+      const formaRaw = parsedNotes?.forma || payload.forma || {};
+      const fichaRaw = parsedNotes?.ficha_prototipo || payload.ficha_prototipo || {};
       const formas = formaRaw.formas || fichaRaw.formas || [];
 
       const peca3dRaw = formaRaw.campos_forma?.peca_3d || fichaRaw.peca_3d || {};
@@ -465,7 +547,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       };
 
       // ─── Etapa 6 - Fechamento & ODS ───
-      const fechamentoRaw = payload.fechamento || parsedNotes?.fechamento || {};
+      const fechamentoRaw = parsedNotes?.fechamento || payload.fechamento || {};
       const odsList = Array.isArray(fechamentoRaw.ods)
         ? fechamentoRaw.ods
         : Array.isArray(fichaRaw.ods)
@@ -487,17 +569,34 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
 
       // ─── Entregas de Trabalhos / Protótipos ───
       const trabalhos: TrabalhoItem[] = [];
-      if (payload.trabalho_entregue) {
+      const trabalhoEntregue = parsedNotes?.trabalho_entregue || payload.trabalho_entregue;
+      if (trabalhoEntregue) {
         trabalhos.push({
           origem: "inscricao",
-          data: payload.trabalho_entregue.enviado_em || ins.createdAt,
-          videoUrl: payload.trabalho_entregue.video_url,
-          prototipoUrl: payload.trabalho_entregue.prototipo_url,
-          itens: payload.trabalho_entregue.artefatos_adicionais || [],
-          observacoes: payload.trabalho_entregue.observacoes,
-          acessoLiberado: payload.trabalho_entregue.acesso_liberado,
+          data: trabalhoEntregue.enviado_em || ins.createdAt,
+          videoUrl: trabalhoEntregue.video_url,
+          prototipoUrl: trabalhoEntregue.prototipo_url,
+          itens: Array.isArray(trabalhoEntregue.artefatos_adicionais)
+            ? trabalhoEntregue.artefatos_adicionais.map((it: any) => ({
+                tipo: it.tipo || "link",
+                titulo: it.titulo || "Artefato / Documento Complementar",
+                linkUrl: it.linkUrl || it.url || it.link || "",
+                url: it.url || it.linkUrl || it.link || "",
+                arquivoNome: it.arquivoNome || it.name || "",
+              }))
+            : [],
+          observacoes: trabalhoEntregue.observacoes,
+          acessoLiberado: trabalhoEntregue.acesso_liberado,
         });
       }
+
+      // ─── Auditoria e Data da Última Edição Realizada ───
+      const ultimaEdicaoEm = parsedNotes?.ultima_edicao_em || parsedNotes?.payload_completo?.ultima_edicao_em;
+      const historicoEdicoes = Array.isArray(parsedNotes?.historico_edicoes)
+        ? parsedNotes.historico_edicoes
+        : Array.isArray(parsedNotes?.payload_completo?.historico_edicoes)
+        ? parsedNotes.payload_completo.historico_edicoes
+        : [];
 
       const extraWorks = [
         ...(workMap[ins.id] || []),
@@ -512,8 +611,10 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         avaliacaoRaw && typeof avaliacaoRaw.nota === "number"
           ? {
               nota: avaliacaoRaw.nota,
+              criterios: avaliacaoRaw.criterios,
               posicao: avaliacaoRaw.posicao || undefined,
               comentario: avaliacaoRaw.comentario || undefined,
+              anotacoesDeliberacao: avaliacaoRaw.anotacoesDeliberacao || undefined,
               avaliadorNome: avaliacaoRaw.avaliadorNome || undefined,
               atualizadoEm: avaliacaoRaw.atualizadoEm || undefined,
             }
@@ -545,6 +646,8 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         vagasRestantes,
         trabalhos,
         createdAt: ins.createdAt,
+        ultimaEdicaoEm,
+        historicoEdicoes,
         rawInscription: ins,
         avaliacao,
       });
@@ -552,6 +655,16 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
 
     return list;
   }, [inscriptions]);
+
+  // Mantém a ficha selecionada sincronizada com dados atualizados
+  useEffect(() => {
+    if (selectedTeam) {
+      const updated = teams.find((t) => t.id === selectedTeam.id);
+      if (updated && updated !== selectedTeam) {
+        setSelectedTeam(updated);
+      }
+    }
+  }, [teams]);
 
   // Lista de eixos únicos
   const eixosDisponiveis = useMemo(() => {
@@ -631,6 +744,83 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
     setTimeout(() => setCopiedToast(null), 3500);
   }
 
+  /**
+   * Empacota todas as equipes da maratona em um único arquivo ZIP com os PDFs
+   * de avaliação anônimos (sem dados de contato ou nomes pessoais).
+   */
+  async function handleExportZipAvaliadores() {
+    if (teams.length === 0) {
+      alert("Nenhuma equipe encontrada para exportar.");
+      return;
+    }
+
+    try {
+      setExportingZip(true);
+      setExportProgress("Iniciando geração dos PDFs...");
+
+      const blob = await exportTeamsEvaluationZip(
+        teams,
+        eventName || "INOVA SAÚDE 2026",
+        (_curr, _total, msg) => {
+          setExportProgress(msg);
+        }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const cleanEventName = (eventName || "inova-saude")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-");
+      const dateStr = new Date().toISOString().split("T")[0];
+      link.download = `equipes_${cleanEventName}_avaliacoes_sigilo_${dateStr}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`ZIP gerado com sucesso contendo ${teams.length} equipes para avaliação com sigilo! 📦`);
+    } catch (err: any) {
+      console.error("Erro ao gerar ZIP de avaliações:", err);
+      alert("Erro ao gerar arquivo ZIP: " + (err.message || String(err)));
+    } finally {
+      setExportingZip(false);
+      setExportProgress("");
+    }
+  }
+
+  /**
+   * Baixa a ficha técnica anônima de uma equipe individual em PDF
+   */
+  function handleDownloadSingleTeamPdf(team: TeamRecord) {
+    try {
+      const idx = teams.findIndex((t) => t.id === team.id);
+      const teamIdx = idx >= 0 ? idx : 0;
+      const pdfBytes = generateAnonymousTeamPdf(team, teamIdx, eventName || "INOVA SAÚDE 2026");
+      const blob = new Blob([pdfBytes as unknown as BlobPart], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const projCode = `Projeto_${String(teamIdx + 1).padStart(2, "0")}`;
+      const safeName = (team.idear?.nome_solucao || team.teamName || "Equipe")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9_-]/g, "_");
+      link.download = `${projCode}_${safeName}_Avaliacao_Sigilo.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`PDF anônimo da equipe "${team.teamName}" baixado com sucesso! 📄`);
+    } catch (err: any) {
+      console.error("Erro ao gerar PDF individual:", err);
+      alert("Erro ao gerar PDF da equipe: " + (err.message || String(err)));
+    }
+  }
+
   async function copiarContatosDaEquipe(team: TeamRecord) {
     const contatos = [
       `EQUIPE: ${team.teamName}`,
@@ -663,6 +853,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       `**Trilha:** ${team.trilhaLabel}`,
       `**Eixo Temático:** ${team.definir.eixo}`,
       `**Data de Cadastro:** ${new Date(team.createdAt).toLocaleString("pt-BR")}`,
+      `**Última Edição:** ${team.ultimaEdicaoEm ? new Date(team.ultimaEdicaoEm).toLocaleString("pt-BR") : "Sem edições posteriores"}`,
       ``,
       `---`,
       `## 1. INTEGRANTES DA EQUIPE (${team.totalIntegrantes})`,
@@ -758,7 +949,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
               t.prototipoUrl ? `- **Protótipo / Apresentação:** ${t.prototipoUrl}` : "",
               t.observacoes ? `- **Observações:** ${t.observacoes}` : "",
               t.itens && t.itens.length > 0
-                ? `- **Artefatos Complementares:**\n${t.itens.map((it) => `  - [${it.tipo}] ${it.titulo}: ${it.linkUrl}`).join("\n")}`
+                ? `- **Artefatos Complementares:**\n${t.itens.map((it: any) => `  - [${it.tipo}] ${it.titulo}: ${getValidExternalUrl(it.linkUrl || it.url || it.link)}`).join("\n")}`
                 : "",
               "",
             ]),
@@ -788,19 +979,56 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
 
   function abrirModalAvaliacao(team: TeamRecord) {
     setEvaluatingTeam(team);
-    setEvaluationNota(team.avaliacao?.nota ?? null);
+    const crit = team.avaliacao?.criterios;
+    if (crit) {
+      setEvaluationCriterios({
+        problema: crit.problema || 0,
+        inovacao: crit.inovacao || 0,
+        viabilidade: crit.viabilidade || 0,
+        impacto: crit.impacto || 0,
+        prototipoApresentacao: crit.prototipoApresentacao || 0,
+      });
+      setEvaluationNota(team.avaliacao?.nota ?? null);
+    } else {
+      setEvaluationCriterios({
+        problema: 0,
+        inovacao: 0,
+        viabilidade: 0,
+        impacto: 0,
+        prototipoApresentacao: 0,
+      });
+      setEvaluationNota(team.avaliacao?.nota ?? null);
+    }
     setEvaluationPosicao(team.avaliacao?.posicao ?? "");
     setEvaluationComentario(team.avaliacao?.comentario ?? "");
+    setEvaluationAnotacoesDeliberacao(team.avaliacao?.anotacoesDeliberacao ?? "");
     const storedAvaliador = typeof window !== "undefined" ? localStorage.getItem("inova_avaliador_nome") || "" : "";
     setEvaluationAvaliadorNome(team.avaliacao?.avaliadorNome ?? storedAvaliador);
   }
 
   async function salvarAvaliacao() {
     if (!evaluatingTeam) return;
-    if (evaluationNota === null || evaluationNota < 1 || evaluationNota > 10) {
-      alert("Por favor, selecione uma nota de 1 a 10 para a ideia da equipe.");
+
+    const somaCriterios =
+      (evaluationCriterios.problema || 0) +
+      (evaluationCriterios.inovacao || 0) +
+      (evaluationCriterios.viabilidade || 0) +
+      (evaluationCriterios.impacto || 0) +
+      (evaluationCriterios.prototipoApresentacao || 0);
+
+    const hasAllCriterios =
+      evaluationCriterios.problema >= 1 &&
+      evaluationCriterios.inovacao >= 1 &&
+      evaluationCriterios.viabilidade >= 1 &&
+      evaluationCriterios.impacto >= 1 &&
+      evaluationCriterios.prototipoApresentacao >= 1;
+
+    if (!hasAllCriterios && evaluationNota === null) {
+      alert("Por favor, selecione uma nota de 1 a 5 para todos os 5 critérios da banca.");
       return;
     }
+
+    const notaFinal = hasAllCriterios ? somaCriterios : (evaluationNota ?? 0);
 
     setSavingEvaluation(true);
     try {
@@ -814,24 +1042,50 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       }
 
       const novaAvaliacao: TeamAvaliacao = {
-        nota: evaluationNota,
+        nota: notaFinal,
+        criterios: hasAllCriterios ? evaluationCriterios : undefined,
         posicao: evaluationPosicao.trim() || undefined,
         comentario: evaluationComentario.trim() || undefined,
+        anotacoesDeliberacao: evaluationAnotacoesDeliberacao.trim() || undefined,
         avaliadorNome: evaluationAvaliadorNome.trim() || undefined,
         atualizadoEm: new Date().toISOString(),
       };
 
-      baseNotesObj.avaliacao = novaAvaliacao;
+      baseNotesObj.avaliacao = {
+        ...novaAvaliacao,
+        metodologia: "INOVA_SAUDE_2026_5_CRITERIOS",
+      };
 
       if (evaluationAvaliadorNome.trim() && typeof window !== "undefined") {
         localStorage.setItem("inova_avaliador_nome", evaluationAvaliadorNome.trim());
+      }
+
+      // Sincroniza com localStorage da aba Banca Avaliadora
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(`inova_banca_evaluations_${eventId}`);
+          const map = raw ? JSON.parse(raw) : {};
+          map[evaluatingTeam.teamName] = {
+            id: evaluatingTeam.id,
+            teamNumber: 0,
+            teamName: evaluatingTeam.teamName,
+            ideaDescription: evaluatingTeam.idear?.nome_solucao || "",
+            criterios: evaluationCriterios,
+            total: notaFinal,
+            anotacoesDeliberacao: evaluationAnotacoesDeliberacao.trim(),
+            avaliadorNome: evaluationAvaliadorNome.trim(),
+            atualizadoEm: new Date().toISOString(),
+            hasInscription: true,
+          };
+          localStorage.setItem(`inova_banca_evaluations_${eventId}`, JSON.stringify(map));
+        } catch {}
       }
 
       await api.updateInscription(eventId, evaluatingTeam.id, {
         notes: JSON.stringify(baseNotesObj),
       });
 
-      showToast(`Avaliação da equipe "${evaluatingTeam.teamName}" salva com sucesso! ⭐ ${evaluationNota}/10`);
+      showToast(`Avaliação da equipe "${evaluatingTeam.teamName}" salva com sucesso! ⭐ ${notaFinal}/25`);
 
       if (selectedTeam && selectedTeam.id === evaluatingTeam.id) {
         setSelectedTeam({
@@ -869,6 +1123,17 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
       }
 
       delete baseNotesObj.avaliacao;
+
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(`inova_banca_evaluations_${eventId}`);
+          if (raw) {
+            const map = JSON.parse(raw);
+            delete map[evaluatingTeam.teamName];
+            localStorage.setItem(`inova_banca_evaluations_${eventId}`, JSON.stringify(map));
+          }
+        } catch {}
+      }
 
       await api.updateInscription(eventId, evaluatingTeam.id, {
         notes: JSON.stringify(baseNotesObj),
@@ -918,10 +1183,10 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
     setWorkAcessoLiberado(existing?.acessoLiberado !== false);
     setWorkArtefatos(
       Array.isArray(existing?.itens)
-        ? existing.itens.map((it) => ({
+        ? existing.itens.map((it: any) => ({
             tipo: it.tipo || "Arquivo",
             titulo: it.titulo || "",
-            linkUrl: it.linkUrl || "",
+            linkUrl: it.linkUrl || it.url || it.link || "",
           }))
         : []
     );
@@ -1018,6 +1283,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
             tipo: a.tipo.trim() || "Link",
             titulo: a.titulo.trim() || a.linkUrl.trim(),
             linkUrl: a.linkUrl.trim(),
+            url: a.linkUrl.trim(),
           })),
         enviado_em: new Date().toISOString(),
       };
@@ -1274,33 +1540,67 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         </div>
       </div>
 
-      {/* ──── SELETOR DE VISUALIZAÇÃO: EQUIPES OU BANCO DE TALENTOS ──── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border)", paddingBottom: "10px" }}>
-        <button
-          type="button"
-          onClick={() => setMainView("equipes")}
-          className={`btn btn-sm ${mainView === "equipes" ? "" : "btn-secondary"}`}
-          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-        >
-          <UsersIcon size={14} />
-          <span>Equipes Formadas ({teams.length})</span>
-        </button>
+      {/* ──── SELETOR DE VISUALIZAÇÃO: EQUIPES OU BANCO DE TALENTOS & AÇÕES DE EXPORTAÇÃO ──── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setMainView("equipes")}
+            className={`btn btn-sm ${mainView === "equipes" ? "" : "btn-secondary"}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <UsersIcon size={14} />
+            <span>Equipes Formadas ({teams.length})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setMainView("talentos")}
-          className={`btn btn-sm ${mainView === "talentos" ? "" : "btn-secondary"}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            background: mainView === "talentos" ? "rgba(234, 179, 8, 0.2)" : undefined,
-            color: mainView === "talentos" ? "#ffb340" : undefined,
-            borderColor: mainView === "talentos" ? "#ffb340" : undefined,
-          }}
-        >
-          <span>⚠️ Banco de Talentos / Sem Equipe ({bancoDeTalentos.length})</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setMainView("talentos")}
+            className={`btn btn-sm ${mainView === "talentos" ? "" : "btn-secondary"}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: mainView === "talentos" ? "rgba(234, 179, 8, 0.2)" : undefined,
+              color: mainView === "talentos" ? "#ffb340" : undefined,
+              borderColor: mainView === "talentos" ? "#ffb340" : undefined,
+            }}
+          >
+            <span>⚠️ Banco de Talentos / Sem Equipe ({bancoDeTalentos.length})</span>
+          </button>
+        </div>
+
+        {/* ──── BOTÃO BAIXAR ZIP COM TODAS AS EQUIPES PARA OS AVALIADORES (SIGILO) ──── */}
+        <div>
+          <button
+            type="button"
+            onClick={handleExportZipAvaliadores}
+            disabled={exportingZip || teams.length === 0}
+            className="btn btn-sm"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              background: "linear-gradient(135deg, #0E3634 0%, #165b57 100%)",
+              color: "#ffffff",
+              border: "1px solid #C8A261",
+              fontWeight: 700,
+              padding: "7px 14px",
+              borderRadius: "8px",
+              boxShadow: "0 2px 6px rgba(14, 54, 52, 0.25)",
+              cursor: exportingZip || teams.length === 0 ? "not-allowed" : "pointer",
+              opacity: exportingZip || teams.length === 0 ? 0.7 : 1,
+            }}
+            title="Compacta todas as equipes em um único arquivo ZIP com os PDFs de avaliação anônimos (sem nomes e contatos pessoais)."
+          >
+            <DownloadIcon size={15} />
+            <span>
+              {exportingZip
+                ? (exportProgress || "Gerando ZIP com Sigilo...")
+                : `Baixar ZIP das Equipes para Avaliadores (Com Sigilo) [${teams.length}]`}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ──── FILTROS E BUSCA ──── */}
@@ -1594,10 +1894,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
             <div
               key={team.id}
               className="card"
-              onClick={() => {
-                setSelectedTeam(team);
-                setModalTab("todos");
-              }}
+              onClick={() => abrirFichaDaEquipe(team)}
               style={{
                 padding: "20px",
                 cursor: "pointer",
@@ -1695,7 +1992,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 </div>
               </div>
 
-              {/* ─── Avaliação da Ideia & Nota ─── */}
+              {/* ─── Avaliação da Ideia & Nota (Ficha da Banca) ─── */}
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: "10px" }} onClick={(e) => e.stopPropagation()}>
                 {team.avaliacao ? (
                   <div
@@ -1703,47 +2000,82 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                       background: "rgba(16, 185, 129, 0.08)",
                       border: "1px solid rgba(16, 185, 129, 0.25)",
                       borderRadius: "8px",
-                      padding: "6px 10px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "8px",
+                      padding: "8px 10px",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                      <span
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            background:
+                              team.avaliacao.criterios || team.avaliacao.nota > 10
+                                ? team.avaliacao.nota >= 22
+                                  ? "#10b981"
+                                  : team.avaliacao.nota >= 18
+                                  ? "#06b6d4"
+                                  : team.avaliacao.nota >= 14
+                                  ? "#f59e0b"
+                                  : "#ef4444"
+                                : team.avaliacao.nota >= 9
+                                ? "#10b981"
+                                : team.avaliacao.nota >= 7
+                                ? "#06b6d4"
+                                : team.avaliacao.nota >= 5
+                                ? "#f59e0b"
+                                : "#ef4444",
+                            color: "#ffffff",
+                            fontWeight: 800,
+                            fontSize: "11px",
+                            padding: "2px 7px",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          ⭐ {team.avaliacao.nota}/{team.avaliacao.criterios || team.avaliacao.nota > 10 ? "25" : "10"}
+                        </span>
+                        {team.avaliacao.posicao && (
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#fbbf24" }}>
+                            🏆 {team.avaliacao.posicao}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: "2px 8px", fontSize: "11px", height: "auto" }}
+                        onClick={() => abrirModalAvaliacao(team)}
+                      >
+                        Editar Ficha
+                      </button>
+                    </div>
+
+                    {team.avaliacao.criterios && (
+                      <div
                         style={{
-                          background:
-                            team.avaliacao.nota >= 9
-                              ? "#10b981"
-                              : team.avaliacao.nota >= 7
-                              ? "#06b6d4"
-                              : team.avaliacao.nota >= 5
-                              ? "#f59e0b"
-                              : "#ef4444",
-                          color: "#ffffff",
-                          fontWeight: 800,
-                          fontSize: "11px",
-                          padding: "2px 7px",
-                          borderRadius: "6px",
+                          display: "flex",
+                          gap: "4px",
+                          marginTop: "6px",
+                          fontSize: "10px",
+                          color: "var(--text-muted)",
+                          flexWrap: "wrap",
                         }}
                       >
-                        ⭐ {team.avaliacao.nota}/10
-                      </span>
-                      {team.avaliacao.posicao && (
-                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#fbbf24" }}>
-                          🏆 {team.avaliacao.posicao}
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8", fontWeight: 700 }} title="Problema (1º Desempate)">
+                          P: {team.avaliacao.criterios.problema}
                         </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: "2px 8px", fontSize: "11px", height: "auto" }}
-                      onClick={() => abrirModalAvaliacao(team)}
-                    >
-                      Editar Nota
-                    </button>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)" }} title="Inovação">
+                          I: {team.avaliacao.criterios.inovacao}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8", fontWeight: 700 }} title="Viabilidade (2º Desempate)">
+                          V: {team.avaliacao.criterios.viabilidade}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)" }} title="Impacto">
+                          Imp: {team.avaliacao.criterios.impacto}
+                        </span>
+                        <span style={{ padding: "1px 5px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.05)" }} title="Protótipo e Apresentação">
+                          Prot: {team.avaliacao.criterios.prototipoApresentacao}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <button
@@ -1764,7 +2096,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                     }}
                     onClick={() => abrirModalAvaliacao(team)}
                   >
-                    ⭐ Avaliar Ideia & Nota (1-10)
+                    ⭐ Avaliar na Banca (5 Critérios)
                   </button>
                 )}
               </div>
@@ -1773,8 +2105,10 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
                   Ver ficha completa <ArrowRightIcon size={12} />
                 </span>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                  {new Date(team.createdAt).toLocaleDateString("pt-BR")}
+                <span style={{ fontSize: "11px", color: team.ultimaEdicaoEm ? "#10b981" : "var(--text-muted)", fontWeight: team.ultimaEdicaoEm ? 600 : 400 }} title={team.ultimaEdicaoEm ? `Última edição: ${new Date(team.ultimaEdicaoEm).toLocaleString("pt-BR")}` : `Inscrito em ${new Date(team.createdAt).toLocaleString("pt-BR")}`}>
+                  {team.ultimaEdicaoEm
+                    ? `✏️ Editado em ${new Date(team.ultimaEdicaoEm).toLocaleDateString("pt-BR")}`
+                    : new Date(team.createdAt).toLocaleDateString("pt-BR")}
                 </span>
               </div>
             </div>
@@ -1835,34 +2169,105 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
 
             {/* Cabeçalho da Equipe */}
             <div style={{ marginBottom: "20px" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <span className="badge badge-cyan" style={{ fontSize: "11px" }}>
-                  {selectedTeam.trilhaLabel}
-                </span>
-                <span className={`badge ${selectedTeam.status === "CONFIRMED" ? "badge-success" : "badge-warning"}`}>
-                  {selectedTeam.status === "CONFIRMED" ? "Inscrição Confirmada" : "Pendente"}
-                </span>
-                {selectedTeam.fechamento.aberta_a_novos ? (
-                  <span className="badge badge-amber" style={{ fontSize: "11px" }}>
-                    {selectedTeam.vagasRestantes} vaga(s) aberta(s)
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                  marginBottom: "8px",
+                  paddingRight: "44px", // espaço reservado para o botão X
+                }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+                  <span className="badge badge-cyan" style={{ fontSize: "11px" }}>
+                    {selectedTeam.trilhaLabel}
                   </span>
-                ) : (
-                  <span className="badge badge-muted" style={{ fontSize: "11px" }}>
-                    Equipe Completa / Fechada
+                  <span className={`badge ${selectedTeam.status === "CONFIRMED" ? "badge-success" : "badge-warning"}`}>
+                    {selectedTeam.status === "CONFIRMED" ? "Inscrição Confirmada" : "Pendente"}
                   </span>
-                )}
+                  {selectedTeam.fechamento.aberta_a_novos ? (
+                    <span className="badge badge-amber" style={{ fontSize: "11px" }}>
+                      {selectedTeam.vagasRestantes} vaga(s) aberta(s)
+                    </span>
+                  ) : (
+                    <span className="badge badge-muted" style={{ fontSize: "11px" }}>
+                      Equipe Completa / Fechada
+                    </span>
+                  )}
+                </div>
+
+                {/* Box de Destaque no Canto: Última Edição Realizada */}
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    background: selectedTeam.ultimaEdicaoEm
+                      ? "rgba(16, 185, 129, 0.12)"
+                      : "rgba(255, 255, 255, 0.04)",
+                    border: `1px solid ${
+                      selectedTeam.ultimaEdicaoEm
+                        ? "rgba(16, 185, 129, 0.35)"
+                        : "var(--border)"
+                    }`,
+                  }}
+                  title={
+                    selectedTeam.ultimaEdicaoEm
+                      ? `Projeto editado pelo líder às ${new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")}`
+                      : "Nenhuma edição recente registrada pelo líder"
+                  }
+                >
+                  <span style={{ fontSize: "15px" }}>{selectedTeam.ultimaEdicaoEm ? "🕒" : "📝"}</span>
+                  <div style={{ lineHeight: 1.2 }}>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                        color: selectedTeam.ultimaEdicaoEm ? "#10b981" : "var(--text-muted)",
+                      }}
+                    >
+                      {selectedTeam.ultimaEdicaoEm ? "Última Edição Realizada" : "Edições do Projeto"}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: selectedTeam.ultimaEdicaoEm ? "#34d399" : "var(--text)",
+                      }}
+                    >
+                      {selectedTeam.ultimaEdicaoEm
+                        ? new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")
+                        : "Sem edições posteriores"}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <h1 style={{ fontSize: "28px", fontWeight: 800, margin: "6px 0", color: "var(--text)" }}>
                 {selectedTeam.teamName}
               </h1>
 
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", display: "flex", flexWrap: "wrap", gap: "12px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center" }}>
                 <span>Protocolo: <code>{selectedTeam.id}</code></span>
                 <span>•</span>
                 <span>Eixo: <strong>{selectedTeam.definir.eixo}</strong></span>
                 <span>•</span>
                 <span>Inscrito em {new Date(selectedTeam.createdAt).toLocaleString("pt-BR")}</span>
+                {selectedTeam.ultimaEdicaoEm && (
+                  <>
+                    <span>•</span>
+                    <span style={{ color: "#10b981", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <span>✏️ Última alteração:</span>
+                      <strong>{new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")}</strong>
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1920,6 +2325,25 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
 
               <button
                 type="button"
+                onClick={() => handleDownloadSingleTeamPdf(selectedTeam)}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: "#0E3634",
+                  borderColor: "#C8A261",
+                  fontWeight: 600,
+                  backgroundColor: "rgba(200, 162, 97, 0.12)",
+                }}
+                title="Gera o PDF formatado desta equipe para os avaliadores, com todas as informações técnicas e artefatos, mantendo o sigilo de dados pessoais e de contato."
+              >
+                <DownloadIcon size={14} />
+                <span>PDF de Avaliação (Com Sigilo)</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={imprimirFicha}
                 className="btn btn-secondary btn-sm"
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
@@ -1971,13 +2395,13 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 <span>
                   ⭐{" "}
                   {selectedTeam.avaliacao
-                    ? `Nota: ${selectedTeam.avaliacao.nota}/10 (${selectedTeam.avaliacao.posicao || "Editar"})`
-                    : "Avaliar Ideia da Equipe"}
+                    ? `Nota: ${selectedTeam.avaliacao.nota}/${selectedTeam.avaliacao.criterios || selectedTeam.avaliacao.nota > 10 ? "25" : "10"} (${selectedTeam.avaliacao.posicao || "Editar"})`
+                    : "Avaliar na Banca (5 Critérios)"}
                 </span>
               </button>
             </div>
 
-            {/* ──── BANNER DE AVALIAÇÃO DA BANCA ──── */}
+            {/* ──── BANNER DE AVALIAÇÃO DA BANCA (INOVA SAÚDE 2026) ──── */}
             {selectedTeam.avaliacao ? (
               <div
                 style={{
@@ -1988,7 +2412,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                   border: "1px solid rgba(16, 185, 129, 0.35)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "10px",
+                  gap: "12px",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
@@ -1996,7 +2420,15 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                     <span
                       style={{
                         background:
-                          selectedTeam.avaliacao.nota >= 9
+                          selectedTeam.avaliacao.criterios || selectedTeam.avaliacao.nota > 10
+                            ? selectedTeam.avaliacao.nota >= 22
+                              ? "#10b981"
+                              : selectedTeam.avaliacao.nota >= 18
+                              ? "#06b6d4"
+                              : selectedTeam.avaliacao.nota >= 14
+                              ? "#f59e0b"
+                              : "#ef4444"
+                            : selectedTeam.avaliacao.nota >= 9
                             ? "#10b981"
                             : selectedTeam.avaliacao.nota >= 7
                             ? "#06b6d4"
@@ -2010,7 +2442,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                         borderRadius: "8px",
                       }}
                     >
-                      ⭐ Nota da Ideia: {selectedTeam.avaliacao.nota}/10
+                      ⭐ Nota da Banca: {selectedTeam.avaliacao.nota}/{selectedTeam.avaliacao.criterios || selectedTeam.avaliacao.nota > 10 ? "25" : "10"}
                     </span>
                     {selectedTeam.avaliacao.posicao && (
                       <span style={{ fontSize: "14px", fontWeight: 800, color: "#fbbf24" }}>
@@ -2027,6 +2459,57 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                     ✏️ Editar Avaliação
                   </button>
                 </div>
+
+                {/* 5 Critérios Oficiais da Banca */}
+                {selectedTeam.avaliacao.criterios && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                      gap: "8px",
+                      background: "rgba(0, 0, 0, 0.2)",
+                      padding: "12px",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(56, 189, 248, 0.12)", border: "1px solid rgba(56, 189, 248, 0.3)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "#38bdf8", textTransform: "uppercase" }}>1. Problema (1º Desemp.)</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.problema}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.04)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>2. Inovação</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.inovacao}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(56, 189, 248, 0.12)", border: "1px solid rgba(56, 189, 248, 0.3)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "#38bdf8", textTransform: "uppercase" }}>3. Viabilidade (2º Desemp.)</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.viabilidade}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.04)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>4. Impacto</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.impacto}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", padding: "6px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.04)" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>5. Protótipo & Apres.</div>
+                      <div style={{ fontSize: "18px", fontWeight: 900, color: "#ffffff", marginTop: "2px" }}>{selectedTeam.avaliacao.criterios.prototipoApresentacao}<span style={{ fontSize: "11px", opacity: 0.7 }}>/5</span></div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedTeam.avaliacao.anotacoesDeliberacao && (
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      color: "var(--text)",
+                      lineHeight: 1.5,
+                      background: "rgba(0,0,0,0.18)",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      borderLeft: "3px solid #38bdf8",
+                    }}
+                  >
+                    <strong style={{ color: "#38bdf8" }}>Anotações para a Deliberação:</strong> {selectedTeam.avaliacao.anotacoesDeliberacao}
+                  </div>
+                )}
 
                 {selectedTeam.avaliacao.comentario && (
                   <div
@@ -2070,7 +2553,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 }}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                  ⭐ Esta equipe ainda não possui nota atribuída por um avaliador.
+                  ⭐ Esta equipe ainda não possui notas atribuídas na banca examinadora.
                 </div>
                 <button
                   type="button"
@@ -2078,7 +2561,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                   style={{ color: "#fbbf24", borderColor: "rgba(245, 158, 11, 0.4)" }}
                   onClick={() => abrirModalAvaliacao(selectedTeam)}
                 >
-                  ⭐ Avaliar Ideia & Nota
+                  ⭐ Avaliar na Banca (5 Critérios)
                 </button>
               </div>
             )}
@@ -2093,6 +2576,7 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                 { id: "prototipo", label: "🛠️ Prototipagem & 3D" },
                 { id: "ods", label: "🌍 Impacto & ODS" },
                 { id: "entregas", label: `📦 Entregas (${selectedTeam.trabalhos.length})` },
+                { id: "historico", label: `🕒 Histórico (${selectedTeam.historicoEdicoes?.length || 0})` },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -2719,48 +3203,93 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                             {trab.origem === "inscricao" ? "Enviado na Inscrição" : "Envio Posterior de Trabalho"}
                           </span>
                           <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                            {trab.data}
+                            {trab.data
+                              ? !isNaN(new Date(trab.data).getTime())
+                                ? new Date(trab.data).toLocaleString("pt-BR")
+                                : trab.data
+                              : ""}
                           </span>
                         </div>
 
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "6px" }}>
-                          {trab.videoUrl && (
-                            <a
-                              href={trab.videoUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="btn btn-secondary btn-sm"
-                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                            >
-                              ▶️ Assistir Vídeo Pitch
-                            </a>
-                          )}
-
-                          {trab.prototipoUrl && (
-                            <a
-                              href={trab.prototipoUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="btn btn-secondary btn-sm"
-                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                            >
-                              🔗 Abrir Protótipo / Figma
-                            </a>
-                          )}
-
-                          {trab.itens &&
-                            trab.itens.map((it, iIdx) => (
+                          {trab.videoUrl && (() => {
+                            const validUrl = getValidExternalUrl(trab.videoUrl);
+                            return validUrl ? (
                               <a
-                                key={iIdx}
-                                href={it.linkUrl || "#"}
+                                href={validUrl}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="btn btn-secondary btn-sm"
                                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                📄 {it.titulo || "Artefato Complementar"}
+                                ▶️ Assistir Vídeo Pitch
                               </a>
-                            ))}
+                            ) : null;
+                          })()}
+
+                          {trab.prototipoUrl && (() => {
+                            const validUrl = getValidExternalUrl(trab.prototipoUrl);
+                            return validUrl ? (
+                              <a
+                                href={validUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-secondary btn-sm"
+                                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                🔗 Abrir Protótipo / Figma
+                              </a>
+                            ) : null;
+                          })()}
+
+                          {trab.itens &&
+                            trab.itens.map((it: any, iIdx) => {
+                              const rawUrl = it.linkUrl || it.url || it.link || "";
+                              const validUrl = getValidExternalUrl(rawUrl);
+
+                              if (!validUrl) {
+                                return (
+                                  <button
+                                    key={iIdx}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      alert(
+                                        `O artefato "${it.titulo || "Artefato / Documento Complementar"}" não possui um link cadastrado pela equipe.`
+                                      );
+                                    }}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      opacity: 0.75,
+                                      cursor: "not-allowed",
+                                    }}
+                                    title="Link não informado pela equipe"
+                                  >
+                                    📄 {it.titulo || "Artefato / Documento Complementar"} (Sem link)
+                                  </button>
+                                );
+                              }
+
+                              return (
+                                <a
+                                  key={iIdx}
+                                  href={validUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  📄 {it.titulo || "Artefato / Documento Complementar"}
+                                </a>
+                              );
+                            })}
                         </div>
 
                         {trab.observacoes && (
@@ -2770,6 +3299,73 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 7. SEÇÃO DE HISTÓRICO DE EDIÇÕES / AUDITORIA */}
+            {(modalTab === "todos" || modalTab === "historico") && (
+              <div className="print-card" style={{ marginBottom: "24px" }}>
+                <h3 style={{ fontSize: "14px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--accent)", margin: "0 0 14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>🕒 7. Histórico de Edições Realizadas no Projeto</span>
+                  <span className="badge badge-muted" style={{ fontSize: "11px" }}>
+                    {selectedTeam.historicoEdicoes?.length || 0} registro(s)
+                  </span>
+                </h3>
+
+                {selectedTeam.historicoEdicoes && selectedTeam.historicoEdicoes.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {selectedTeam.historicoEdicoes.map((log: any, idx: number) => (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "10px",
+                          background: "var(--surface)",
+                          border: "1px solid var(--border)",
+                          fontSize: "12px",
+                        }}
+                      >
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
+                          <div style={{ fontWeight: 700, color: "var(--text)" }}>
+                            📅 {new Date(log.timestamp).toLocaleString("pt-BR")}
+                          </div>
+                          <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
+                            Autor: <strong>{log.autor || selectedTeam.lider.email}</strong> {log.ip ? `· IP: ${log.ip}` : ""}
+                          </div>
+                        </div>
+
+                        {Array.isArray(log.alteracoes) && log.alteracoes.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
+                            {log.alteracoes.map((alt: string, aIdx: number) => (
+                              <span
+                                key={aIdx}
+                                className="badge"
+                                style={{
+                                  fontSize: "11px",
+                                  backgroundColor: "rgba(56, 189, 248, 0.12)",
+                                  color: "#38bdf8",
+                                  border: "1px solid rgba(56, 189, 248, 0.25)",
+                                }}
+                              >
+                                ✓ {alt}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ color: "var(--text-muted)", fontStyle: "italic" }}>
+                            Alteração salva no projeto
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: "16px", borderRadius: "10px", background: "rgba(255, 255, 255, 0.03)", border: "1px dashed var(--border)", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
+                    {selectedTeam.ultimaEdicaoEm
+                      ? `Última edição gravada em ${new Date(selectedTeam.ultimaEdicaoEm).toLocaleString("pt-BR")}`
+                      : "Nenhuma alteração posterior foi realizada após a inscrição inicial."}
                   </div>
                 )}
               </div>
@@ -2789,286 +3385,542 @@ export function TeamsTab({ eventId }: TeamsTabProps) {
         </div>
       )}
 
-      {/* ──── MODAL DE AVALIAÇÃO DA IDEIA (BANCA EXAMINADORA) ──── */}
-      {evaluatingTeam && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.8)",
-            zIndex: 1100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "16px",
-            backdropFilter: "blur(6px)",
-          }}
-          onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
-        >
+      {/* ──── MODAL DE AVALIAÇÃO DA IDEIA (FICHA DA BANCA INOVA SAÚDE 2026) ──── */}
+      {evaluatingTeam && (() => {
+        const liveSoma =
+          (evaluationCriterios.problema || 0) +
+          (evaluationCriterios.inovacao || 0) +
+          (evaluationCriterios.viabilidade || 0) +
+          (evaluationCriterios.impacto || 0) +
+          (evaluationCriterios.prototipoApresentacao || 0);
+
+        const allFiveRated =
+          evaluationCriterios.problema >= 1 &&
+          evaluationCriterios.inovacao >= 1 &&
+          evaluationCriterios.viabilidade >= 1 &&
+          evaluationCriterios.impacto >= 1 &&
+          evaluationCriterios.prototipoApresentacao >= 1;
+
+        return (
           <div
-            className="card"
             style={{
-              maxWidth: "580px",
-              width: "100%",
-              maxHeight: "92vh",
-              overflowY: "auto",
-              padding: "24px",
-              position: "relative",
-              boxShadow: "0 25px 50px rgba(0,0,0,0.7)",
-              border: "1px solid var(--border)",
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0,0,0,0.85)",
+              zIndex: 1100,
               display: "flex",
-              flexDirection: "column",
-              gap: "18px",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "16px",
+              backdropFilter: "blur(6px)",
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
           >
-            {/* Cabeçalho */}
             <div
+              className="card"
               style={{
+                maxWidth: "1150px",
+                width: "95vw",
+                maxHeight: "92vh",
+                overflowY: "auto",
+                overflowX: "hidden",
+                padding: "24px",
+                position: "relative",
+                boxShadow: "0 25px 50px rgba(0,0,0,0.7)",
+                border: "1px solid var(--border)",
                 display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: "12px",
-                borderBottom: "1px solid var(--border)",
-                paddingBottom: "14px",
+                flexDirection: "column",
+                gap: "18px",
               }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <div>
-                <span
+              {/* Cabeçalho */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  borderBottom: "1px solid var(--border)",
+                  paddingBottom: "14px",
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      color: "#fbbf24",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    ⭐ Ficha da Banca INOVA SAÚDE 2026
+                  </span>
+                  <h2 style={{ margin: "4px 0 2px", fontSize: "20px", fontWeight: 800, color: "var(--text)" }}>
+                    Avaliação da Equipe: {evaluatingTeam.teamName}
+                  </h2>
+                  <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                    Solução Proposta: <strong style={{ color: "var(--text)" }}>{evaluatingTeam.idear?.nome_solucao || "Em desenvolvimento"}</strong>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
                   style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#fbbf24",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
+                    background: "rgba(255,255,255,0.08)",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--text)",
+                    padding: "6px",
+                    borderRadius: "6px",
                   }}
                 >
-                  ⭐ Banca Examinadora / Avaliador
-                </span>
-                <h2 style={{ margin: "4px 0 2px", fontSize: "20px", fontWeight: 800, color: "var(--text)" }}>
-                  Avaliação da Ideia da Equipe
-                </h2>
-                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                  Equipe: <strong style={{ color: "var(--text)" }}>{evaluatingTeam.teamName}</strong> • Solução:{" "}
-                  <em>{evaluatingTeam.idear.nome_solucao}</em>
+                  <XIcon size={18} />
+                </button>
+              </div>
+
+              {/* Banner de Instruções e Regra de Ouro */}
+              <div
+                style={{
+                  background: "rgba(56, 189, 248, 0.08)",
+                  border: "1px solid rgba(56, 189, 248, 0.25)",
+                  borderRadius: "8px",
+                  padding: "12px 14px",
+                  fontSize: "12.5px",
+                  lineHeight: "1.5",
+                  color: "var(--text)",
+                }}
+              >
+                <div style={{ fontWeight: 700, color: "#38bdf8", marginBottom: "4px" }}>
+                  📋 Como avaliar: Dê uma nota de 1 a 5 em cada critério
+                </div>
+                <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                  Use 2 e 4 para os casos entre as descrições. Os cinco têm o mesmo peso (2, como no edital), então basta somar: <strong>máximo 25</strong>. Todas as equipes começam do zero hoje.
+                </div>
+                <div style={{ marginTop: "6px", fontSize: "12px", color: "#fbbf24" }}>
+                  💡 <strong>Acabamento não conta.</strong> Um protótipo de papel testado com usuários vale mais que um app bonito nunca testado.
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "11.5px", color: "var(--text-muted)" }}>
+                  ⚖️ <strong>Critérios de desempate:</strong> 1º maior nota em <em>Problema</em>. Se continuar empatado, 2º maior nota em <em>Viabilidade</em>.
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => !savingEvaluation && setEvaluatingTeam(null)}
+              {/* 5 Critérios Oficiais */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {BANCA_CRITERIOS_DEF.map((critDef) => {
+                  const valorAtual = evaluationCriterios[critDef.key] || 0;
+
+                  return (
+                    <div
+                      key={critDef.key}
+                      style={{
+                        padding: "16px",
+                        borderRadius: "10px",
+                        backgroundColor: "rgba(255, 255, 255, 0.03)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
+                      {/* Topo do Critério */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px", flexWrap: "wrap", gap: "6px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontWeight: 800, color: "#38bdf8", fontSize: "14px" }}>
+                            {critDef.numero}. {critDef.nome}
+                          </span>
+                          {critDef.desempate && (
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: 700,
+                                padding: "2px 7px",
+                                borderRadius: "4px",
+                                backgroundColor: "rgba(56, 189, 248, 0.2)",
+                                color: "#38bdf8",
+                              }}
+                            >
+                              {critDef.desempate}
+                            </span>
+                          )}
+                        </div>
+
+                        {valorAtual > 0 && (
+                          <span
+                            style={{
+                              fontSize: "12.5px",
+                              fontWeight: 800,
+                              color: valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444",
+                            }}
+                          >
+                            Nota Atribuída: {valorAtual}/5
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "14px", fontStyle: "italic" }}>
+                        "{critDef.pergunta}"
+                      </div>
+
+                      {/* Layout Lado a Lado Responsivo (O que a equipe colocou + Avaliação da Banca) */}
+                      <div className="banca-criterion-split">
+                        {/* Coluna Esquerda: Informações Declaradas pela Equipe */}
+                        <div
+                          style={{
+                            backgroundColor: "rgba(0, 0, 0, 0.22)",
+                            borderRadius: "8px",
+                            padding: "14px",
+                            border: "1px solid rgba(255, 255, 255, 0.07)",
+                            minWidth: 0,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <TeamCriterionInfoBox critKey={critDef.key} team={evaluatingTeam} />
+                        </div>
+
+                        {/* Coluna Direita: Avaliação da Banca e Guia Oficial */}
+                        <div
+                          style={{
+                            backgroundColor: "rgba(0, 0, 0, 0.22)",
+                            borderRadius: "8px",
+                            padding: "14px",
+                            border: "1px solid rgba(255, 255, 255, 0.07)",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                            gap: "12px",
+                            minWidth: 0,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
+                              <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", color: "#fbbf24", letterSpacing: "0.5px" }}>
+                                ⭐ NOTA DA BANCA (1 A 5):
+                              </span>
+                              {valorAtual > 0 && (
+                                <span
+                                  style={{
+                                    fontSize: "11.5px",
+                                    fontWeight: 800,
+                                    color: valorAtual >= 4 ? "#10b981" : valorAtual === 3 ? "#f59e0b" : "#ef4444",
+                                  }}
+                                >
+                                  {valorAtual === 1 ? "1 - Crítico" : valorAtual === 2 ? "2 - Fraco" : valorAtual === 3 ? "3 - Médio" : valorAtual === 4 ? "4 - Bom" : "5 - Excelente"}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 5 Botões de Nota com largura 100% responsiva */}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "6px", width: "100%" }}>
+                              {[1, 2, 3, 4, 5].map((nota) => {
+                                const isSelected = valorAtual === nota;
+                                return (
+                                  <button
+                                    key={nota}
+                                    type="button"
+                                    onClick={() => {
+                                      setEvaluationCriterios((prev) => ({
+                                        ...prev,
+                                        [critDef.key]: nota,
+                                      }));
+                                    }}
+                                    style={{
+                                      padding: "10px 2px",
+                                      borderRadius: "8px",
+                                      border: isSelected ? "2px solid #38bdf8" : "1px solid var(--border)",
+                                      backgroundColor: isSelected ? "#0284c7" : "rgba(255, 255, 255, 0.04)",
+                                      color: isSelected ? "#ffffff" : "var(--text)",
+                                      cursor: "pointer",
+                                      textAlign: "center",
+                                      transition: "all 0.15s ease",
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <div style={{ fontSize: "18px", fontWeight: 900, lineHeight: 1 }}>{nota}</div>
+                                    <div
+                                      style={{
+                                        fontSize: "9px",
+                                        fontWeight: 600,
+                                        opacity: 0.85,
+                                        marginTop: "4px",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                      }}
+                                    >
+                                      {nota === 1 ? "Crítico" : nota === 2 ? "Fraco" : nota === 3 ? "Médio" : nota === 4 ? "Bom" : "Excelente"}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Guia de Pontuação Oficial deste Critério */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "12px" }}>
+                              <div style={{ fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", letterSpacing: "0.5px" }}>
+                                Guia de Avaliação deste Critério:
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setEvaluationCriterios((prev) => ({
+                                    ...prev,
+                                    [critDef.key]: 1,
+                                  }));
+                                }}
+                                style={{
+                                  padding: "6px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  border: valorAtual === 1 ? "1.5px solid #ef4444" : "1px solid rgba(255, 255, 255, 0.06)",
+                                  background: valorAtual === 1 ? "rgba(239, 68, 68, 0.18)" : "rgba(255, 255, 255, 0.02)",
+                                  transition: "all 0.15s ease",
+                                  lineHeight: 1.35,
+                                }}
+                                title="Clique para atribuir Nota 1"
+                              >
+                                <strong style={{ color: "#ef4444" }}>Nota 1:</strong>{" "}
+                                <span style={{ color: "var(--text)" }}>{critDef.nivel1}</span>
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setEvaluationCriterios((prev) => ({
+                                    ...prev,
+                                    [critDef.key]: 3,
+                                  }));
+                                }}
+                                style={{
+                                  padding: "6px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  border: valorAtual === 3 ? "1.5px solid #f59e0b" : "1px solid rgba(255, 255, 255, 0.06)",
+                                  background: valorAtual === 3 ? "rgba(245, 158, 11, 0.18)" : "rgba(255, 255, 255, 0.02)",
+                                  transition: "all 0.15s ease",
+                                  lineHeight: 1.35,
+                                }}
+                                title="Clique para atribuir Nota 3"
+                              >
+                                <strong style={{ color: "#f59e0b" }}>Nota 3:</strong>{" "}
+                                <span style={{ color: "var(--text)" }}>{critDef.nivel3}</span>
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setEvaluationCriterios((prev) => ({
+                                    ...prev,
+                                    [critDef.key]: 5,
+                                  }));
+                                }}
+                                style={{
+                                  padding: "6px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  border: valorAtual === 5 ? "1.5px solid #10b981" : "1px solid rgba(255, 255, 255, 0.06)",
+                                  background: valorAtual === 5 ? "rgba(16, 185, 129, 0.18)" : "rgba(255, 255, 255, 0.02)",
+                                  transition: "all 0.15s ease",
+                                  lineHeight: 1.35,
+                                }}
+                                title="Clique para atribuir Nota 5"
+                              >
+                                <strong style={{ color: "#10b981" }}>Nota 5:</strong>{" "}
+                                <span style={{ color: "var(--text)" }}>{critDef.nivel5}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: "10.5px", color: "var(--text-muted)", fontStyle: "italic", marginTop: "4px" }}>
+                            💡 Clique nos botões 1 a 5 ou diretamente na descrição acima. Use 2 e 4 para intermediários.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Placar Total da Ficha */}
+              <div
                 style={{
-                  background: "rgba(255,255,255,0.08)",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text)",
-                  padding: "6px",
-                  borderRadius: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 18px",
+                  borderRadius: "10px",
+                  backgroundColor: allFiveRated ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.04)",
+                  border: allFiveRated ? "1px solid #10b981" : "1px dashed var(--border)",
+                  flexWrap: "wrap",
+                  gap: "10px",
                 }}
               >
-                <XIcon size={18} />
-              </button>
-            </div>
+                <div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Soma dos 5 Critérios (Máximo 25)
+                  </div>
+                  <div style={{ fontSize: "11px", color: allFiveRated ? "#10b981" : "#f59e0b" }}>
+                    {allFiveRated
+                      ? "✓ Todos os 5 critérios foram avaliados"
+                      : "⚠️ Preencha os 5 critérios de 1 a 5"}
+                  </div>
+                </div>
 
-            {/* 1. SELEÇÃO DA NOTA (1 A 10) */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                <label style={{ fontSize: "13px", fontWeight: 700, color: "var(--text)" }}>
-                  1. Nota da Ideia (Selecione de 1 a 10) *
-                </label>
-                {evaluationNota !== null && (
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: 800,
-                      padding: "2px 8px",
-                      borderRadius: "6px",
-                      color: "#ffffff",
-                      background:
-                        evaluationNota >= 9
-                          ? "#10b981"
-                          : evaluationNota >= 7
-                          ? "#06b6d4"
-                          : evaluationNota >= 5
-                          ? "#f59e0b"
-                          : "#ef4444",
-                    }}
-                  >
-                    ⭐ {evaluationNota}/10 -{" "}
-                    {evaluationNota >= 9
-                      ? "Excelente / Destaque"
-                      : evaluationNota >= 7
-                      ? "Boa Solução"
-                      : evaluationNota >= 5
-                      ? "Regular"
-                      : "Inicial / Insuficiente"}
+                <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                  <span style={{ fontSize: "32px", fontWeight: 900, color: allFiveRated ? "#10b981" : "#ffffff" }}>
+                    {liveSoma}
                   </span>
+                  <span style={{ fontSize: "16px", color: "var(--text-muted)", fontWeight: 700 }}>/ 25</span>
+                </div>
+              </div>
+
+              {/* Nome do Avaliador(a) */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                  Avaliador(a):
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Seu nome completo ou identificação da banca examinadora"
+                  value={evaluationAvaliadorNome}
+                  onChange={(e) => setEvaluationAvaliadorNome(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px" }}
+                />
+              </div>
+
+              {/* Anotações para a Deliberação */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                  Anotações para a deliberação:
+                </label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder="Registre argumentos para o debate da banca, considerações qualitativas, pontos fortes e fragilidades do projeto..."
+                  value={evaluationAnotacoesDeliberacao}
+                  onChange={(e) => setEvaluationAnotacoesDeliberacao(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px", resize: "vertical" }}
+                />
+              </div>
+
+              {/* Posição / Classificação Provisória ou Final */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "8px" }}>
+                  Posição / Classificação da Equipe (Opcional):
+                </label>
+
+                {/* Pílulas rápidas */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                  {[
+                    "🥇 1º Lugar",
+                    "🥈 2º Lugar",
+                    "🥉 3º Lugar",
+                    "4º Lugar",
+                    "5º Lugar",
+                    "Finalista",
+                    "Menção Honrosa",
+                    "Destaque Inovação",
+                  ].map((pos) => {
+                    const isSelected = evaluationPosicao === pos;
+                    return (
+                      <button
+                        key={pos}
+                        type="button"
+                        onClick={() => setEvaluationPosicao(pos)}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: isSelected ? 700 : 500,
+                          border: isSelected ? "1px solid #fbbf24" : "1px solid var(--border)",
+                          background: isSelected ? "rgba(251, 191, 36, 0.2)" : "rgba(255,255,255,0.04)",
+                          color: isSelected ? "#fbbf24" : "var(--text-muted)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {pos}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Ou digite a colocação (ex: 1º Lugar Geral, Menção Honrosa...)"
+                  value={evaluationPosicao}
+                  onChange={(e) => setEvaluationPosicao(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px" }}
+                />
+              </div>
+
+              {/* Parecer Adicional do Avaliador */}
+              <div>
+                <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
+                  Parecer do Avaliador (Feedback Geral):
+                </label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  placeholder="Comentário adicional sobre a apresentação ou protótipo..."
+                  value={evaluationComentario}
+                  onChange={(e) => setEvaluationComentario(e.target.value)}
+                  style={{ width: "100%", fontSize: "13px", resize: "vertical" }}
+                />
+              </div>
+
+              {/* Rodapé e Ações */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "14px",
+                  marginTop: "4px",
+                }}
+              >
+                {evaluatingTeam.avaliacao ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={removerAvaliacao}
+                    disabled={savingEvaluation}
+                    style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                  >
+                    🗑️ Remover Notas
+                  </button>
+                ) : (
+                  <div />
                 )}
-              </div>
 
-              {/* Botões de 1 a 10 */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: "5px" }}>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-                  const isSelected = evaluationNota === num;
-                  const cor =
-                    num >= 9 ? "#10b981" : num >= 7 ? "#06b6d4" : num >= 5 ? "#f59e0b" : "#ef4444";
-                  return (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setEvaluationNota(num)}
-                      style={{
-                        height: "44px",
-                        borderRadius: "8px",
-                        border: isSelected ? `2px solid ${cor}` : "1px solid var(--border)",
-                        background: isSelected ? cor : "rgba(255,255,255,0.03)",
-                        color: isSelected ? "#ffffff" : "var(--text)",
-                        fontWeight: isSelected ? 800 : 600,
-                        fontSize: "15px",
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {num}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 2. POSIÇÃO / COLOCAÇÃO */}
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "8px" }}>
-                2. Posição / Classificação da Equipe
-              </label>
-
-              {/* Pílulas rápidas */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                {[
-                  "🥇 1º Lugar",
-                  "🥈 2º Lugar",
-                  "🥉 3º Lugar",
-                  "4º Lugar",
-                  "5º Lugar",
-                  "Finalista",
-                  "Menção Honrosa",
-                  "Destaque Inovação",
-                ].map((pos) => {
-                  const isSelected = evaluationPosicao === pos;
-                  return (
-                    <button
-                      key={pos}
-                      type="button"
-                      onClick={() => setEvaluationPosicao(pos)}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: "6px",
-                        fontSize: "11px",
-                        fontWeight: isSelected ? 700 : 500,
-                        border: isSelected ? "1px solid #fbbf24" : "1px solid var(--border)",
-                        background: isSelected ? "rgba(251, 191, 36, 0.2)" : "rgba(255,255,255,0.04)",
-                        color: isSelected ? "#fbbf24" : "var(--text-muted)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {pos}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <input
-                type="text"
-                className="input"
-                placeholder="Ou digite a colocação (ex: 1º Lugar Geral, 2º Lugar Eixo Saúde...)"
-                value={evaluationPosicao}
-                onChange={(e) => setEvaluationPosicao(e.target.value)}
-                style={{ width: "100%", fontSize: "13px" }}
-              />
-            </div>
-
-            {/* 3. COMENTÁRIO SOBRE A NOTA E POSIÇÃO */}
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
-                3. Comentário do Avaliador (Parecer & Justificativa da Nota e Posição)
-              </label>
-              <textarea
-                className="input"
-                rows={4}
-                placeholder="Escreva aqui seu comentário detalhado sobre a ideia da equipe, os pontos fortes, pontos a melhorar e o motivo da nota e da posição alcançada..."
-                value={evaluationComentario}
-                onChange={(e) => setEvaluationComentario(e.target.value)}
-                style={{ width: "100%", fontSize: "13px", resize: "vertical" }}
-              />
-            </div>
-
-            {/* 4. NOME DO AVALIADOR */}
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: "var(--text)", marginBottom: "6px" }}>
-                4. Nome do Avaliador / Integrante da Banca
-              </label>
-              <input
-                type="text"
-                className="input"
-                placeholder="Seu nome ou identificação (ex: Prof. Avaliador / Banca Oficial)"
-                value={evaluationAvaliadorNome}
-                onChange={(e) => setEvaluationAvaliadorNome(e.target.value)}
-                style={{ width: "100%", fontSize: "13px" }}
-              />
-            </div>
-
-            {/* RODAPÉ E AÇÕES */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "10px",
-                borderTop: "1px solid var(--border)",
-                paddingTop: "14px",
-                marginTop: "4px",
-              }}
-            >
-              {evaluatingTeam.avaliacao ? (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={removerAvaliacao}
-                  disabled={savingEvaluation}
-                  style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.4)" }}
-                >
-                  🗑️ Remover Nota
-                </button>
-              ) : (
-                <div />
-              )}
-
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setEvaluatingTeam(null)}
-                  disabled={savingEvaluation}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={salvarAvaliacao}
-                  disabled={savingEvaluation || evaluationNota === null}
-                  style={{ minWidth: "140px" }}
-                >
-                  {savingEvaluation ? "Salvando..." : "💾 Salvar Avaliação"}
-                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setEvaluatingTeam(null)}
+                    disabled={savingEvaluation}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={salvarAvaliacao}
+                    disabled={savingEvaluation || (!allFiveRated && evaluationNota === null)}
+                    style={{ minWidth: "150px" }}
+                  >
+                    {savingEvaluation ? "Salvando..." : "💾 Salvar Avaliação"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ──── MODAL DE GERENCIAMENTO DE TRABALHO ENTREGUE ──── */}
       {editingWorkTeam && (

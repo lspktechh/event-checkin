@@ -19,14 +19,19 @@ import { ScheduleTab } from "./event/ScheduleTab";
 import { CredenciamentoTab } from "./event/CredenciamentoTab";
 import { HandsOnTab } from "./event/HandsOnTab";
 import { TeamsTab } from "./event/TeamsTab";
+import { RaffleTab } from "./event/RaffleTab";
+import { EvaluationTab } from "./event/EvaluationTab";
+import { InscricoesTab } from "./event/InscricoesTab";
 import { ArrowLeftIcon, CheckIcon, ChevronDownIcon, SmartphoneIcon } from "../components/Icons";
 import { Sheet } from "../components/Sheet";
 
 type Tab =
+  | "inscricoes"
   | "credenciamento"
   | "participants"
   | "inscriptions"
   | "teams"
+  | "evaluation"
   | "handson"
   | "batches"
   | "schedule"
@@ -37,7 +42,8 @@ type Tab =
   | "certificates"
   | "submissions"
   | "emails"
-  | "config";
+  | "config"
+  | "raffle";
 
 /**
  * `gestao`: aba de OPERAÇÃO. Para conta restrita a eventos (conta de
@@ -45,6 +51,7 @@ type Tab =
  * permissões de gestão; para as demais contas, nada muda.
  */
 const TABS: { key: Tab; label: string; permission: string; gestao?: string[] }[] = [
+  { key: "inscricoes", label: "Inscrições", permission: "events.view", gestao: ["events.edit"] },
   { key: "inscriptions", label: "Inscritos", permission: "participants.view" },
   { key: "submissions", label: "Trabalhos", permission: "submissions.view" },
   { key: "certificates", label: "Certificados", permission: "certificates.view" },
@@ -55,6 +62,12 @@ const TABS: { key: Tab; label: string; permission: string; gestao?: string[] }[]
     gestao: ["participants.edit"],
   },
   { key: "participants", label: "Participantes", permission: "participants.view" },
+  {
+    key: "raffle",
+    label: "Sorteios",
+    permission: "participants.view",
+    gestao: ["participants.edit"],
+  },
   { key: "batches", label: "Lotes", permission: "events.view", gestao: ["events.edit"] },
   { key: "schedule", label: "Programação", permission: "events.view", gestao: ["events.edit"] },
   { key: "emails", label: "E-mails", permission: "events.edit" },
@@ -116,14 +129,23 @@ export function EventDetailPage() {
   const visibleTabs = useMemo(() => {
     const list = [...TABS];
     if (isInovaSaude) {
-      // Insere "Equipes" logo após a aba "Inscritos"
+      // Insere "Equipes" e "Banca Avaliadora" logo após a aba "Inscritos"
       const inscritosIdx = list.findIndex((t) => t.key === "inscriptions");
       const insertAt = inscritosIdx >= 0 ? inscritosIdx + 1 : 1;
-      list.splice(insertAt, 0, {
-        key: "teams" as Tab,
-        label: "Equipes",
-        permission: "participants.view",
-      });
+      list.splice(
+        insertAt,
+        0,
+        {
+          key: "teams" as Tab,
+          label: "Equipes",
+          permission: "participants.view",
+        },
+        {
+          key: "evaluation" as Tab,
+          label: "Banca Avaliadora",
+          permission: "participants.view",
+        }
+      );
     }
     if (isCopol) {
       // Insere "Hands On" logo após a aba "Inscritos"
@@ -206,7 +228,11 @@ export function EventDetailPage() {
 
   async function handleStatusChange(status: api.EventRecord["status"]) {
     if (!eventId) return;
-    const updated = await api.updateEvent(eventId, { status });
+    const payload: api.UpdateEventInput = { status };
+    if (status === "CLOSED") {
+      payload.registrationInPortal = false;
+    }
+    const updated = await api.updateEvent(eventId, payload);
     setEvent(updated);
   }
 
@@ -394,10 +420,13 @@ export function EventDetailPage() {
         </div>
       ) : null}
 
+      {activeTab === "inscricoes" ? <InscricoesTab eventId={eventId} /> : null}
       {activeTab === "credenciamento" ? <CredenciamentoTab eventId={eventId} /> : null}
+      {activeTab === "raffle" ? <RaffleTab eventId={eventId} /> : null}
       {activeTab === "participants" ? <ParticipantsTab eventId={eventId} eventName={event?.name} isCopol={isCopol} /> : null}
       {activeTab === "inscriptions" ? <InscriptionsReportTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "teams" && eventId ? <TeamsTab eventId={eventId} eventName={event?.name} /> : null}
+      {activeTab === "evaluation" && eventId ? <EvaluationTab eventId={eventId} eventName={event?.name} /> : null}
       {activeTab === "handson" && eventId ? <HandsOnTab eventId={eventId} /> : null}
       {activeTab === "batches" ? <BatchesTab eventId={eventId} /> : null}
       {activeTab === "schedule" ? <ScheduleTab eventId={eventId} /> : null}

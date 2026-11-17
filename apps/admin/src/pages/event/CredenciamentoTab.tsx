@@ -19,8 +19,10 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
   const processingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function handleScan(token: string) {
-    if (processingRef.current || !eventId) return;
+  async function handleScan(scanned: string) {
+    // A câmera às vezes entrega o texto com espaço ou quebra de linha nas pontas.
+    const token = scanned.trim();
+    if (!token || processingRef.current || !eventId) return;
     processingRef.current = true;
     setPaused(true);
 
@@ -119,6 +121,12 @@ export function CredenciamentoTab({ eventId }: { eventId: string }) {
     setFeedback(null);
     setPaused(false);
     processingRef.current = false;
+
+    // Garante que o elemento de vídeo continue reproduzindo no Android Chrome
+    const vid = document.querySelector("#web-qr-scanner-viewport video") as HTMLVideoElement | null;
+    if (vid && vid.paused) {
+      vid.play().catch(() => {});
+    }
   }
 
   return (

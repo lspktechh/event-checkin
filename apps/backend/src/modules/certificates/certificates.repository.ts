@@ -108,6 +108,8 @@ export function listParticipantsWithCertificate(eventId: string) {
     select: {
       id: true,
       name: true,
+      // Para casar com a avaliação pós-evento (ver certificate-por-avaliacao.ts).
+      email: true,
       certificates: {
         where: { eventId },
         select: {

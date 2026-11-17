@@ -27,6 +27,9 @@ import { releasesRoutes } from "./modules/releases/releases.routes.js";
 import { batchesRoutes } from "./modules/batches/batches.routes.js";
 import { scheduleRoutes } from "./modules/schedule/schedule.routes.js";
 import { handsOnRoutes } from "./modules/hands-on/hands-on.routes.js";
+import { emailVerificationRoutes } from "./modules/email-verification/email-verification.routes.js";
+import { raffleRoutes } from "./modules/raffle/raffle.routes.js";
+import { evaluationsRoutes } from "./modules/evaluations/evaluations.routes.js";
 
 // Versão da API — usada pelo app do terminal para verificar compatibilidade
 // (seção 27 da especificação). Incrementar em mudanças que quebrem contrato.
@@ -57,17 +60,23 @@ export function buildApp() {
       // qualquer *.vercel.app evita ter que atualizar CORS_ORIGINS a cada
       // deploy novo do portal do participante.
       const isVercelPreview = !!origin && /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin);
+      const isLspkEventos = !!origin && /^https?:\/\/(www\.)?([a-z0-9-]+\.)?lspkeventos\.com\.br$/.test(origin);
       const isSslip = !!origin && /^https:\/\/[a-z0-9.-]+\.sslip\.io$/.test(origin);
       const isSuperInteligencia = !!origin && /^https:\/\/(www\.)?superinteligencia\.tec\.br$/.test(origin);
       const isGithubPages = !!origin && /^https:\/\/[a-z0-9-]+\.github\.io$/.test(origin);
+      const isTryCloudflare = !!origin && /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin);
+      const isLhrLife = !!origin && /^https:\/\/[a-z0-9-]+\.lhr\.life$/.test(origin);
       if (
         !origin ||
         ALLOWED_ORIGINS.length === 0 ||
         ALLOWED_ORIGINS.includes(origin) ||
         isVercelPreview ||
+        isLspkEventos ||
         isSslip ||
         isSuperInteligencia ||
-        isGithubPages
+        isGithubPages ||
+        isTryCloudflare ||
+        isLhrLife
       ) {
         callback(null, true);
       } else {
@@ -119,6 +128,9 @@ export function buildApp() {
   app.register(batchesRoutes);
   app.register(scheduleRoutes);
   app.register(handsOnRoutes);
+  app.register(emailVerificationRoutes);
+  app.register(raffleRoutes);
+  app.register(evaluationsRoutes);
 
   return app;
 }

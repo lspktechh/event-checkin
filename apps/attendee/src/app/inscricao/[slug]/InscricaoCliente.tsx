@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { loginAttendee } from "@/lib/api";
-import estilos from "./inscricao.module.css";
+import { loginAttendee, verifyEmail } from "@/lib/api";
+import { PortalShell } from "@/components/portal/PortalShell";
+import { CalendarIcon, ClockIcon, MapPinIcon, CheckCircleIcon } from "@/components/Icons";
+import estilos from "@/components/portal/portal.module.css";
 
 /**
  * Página pública de inscrição.
@@ -21,10 +24,12 @@ const VERSAO_DO_TERMO = "1.0";
 interface Evento {
   id: string;
   name: string;
+  description: string | null;
   location: string | null;
   startDate: string;
   endDate: string;
   registrationsOpen: boolean;
+  registrationInPortal?: boolean;
   siteContent: Conteudo | null;
 }
 
@@ -34,6 +39,18 @@ interface Tema {
   primariaClara?: string;
   acento?: string;
   gradiente?: string[];
+}
+
+interface RegistrationFormConfig {
+  fields?: {
+    name?: boolean;
+    email?: boolean;
+    cpf?: boolean;
+    phone?: boolean;
+  };
+  customTitle?: string | null;
+  customDescription?: string | null;
+  bannerUrl?: string | null;
 }
 
 interface Conteudo {
@@ -47,6 +64,9 @@ interface Conteudo {
   destaques?: { titulo: string; texto: string }[];
   /** Inscrição em equipe (ex.: maratonas de programação). Ausente = individual. */
   equipe?: { tamanho: number };
+  bannerUrl?: string | null;
+  imageUrl?: string | null;
+  registrationForm?: RegistrationFormConfig;
 }
 
 /** Máscara de CPF, aplicada enquanto digita. */
@@ -96,11 +116,33 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   const [erroDaPagina, setErroDaPagina] = useState<string | null>(null);
 
   const [nome, setNome] = useState("");
-  const [sobrenome, setSobrenome] = useState("");
   const [email, setEmail] = useState("");
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [cpf, setCpf] = useState("");
   const [telefone, setTelefone] = useState("");
   const [aceite, setAceite] = useState(false);
+
+  async function handleEmailBlur() {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailSuggestion(null);
+      setEmailError(null);
+      return;
+    }
+    try {
+      const res = await verifyEmail(trimmed);
+      if (!res.valid) {
+        setEmailSuggestion(res.suggestion || null);
+        setEmailError(res.reason || "E-mail inválido ou inexistente.");
+      } else {
+        setEmailSuggestion(null);
+        setEmailError(null);
+      }
+    } catch {
+      // Ignora erro de rede no blur
+    }
+  }
 
   // Inscrição em equipe (ver Conteudo.equipe): nomeEquipe + o nome de cada
   // integrante ALÉM do líder (que já é a pessoa preenchendo o formulário
@@ -130,6 +172,16 @@ export function InscricaoCliente({ slug }: { slug: string }) {
   const c: Conteudo = evento?.siteContent ?? {};
   const equipeConfig = c.equipe;
 
+  const formFields = c.registrationForm?.fields ?? { name: true, email: true, cpf: true, phone: false };
+  const exigeNome = formFields.name !== false;
+  const exigeEmail = formFields.email !== false;
+  const exigeCpf = formFields.cpf !== false;
+  const exigeTelefone = formFields.phone === true;
+
+  const banner = c.bannerUrl || c.registrationForm?.bannerUrl || c.imageUrl;
+  const tituloExibicao = c.registrationForm?.customTitle || c.heroTitulo || evento?.name || "";
+  const descricaoExibicao = c.registrationForm?.customDescription || c.heroTexto || evento?.description || null;
+
   const dataFormatada = evento
     ? new Date(evento.startDate).toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -139,7 +191,7 @@ export function InscricaoCliente({ slug }: { slug: string }) {
       })
     : "";
 
-  const horaFormatada = evento
+  const horaInicioFormatada = evento
     ? new Date(evento.startDate).toLocaleTimeString("pt-BR", {
         hour: "2-digit",
         minute: "2-digit",
@@ -147,13 +199,38 @@ export function InscricaoCliente({ slug }: { slug: string }) {
       })
     : "";
 
+  const horaFimFormatada = evento?.endDate
+    ? new Date(evento.endDate).toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "America/Sao_Paulo",
+      })
+    : "";
+
+  const horarioFormatado =
+    horaFimFormatada && horaFimFormatada !== horaInicioFormatada
+      ? `${horaInicioFormatada} às ${horaFimFormatada}`
+      : horaInicioFormatada;
+
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
     if (!evento) return;
     setErro(null);
 
-    if (!cpfValido(cpf)) {
+    if (exigeNome && !nome.trim()) {
+      setErro("Informe seu nome completo.");
+      return;
+    }
+    if (exigeEmail && !email.trim()) {
+      setErro("Informe seu e-mail.");
+      return;
+    }
+    if (exigeCpf && !cpfValido(cpf)) {
       setErro("Confira o CPF — os dígitos não batem.");
+      return;
+    }
+    if (exigeTelefone && !telefone.trim()) {
+      setErro("Informe seu número de celular / WhatsApp.");
       return;
     }
     if (!aceite) {
@@ -178,11 +255,9 @@ export function InscricaoCliente({ slug }: { slug: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventId: evento.id,
-          // O backend guarda um nome só; o formulário pede separado
-          // porque é como as pessoas esperam preencher.
-          name: `${nome.trim()} ${sobrenome.trim()}`.replace(/\s+/g, " ").trim(),
+          name: nome.replace(/\s+/g, " ").trim(),
           email: email.trim().toLowerCase(),
-          document: cpf.replace(/\D/g, ""),
+          document: exigeCpf ? cpf.replace(/\D/g, "") : null,
           phone: telefone.replace(/\D/g, "") || null,
           consentVersion: VERSAO_DO_TERMO,
           ...(equipeConfig
@@ -223,129 +298,223 @@ export function InscricaoCliente({ slug }: { slug: string }) {
     }
   }
 
+
   if (carregando) {
     return (
-      <main className={estilos.pagina}>
-        <p className={estilos.aviso}>Carregando…</p>
-      </main>
+      <PortalShell aba="inscricao">
+        <p className={estilos.estado}>Carregando…</p>
+      </PortalShell>
     );
   }
 
   if (erroDaPagina || !evento) {
     return (
-      <main className={estilos.pagina}>
-        <div className={estilos.cartao}>
-          <h1 className={estilos.tituloErro}>Evento não encontrado</h1>
-          <p className={estilos.texto}>{erroDaPagina}</p>
-        </div>
-      </main>
+      <PortalShell aba="inscricao">
+        <section className={estilos.secao}>
+          <h1 className={estilos.titulo}>Inscrições Indisponíveis</h1>
+          <p className={estilos.lead}>
+            Este evento não está disponível para inscrição ou já foi encerrado.
+          </p>
+          <p className={estilos.centro}>
+            <Link href="/inscricao">Ver outras inscrições abertas</Link>
+          </p>
+        </section>
+      </PortalShell>
     );
   }
 
   const isEcohub = slug.toLowerCase().includes("ecohub");
 
+  // Evento que já começou deixa de ser "o próximo".
+  const jaComecou = new Date(evento.startDate).getTime() < Date.now();
+
+  // Linha de apoio sob a data: quem realiza, o certificado e o formato.
+  const detalhes = [
+    c.realizacao?.join(" · "),
+    c.cargaHoraria ?? "Com certificado",
+    equipeConfig ? `Em equipe · ${equipeConfig.tamanho} pessoas` : null,
+  ].filter(Boolean);
+
   return (
-    <main className={estilos.pagina}>
-      <div className={estilos.faixaTopo} aria-hidden="true" />
+    <PortalShell aba="inscricao">
+      <div style={{ marginBottom: "16px" }}>
+        <Link
+          href="/inscricao"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "14px",
+            color: "var(--link)",
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+        >
+          ← Ver todos os eventos
+        </Link>
+      </div>
 
-      <section className={estilos.hero}>
-        {isEcohub && (
-          <div className={estilos.logoEcohub}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/partners/ecohub-rodape.png"
-              alt="Ecohub — ecossistema de inovação"
-              className={estilos.logoImg}
-            />
-          </div>
-        )}
-        <p className={estilos.sobreTitulo}>{c.realizacao?.join(" · ") ?? "Inscrições abertas"}</p>
-        <h1 className={estilos.titulo}>{c.heroTitulo ?? evento.name}</h1>
-        {c.heroSubtitulo && <p className={estilos.subtitulo}>{c.heroSubtitulo}</p>}
-        {c.heroTexto && <p className={estilos.texto}>{c.heroTexto}</p>}
-
-        <ul className={estilos.fatos}>
-          <li>
-            <span className={estilos.fatoRotulo}>Data</span>
-            <strong>
-              {dataFormatada} · {horaFormatada}
-            </strong>
-          </li>
-          <li>
-            <span className={estilos.fatoRotulo}>Local</span>
-            <strong>{c.local ?? evento.location ?? "A confirmar"}</strong>
-          </li>
-          <li>
-            <span className={estilos.fatoRotulo}>Certificado</span>
-            <strong>{c.cargaHoraria ?? "Com certificado"}</strong>
-          </li>
-          {equipeConfig && (
-            <li>
-              <span className={estilos.fatoRotulo}>Formato</span>
-              <strong>Em equipe · {equipeConfig.tamanho} pessoas</strong>
-            </li>
+      <div className={estilos.layoutInscricao}>
+        {/* Painel com detalhes do evento */}
+        <section className={`${estilos.cartaoModerno} ${estilos.painelDetalhes}`}>
+          {banner && (
+            <div className={estilos.bannerHero}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={banner} alt={tituloExibicao} />
+            </div>
           )}
-        </ul>
-      </section>
+          {isEcohub && (
+            <div className={estilos.logoParceiro}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/partners/ecohub-rodape.png"
+                alt="Ecohub — ecossistema de inovação"
+                className={estilos.logoParceiroImg}
+              />
+            </div>
+          )}
 
-      {c.destaques && c.destaques.length > 0 && (
-        <section className={estilos.destaques}>
-          {c.destaques.map((d) => (
-            <article key={d.titulo} className={estilos.destaque}>
-              <h2>{d.titulo}</h2>
-              <p>{d.texto}</p>
-            </article>
-          ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <span className={estilos.badgeAberto}>
+              <span className={estilos.pontoAberto}></span>
+              {jaComecou ? "Inscrições abertas" : "Próximo evento"}
+            </span>
+            <h1 className={estilos.titulo} style={{ marginTop: "4px" }}>{tituloExibicao}</h1>
+            {c.heroSubtitulo && <p className={estilos.subtituloEvento}>{c.heroSubtitulo}</p>}
+          </div>
+
+          <div className={estilos.chipsContainer}>
+            {dataFormatada && (
+              <span className={estilos.chip} title="Data do evento">
+                <CalendarIcon size={14} color="#3b5bff" />
+                {dataFormatada}
+              </span>
+            )}
+            {horarioFormatado && (
+              <span className={estilos.chip} title="Horário">
+                <ClockIcon size={14} color="#3b5bff" />
+                {horarioFormatado}
+              </span>
+            )}
+            {(c.local || evento.location) && (
+              <span className={estilos.chip} title="Local">
+                <MapPinIcon size={14} color="#3b5bff" />
+                {c.local ?? evento.location}
+              </span>
+            )}
+            <span className={`${estilos.chip} notranslate`} translate="no" title="Certificado">
+              <CheckCircleIcon size={14} color="#10b981" />
+              {c.cargaHoraria ?? "Com certificado"}
+            </span>
+          </div>
+
+          {descricaoExibicao && (
+            <p className={estilos.lead} style={{ margin: "4px 0 0", fontSize: "14px", lineHeight: "1.6" }}>
+              {descricaoExibicao}
+            </p>
+          )}
+
+          {c.destaques && c.destaques.length > 0 && (
+            <div className={estilos.destaques}>
+              {c.destaques.map((d) => (
+                <article key={d.titulo} className={estilos.destaque}>
+                  <h2>{d.titulo}</h2>
+                  <p>{d.texto}</p>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
-      )}
 
-      <section className={estilos.cartao} id="inscricao">
-        <h2 className={estilos.tituloForm}>Faça sua inscrição</h2>
+        {/* Formulário de Inscrição */}
+        <section className={estilos.cartaoModerno}>
+          <div style={{ marginBottom: "20px" }}>
+            <h2
+              className="notranslate"
+              translate="no"
+              style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 4px", color: "var(--tinta)" }}
+            >
+              Formulário de Inscrição
+            </h2>
+            <p className={estilos.lead} style={{ fontSize: "14px", margin: 0 }}>
+              Preencha seus dados para receber o QR Code de acesso e certificado.
+            </p>
+          </div>
 
-        {!evento.registrationsOpen ? (
-          <p className={estilos.fechado}>
-            As inscrições para este evento estão encerradas.
-          </p>
-        ) : (
-          <form onSubmit={enviar} className={estilos.form} noValidate>
-            <div className={estilos.dupla}>
+          {(!evento.registrationsOpen || evento.registrationInPortal === false) ? (
+            <div style={{ textAlign: "center", padding: "28px 16px", background: "rgba(255,255,255,0.02)", borderRadius: "14px", border: "1px solid var(--linha)" }}>
+              <p className={estilos.fechado} style={{ fontSize: "15px", fontWeight: 600, margin: "0 0 10px" }}>
+                As inscrições para este evento estão encerradas.
+              </p>
+              <p className={estilos.lead} style={{ fontSize: "14px", margin: "0 0 18px" }}>
+                Novas inscrições não estão sendo aceitas no momento.
+              </p>
+              <Link href="/" className={estilos.botao} style={{ display: "inline-flex", textDecoration: "none", width: "auto", padding: "0 20px" }}>
+                Já é inscrito? Acesse seu QR Code
+              </Link>
+            </div>
+          ) : (
+            <form onSubmit={enviar} className={estilos.form} noValidate id="inscricao">
+            {exigeNome && (
               <label className={estilos.campo}>
-                Nome
+                Nome completo
                 <input
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   required
-                  autoComplete="given-name"
-                  placeholder="Maria"
+                  autoComplete="name"
+                  placeholder="Seu nome completo"
                 />
+                <small>O nome sairá exatamente como você escrever no certificado.</small>
               </label>
+            )}
+
+            {exigeEmail && (
               <label className={estilos.campo}>
-                Sobrenome
+                E-mail
                 <input
-                  value={sobrenome}
-                  onChange={(e) => setSobrenome(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailError || emailSuggestion) {
+                      setEmailError(null);
+                      setEmailSuggestion(null);
+                    }
+                  }}
+                  onBlur={handleEmailBlur}
                   required
-                  autoComplete="family-name"
-                  placeholder="Souza"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="seu@email.com"
                 />
+                <small>É por ele que você acessa seu QR Code e o certificado.</small>
+                {emailSuggestion && (
+                  <div className={estilos.sugestao}>
+                    <span>
+                      Você quis dizer <strong>{emailSuggestion}</strong>?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail(emailSuggestion);
+                        setEmailSuggestion(null);
+                        setEmailError(null);
+                      }}
+                    >
+                      Corrigir
+                    </button>
+                  </div>
+                )}
+                {emailError && !emailSuggestion && (
+                  <span role="alert" className={estilos.erroCampo}>
+                    {emailError}
+                  </span>
+                )}
               </label>
-            </div>
+            )}
 
-            <label className={estilos.campo}>
-              E-mail
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                inputMode="email"
-                placeholder="maria@exemplo.com"
-              />
-              <small>É por ele que você acessa seu QR Code e o certificado.</small>
-            </label>
-
-            <div className={estilos.dupla}>
+            {exigeCpf && (
               <label className={estilos.campo}>
                 CPF
                 <input
@@ -356,17 +525,20 @@ export function InscricaoCliente({ slug }: { slug: string }) {
                   placeholder="000.000.000-00"
                 />
               </label>
+            )}
+
+            {exigeTelefone && (
               <label className={estilos.campo}>
-                Telefone
+                Celular / WhatsApp
                 <input
                   value={telefone}
                   onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
                   inputMode="tel"
                   autoComplete="tel"
-                  placeholder="(41) 90000-0000"
+                  placeholder="(00) 00000-0000"
                 />
               </label>
-            </div>
+            )}
 
             {equipeConfig && (
               <>
@@ -426,20 +598,23 @@ export function InscricaoCliente({ slug }: { slug: string }) {
               </span>
             </label>
 
-            {erro && <p className={estilos.erro}>{erro}</p>}
+            {erro && (
+              <p role="alert" className={estilos.erro}>
+                {erro}
+              </p>
+            )}
 
-            <button type="submit" className={estilos.botao} disabled={enviando}>
+            <button type="submit" className={`${estilos.botao} ${estilos.espaco}`} disabled={enviando}>
               {enviando ? "Enviando…" : "Confirmar inscrição"}
             </button>
 
-            <p className={estilos.rodapeForm}>
-              Já se inscreveu? <a href="/">Acesse seu QR Code</a>.
+            <p className={estilos.centro}>
+              Já se inscreveu? <Link href="/">Acesse seu QR Code</Link>
             </p>
           </form>
         )}
-      </section>
-
-      <div className={estilos.faixaRodape} aria-hidden="true" />
-    </main>
+        </section>
+      </div>
+    </PortalShell>
   );
 }

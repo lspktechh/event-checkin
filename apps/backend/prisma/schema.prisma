@@ -231,6 +231,22 @@ model Event {
   /// Ligado apenas no COPOL (ver migration add_multi_day_checkin).
   multiDayCheckIn Boolean @default(false)
 
+  /// Mostrar este evento no site LSPK Eventos (apps/attendee), na aba
+  /// "Realizados" — que lista só eventos Encerrados E marcados aqui. Separado
+  /// de `visibility` de propósito: aquela decide o que aparece nos sites
+  /// do COPOL/institucional, e tornar um evento "Público" só para ele
+  /// constar no portal o faria disputar o lugar de destaque nesses sites.
+  /// Padrão falso: aplicar a migração não divulga evento nenhum.
+  showInPortal Boolean @default(false)
+
+  /// Inscrição pelo site LSPK Eventos (apps/attendee): o evento aparece na aba
+  /// "Inscrição" e o formulário do site aceita inscrições dele. Independente de
+  /// `showInPortal` (que é a aba "Realizados") e de `visibility`.
+  /// Padrão falso para evento novo — quem liga é o organizador, no painel. A
+  /// migração liga nos eventos Ativos com endereço, que já apareciam na aba
+  /// antes desta opção existir: aplicá-la não tira ninguém do ar.
+  registrationInPortal Boolean @default(false)
+
   siteContent Json?
 
   // Configuração do certificado/comprovante deste evento — carga horária,
@@ -279,6 +295,8 @@ model Event {
   batches              EventBatch[]
   scheduleItems        EventScheduleItem[]
   handsOnRegistrations HandsOnRegistration[]
+  raffleEntries        RaffleEntry[]
+  raffleDraws          RaffleDraw[]
 
   @@map("events")
 }
@@ -934,3 +952,41 @@ model HandsOnRegistration {
   @@map("hands_on_registrations")
 }
 
+
+/// Número da sorte gerado quando alguém escaneia o QR Code da aba "Sorteios".
+///
+/// Não guarda nome nem dado pessoal: no evento a presença já é confirmada
+/// pelo credenciamento, e aqui a pessoa só recebe um número aleatório de 4
+/// dígitos, único no evento. `deviceKey` é um identificador aleatório criado
+/// no celular e guardado no navegador: o mesmo aparelho escaneando de novo
+/// recebe o mesmo número, em vez de acumular vários.
+model RaffleEntry {
+  id        String       @id @default(uuid())
+  eventId   String
+  event     Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  number    Int
+  deviceKey String       @db.VarChar(64)
+  createdAt DateTime     @default(now())
+  draws     RaffleDraw[]
+
+  @@unique([eventId, number])
+  @@unique([eventId, deviceKey])
+  @@index([eventId, createdAt])
+  @@map("raffle_entries")
+}
+
+/// Um número sorteado. Guarda uma cópia do número para o histórico
+/// continuar legível mesmo que o cadastro seja removido depois.
+model RaffleDraw {
+  id      String      @id @default(uuid())
+  eventId String
+  event   Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  entryId String
+  entry   RaffleEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  number  Int
+  drawnBy String?     @db.VarChar(200)
+  drawnAt DateTime    @default(now())
+
+  @@index([eventId, drawnAt])
+  @@map("raffle_draws")
+}

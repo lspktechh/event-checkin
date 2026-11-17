@@ -56,6 +56,10 @@ export const updateEventConfigSchema = z.object({
   timezone: z.string().trim().min(1).max(64).optional(),
   language: z.enum(["pt-BR", "en-US", "es-ES"]).optional(),
   visibility: z.enum(["PUBLIC", "PRIVATE"]).optional(),
+  // Aba "Realizados" do site LSPK Eventos. Só vale com o evento Encerrado.
+  showInPortal: z.boolean().optional(),
+  // Aba "Inscrição" do site LSPK Eventos: lista o evento e aceita inscrição.
+  registrationInPortal: z.boolean().optional(),
 });
 
 export const moduleParamsSchema = z.object({

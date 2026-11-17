@@ -60,6 +60,7 @@ export const updateEventSchema = z.object({
   mpAccessToken: z.string().trim().max(500).nullable().optional(),
   mpPublicKey: z.string().trim().max(500).nullable().optional(),
   mpWebhookSecret: z.string().trim().max(500).nullable().optional(),
+  registrationInPortal: z.boolean().optional(),
 });
 
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;

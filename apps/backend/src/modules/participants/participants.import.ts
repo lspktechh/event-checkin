@@ -1,5 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { ValidationError } from "../../shared/errors.js";
+import { verifyEmail } from "../../shared/email-verifier.js";
 import * as participantsRepository from "./participants.repository.js";
 
 export interface ImportRowResult {
@@ -95,9 +96,17 @@ export async function analyzeImport(eventId: string, csvContent: string): Promis
       rows.push({ ...candidate, status: "invalid", reason: "Nome é obrigatório" });
       continue;
     }
-    if (candidate.email && !EMAIL_REGEX.test(candidate.email)) {
-      rows.push({ ...candidate, status: "invalid", reason: "E-mail inválido" });
-      continue;
+    if (candidate.email) {
+      const emailCheck = await verifyEmail(candidate.email);
+      if (!emailCheck.valid) {
+        rows.push({
+          ...candidate,
+          status: "invalid",
+          reason: emailCheck.reason ?? "E-mail inválido",
+        });
+        continue;
+      }
+      candidate.email = emailCheck.normalized;
     }
 
     const duplicateInFile =

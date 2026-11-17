@@ -11,8 +11,10 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@types/jszip": "^3.4.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
+    "jszip": "^3.10.2",
     "qrcode.react": "^4.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

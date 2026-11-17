@@ -2,7 +2,7 @@ import { prisma } from "../../database/prisma.js";
 import type { CreateEventInput, UpdateEventInput } from "./events.schema.js";
 
 export function createEvent(data: CreateEventInput) {
-  return prisma.event.create({ data });
+  return prisma.event.create({ data: data as any });
 }
 
 export function listEvents() {
@@ -40,12 +40,31 @@ export function listActiveEvents() {
  * de credenciamento precisa da segunda — ele não divulga evento nenhum,
  * só leva quem chegou até ele ao lugar certo.
  *
- * Sem slug fica de fora: sem endereço público não há para onde mandar.
+ * Sem slug fica de fora: sem endereço público não há para onde mandar. E só
+ * entra quem o organizador ligou ("Inscrição pelo site", registrationInPortal):
+ * o portal oferece o que foi escolhido, não tudo o que estiver Ativo.
  */
 export function listEventsWithOpenRegistration() {
   return prisma.event.findMany({
-    where: { status: "ACTIVE", slug: { not: null } },
+    where: { status: "ACTIVE", slug: { not: null }, registrationInPortal: true },
     orderBy: { startDate: "asc" },
+  });
+}
+
+/**
+ * Eventos Encerrados (status CLOSED) que o organizador marcou para o site
+ * (showInPortal), do mais recente para o mais antigo.
+ *
+ * É a lista da aba "Realizados" do portal. O limite existe porque a rota
+ * é pública: sem ele, o número de eventos do sistema decide o tamanho da
+ * resposta.
+ */
+export function listClosedEvents() {
+  return prisma.event.findMany({
+    where: { status: "CLOSED", showInPortal: true },
+    orderBy: { startDate: "desc" },
+    take: 100,
+    select: { slug: true, name: true, location: true, startDate: true, endDate: true },
   });
 }
 
@@ -54,7 +73,7 @@ export function findEventById(eventId: string) {
 }
 
 export function updateEvent(eventId: string, data: UpdateEventInput) {
-  return prisma.event.update({ where: { id: eventId }, data });
+  return prisma.event.update({ where: { id: eventId }, data: data as any });
 }
 
 export function setRegistrationsClosedAt(eventId: string, closedAt: Date | null) {

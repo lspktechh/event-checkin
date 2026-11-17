@@ -88,19 +88,19 @@ export async function checkinsRoutes(app: FastifyInstance) {
   // Check-in via navegador web no Painel Admin (sem necessidade de terminal físico ou APK)
   app.post(
     "/events/:eventId/checkins/admin",
-    { preHandler: requireAnyPermission("participants.edit", "participants.view") },
+    { preHandler: requireAnyPermission("checkin.perform", "participants.edit", "participants.view") },
     async (request, reply) => {
       const { eventId } = checkinEventParamsSchema.parse(request.params);
 
       // Conta restrita a eventos é conta de ACOMPANHAMENTO (ex.: organizador
       // externo que só vê inscritos/participantes/trabalhos): registrar
-      // presença exige participants.edit explícito. Contas sem restrição
-      // seguem a regra acima, de propósito — é a da equipe da porta.
+      // presença exige participants.edit ou checkin.perform explícito.
       const admin = request.admin!;
       if (
         admin.allowedEventIds.length > 0 &&
         !admin.isSystem &&
-        !admin.permissions.has("participants.edit")
+        !admin.permissions.has("participants.edit") &&
+        !admin.permissions.has("checkin.perform")
       ) {
         throw new ForbiddenError("Sua conta é só de acompanhamento — não registra presença.");
       }
@@ -157,7 +157,7 @@ export async function checkinsRoutes(app: FastifyInstance) {
 
   app.get(
     "/events/:eventId/statistics",
-    { preHandler: requirePermission("statistics.view") },
+    { preHandler: requireAnyPermission("statistics.view", "checkin.perform") },
     async (request) => {
       const { eventId } = checkinEventParamsSchema.parse(request.params);
       const stats = await checkinsService.getEventStatistics(eventId);

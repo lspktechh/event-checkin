@@ -137,7 +137,7 @@ export function EmailsTab({ eventId }: { eventId: string }) {
           </label>
 
           <label>
-            Responder para
+            <span>Responder para</span>
             <input
               type="email"
               value={form.replyTo ?? ""}

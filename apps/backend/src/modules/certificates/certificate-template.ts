@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, type RGB } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import type { CertificateLayout } from "./certificate-layout.js";
 import QRCode from "qrcode";
 import { formatEventDateRange, formatEventDateRangeShort } from "../../shared/br-date.js";
@@ -11,6 +12,16 @@ import type { ParagraphSegment } from "./certificate-settings.js";
 // __dirname não existe em ESM — apps/backend roda com "type": "module".
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const ASSETS_DIR = join(currentDir, "..", "..", "..", "assets", "certificates");
+const FONTE_CURSIVA = join(ASSETS_DIR, "fonts", "GreatVibes-Regular.ttf");
+const FONTE_FIGTREE_NOME = join(ASSETS_DIR, "fonts", "Figtree-ExtraBold.ttf");
+const FONTE_FIGTREE_CPF = join(ASSETS_DIR, "fonts", "Figtree-SemiBold.ttf");
+
+/** "12345678901" → "123.456.789-01". Qualquer outra coisa sai como veio. */
+export function formatCpf(documento: string): string {
+  const digitos = documento.replace(/\D/g, "");
+  if (digitos.length !== 11) return documento.trim();
+  return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
+}
 
 export interface CertificateSignatory {
   name: string;
@@ -36,6 +47,8 @@ export async function validateEmbeddableImage(buffer: Buffer, format: "png" | "j
 
 export interface CertificateData {
   participantName: string;
+  /** CPF do participante. Só aparece se o layout tiver a caixa `cpf`. */
+  participantDocument?: string | null;
   eventName: string;
   locationLabel: string;
   eventStartDate: Date;
@@ -333,8 +346,21 @@ export async function renderCertificatePdf(data: CertificateData): Promise<Buffe
 
   // --- Nome do participante ---
   const caixaNome = data.layout.nome;
-  // A fonte segue a arte: serifada no COPOL, sem serifa na Semantix.
-  const fonteDoNome = caixaNome.fonte === "sem-serifa" ? helveticaBold : timesBold;
+  // A fonte segue a arte: serifada no COPOL, sem serifa na Semantix,
+  // cursiva quando a arte já usa letra cursiva nas frases.
+  //
+  // A cursiva é embutida (com subset) só quando pedida: as fontes padrão
+  // do PDF não pesam nada no arquivo, a TTF sim.
+  let fonteDoNome: PDFFont;
+  if (caixaNome.fonte === "cursiva") {
+    pdf.registerFontkit(fontkit);
+    fonteDoNome = await pdf.embedFont(await readFile(FONTE_CURSIVA), { subset: true });
+  } else if (caixaNome.fonte === "figtree") {
+    pdf.registerFontkit(fontkit);
+    fonteDoNome = await pdf.embedFont(await readFile(FONTE_FIGTREE_NOME), { subset: true });
+  } else {
+    fonteDoNome = caixaNome.fonte === "sem-serifa" ? helveticaBold : timesBold;
+  }
   const nameMaxWidthPx = caixaNome.xDireita - caixaNome.xEsquerda;
   const corpoMaximo = toX(caixaNome.tamanhoMaximo ?? 55);
   const nameFontSize = fitFontSize(data.participantName, fonteDoNome, toX(nameMaxWidthPx), corpoMaximo, 16);
@@ -347,8 +373,34 @@ export async function renderCertificatePdf(data: CertificateData): Promise<Buffe
     y: toY(caixaNome.yBase),
     size: nameFontSize,
     font: fonteDoNome,
-    color: primaryColor,
+    // Cor própria do nome, se o modelo definir; senão a de destaque.
+    color: caixaNome.cor ? hexToRgb(caixaNome.cor) : primaryColor,
   });
+
+  // --- CPF do participante (opcional) ---
+  const caixaCpf = data.layout.cpf;
+  if (caixaCpf && data.participantDocument?.trim()) {
+    let fonteDoCpf: PDFFont = helvetica;
+    if (caixaNome.fonte === "figtree") {
+      pdf.registerFontkit(fontkit);
+      fonteDoCpf = await pdf.embedFont(await readFile(FONTE_FIGTREE_CPF), { subset: true });
+    }
+    const textoCpf = `CPF ${formatCpf(data.participantDocument)}`;
+    const corpoCpf = toX(caixaCpf.tamanho);
+    // Com o nome centralizado, o CPF centraliza embaixo dele (no meio da
+    // mesma caixa); alinhado à esquerda, começa no ponto marcado.
+    const xCpf =
+      caixaNome.alinhamento === "esquerda"
+        ? toX(caixaCpf.xEsquerda)
+        : toX((caixaNome.xEsquerda + caixaNome.xDireita) / 2) - fonteDoCpf.widthOfTextAtSize(textoCpf, corpoCpf) / 2;
+    page.drawText(textoCpf, {
+      x: xCpf,
+      y: toY(caixaCpf.yBase),
+      size: corpoCpf,
+      font: fonteDoCpf,
+      color: caixaCpf.cor ? hexToRgb(caixaCpf.cor) : textColor,
+    });
+  }
 
   // --- Parágrafo descritivo (evento/local/data/carga horária dinâmicos) ---
   const workloadWords = numberToWordsPtBr(data.workloadHours);

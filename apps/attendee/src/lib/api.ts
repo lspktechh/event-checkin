@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://137.131.233.254:3000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://painel.lspk.com.br";
 
 export interface ParticipantData {
   id: string;
@@ -368,6 +368,63 @@ export async function adminEditPublicSubmission(
   const data = await res.json();
   if (!res.ok || !data.success) {
     throw new Error(data.error?.message ?? "Falha ao editar trabalho");
+  }
+  return data.data;
+}
+
+export interface EmailVerificationResult {
+  valid: boolean;
+  email: string;
+  normalized: string;
+  domain: string;
+  reason?: string;
+  suggestion?: string;
+  details: {
+    syntax: boolean;
+    disposable: boolean;
+    typo: boolean;
+    hasMx: boolean;
+  };
+}
+
+export async function verifyEmail(email: string, checkMx = true): Promise<EmailVerificationResult> {
+  const res = await fetch(`${API_URL}/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, checkMx }),
+  });
+  const json = await res.json();
+  if (json.success) return json.data;
+  return {
+    valid: false,
+    email,
+    normalized: email,
+    domain: email.split("@")[1] || "",
+    reason: json.error?.message || "E-mail inválido.",
+    details: { syntax: false, disposable: false, typo: false, hasMx: false },
+  };
+}
+
+// --- Validação pública de certificados ---
+
+export interface PublicCertificate {
+  code: string;
+  valid: boolean;
+  revoked: boolean;
+  participantName: string;
+  eventName: string;
+  eventStartDate: string;
+  eventEndDate: string;
+  eventLocation: string | null;
+  workloadHours: number | null;
+  issuedAt: string;
+}
+
+export async function getPublicCertificate(code: string): Promise<PublicCertificate> {
+  const res = await fetch(`${API_URL}/public/certificates/${encodeURIComponent(code)}`);
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data?.error?.message ?? "Certificado não encontrado");
   }
   return data.data;
 }

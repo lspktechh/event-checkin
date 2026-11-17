@@ -14,9 +14,34 @@ export function parseInscriptionNotes(item: api.InscriptionReportItem): any {
 }
 
 /**
- * Identifica se o participante está cadastrado SEM EQUIPE (Banco de Talentos).
+ * Identifica se o evento possui foco em equipes (ex: INOVA SAÚDE).
+ * Eventos como COPOL (Congresso Odontológico) são individuais com Hands On, sem equipes nem banco de talentos.
  */
-export function isParticipantSemEquipe(item: api.InscriptionReportItem): boolean {
+export function isTeamEvent(eventName?: string, eventId?: string): boolean {
+  if (eventId === "e7b5f120-4a81-4993-9c5e-85a265da4168") return true;
+  if (eventId === "f1b36d08-e85d-459b-8606-69119ab05a78") return false;
+  if (!eventName) return false;
+  const lower = eventName.toLowerCase();
+  return lower.includes("inova");
+}
+
+/**
+ * Identifica se o participante está cadastrado SEM EQUIPE (Banco de Talentos).
+ * ATENÇÃO: Banco de Talentos e Equipes pertencem EXCLUSIVAMENTE ao INOVA SAÚDE.
+ * Em eventos individuais como COPOL, participantes não possuem equipe e NUNCA são do banco de talentos.
+ */
+export function isParticipantSemEquipe(
+  item: api.InscriptionReportItem,
+  eventName?: string,
+  eventId?: string
+): boolean {
+  // Se recebemos informações do evento, verifica se é evento de equipes (ex: INOVA SAÚDE)
+  if (eventName || eventId) {
+    if (!isTeamEvent(eventName, eventId)) {
+      return false;
+    }
+  }
+
   // Ignora submissões de trabalho / artigo
   if (item.name?.startsWith("[TRABALHO]") || item.category?.includes("Trabalho")) {
     return false;
@@ -29,7 +54,23 @@ export function isParticipantSemEquipe(item: api.InscriptionReportItem): boolean
   const payload = notes?.payload_completo || notes || {};
   const trilha = payload.trilha || notes?.trilha;
 
-  if (trilha === "sem_ideia") {
+  // Se não foi fornecido eventName/eventId, só consideramos banco de talentos se houver
+  // marcas explícitas do fluxo do Inova Saúde (ex: trilha definida, ficha_prototipo, etc.)
+  if (!eventName && !eventId) {
+    const hasInovaMarkers = Boolean(
+      trilha ||
+      notes?.soloParaSorteio ||
+      payload?.soloParaSorteio ||
+      payload?.ficha_prototipo ||
+      notes?.ficha_prototipo ||
+      payload?.membros_detalhes
+    );
+    if (!hasInovaMarkers) {
+      return false;
+    }
+  }
+
+  if (trilha === "sem_ideia" || notes?.soloParaSorteio || payload?.soloParaSorteio) {
     return true;
   }
 
@@ -62,10 +103,16 @@ export function getCleanWhatsAppPhone(phone?: string | null): string {
 }
 
 /**
- * Gera a mensagem pré-formatada para chamar participantes sem equipe no WhatsApp.
+ * Gera a mensagem pré-formatada para chamar participantes no WhatsApp.
  */
 export function getWhatsAppInviteMessage(item: api.InscriptionReportItem, eventName = "INOVA SAÚDE 2026"): string {
   const firstName = item.name.trim().split(" ")[0] || "Participante";
+  const isTeam = isTeamEvent(eventName);
+
+  if (!isTeam) {
+    return `Olá, ${firstName}! Tudo bem? Aqui é da organização do ${eventName}.\n\nEstamos entrando em contato sobre a sua inscrição no evento. Se tiver alguma dúvida ou precisar de qualquer informação, estamos à disposição!`;
+  }
+
   const notes = parseInscriptionNotes(item);
   const member = notes?.membros_detalhes?.[0] || notes?.payload_completo?.lider;
   const curso = member?.curso?.trim() || item.institution?.trim();
@@ -101,7 +148,8 @@ export function generateInscriptionMarkdown(item: api.InscriptionReportItem, eve
   const payload = notes?.payload_completo || notes || {};
   const member = notes?.membros_detalhes?.[0] || payload.lider || {};
   const ficha = notes?.ficha_prototipo || payload.ficha_prototipo || {};
-  const isSemEquipe = isParticipantSemEquipe(item);
+  const isTeam = isTeamEvent(eventName);
+  const isSemEquipe = isTeam && isParticipantSemEquipe(item, eventName);
   const cleanPhone = getCleanWhatsAppPhone(item.phone || member.telefone);
   const waDirectUrl = cleanPhone ? `https://wa.me/${cleanPhone}` : "";
 
@@ -140,7 +188,15 @@ export function generateInscriptionMarkdown(item: api.InscriptionReportItem, eve
     `**Lote / Categoria:** ${item.category}`,
     `**Valor:** R$ ${item.amount.toFixed(2).replace(".", ",")} (${meioPagamento})`,
     `**Data de Cadastro:** ${new Date(item.createdAt).toLocaleString("pt-BR")}`,
-    `**Situação no Evento:** ${isSemEquipe ? "⚠️ Banco de Talentos Individual (Sem Equipe)" : `👥 Equipe: ${item.teamName || "Equipe Registrada"}`}`,
+  ];
+
+  if (isTeam) {
+    lines.push(
+      `**Situação no Evento:** ${isSemEquipe ? "⚠️ Banco de Talentos Individual (Sem Equipe)" : `👥 Equipe: ${item.teamName || "Equipe Registrada"}`}`
+    );
+  }
+
+  lines.push(
     ``,
     `---`,
     `## 👤 1. DADOS DE CONTATO & IDENTIFICAÇÃO`,
@@ -149,57 +205,67 @@ export function generateInscriptionMarkdown(item: api.InscriptionReportItem, eve
     `- **Telefone:** ${formatPhone(item.phone || member.telefone)}`,
     waDirectUrl ? `- **WhatsApp Direto:** ${waDirectUrl}` : `- **WhatsApp:** Não informado`,
     `- **CPF:** ${formatDocument(item.document || member.cpf)}`,
-    `- **Instituição / Faculdade:** ${item.institution || member.instituicao || "—"}`,
-    `- **Curso / Área:** ${member.curso || item.institution || "—"}`,
-    `- **Vínculo:** ${member.vinculo || "—"}`,
-    ``,
-    `---`,
-    `## 🎯 2. PERFIL NO HACKATHON & HABILIDADES`,
-    `- **Modalidade:** ${isSemEquipe ? "Banco de Talentos Individual (Buscando Equipe)" : "Inscrição com Equipe"}`,
-    `- **Papel de Atuação:** ${member.papel || "Não especificado"}`,
-    `- **Disponibilidade Declarada:** ${disponibilidade.length > 0 ? disponibilidade.join("; ") : "Total / Sem restrição informada"}`,
-    `- **Competências & Habilidades:** ${competencias.length > 0 ? competencias.join(", ") : "Nenhuma competência marcada"}`,
-    ``,
-  ];
+    `- **Instituição / Faculdade:** ${item.institution || member.instituicao || "—"}`
+  );
 
-  if (isSemEquipe) {
-    lines.push(
-      `---`,
-      `## 💡 3. SITUAÇÃO NO BANCO DE TALENTOS`,
-      `- **Status:** Sem equipe definida (Disponível para convocação e alocação)`,
-      `- **Eixo Temático de Preferência:** ${ficha.eixo || payload.definir?.eixo || "Infraestrutura em Saúde Digital"}`,
-      `- **Interesse em Solução:** ${ficha.funcao || "Solução inovadora para a área da saúde"}`,
-      `- **Público / Usuário Alvo:** ${ficha.usuario || "Profissionais e pacientes"}`,
-      `- **Dor ou Problema que Quer Resolver:** ${ficha.dor || "Ineficiência ou sobrecarga no atendimento"}`,
-      `- **Habilidades que Busca em Integrantes:** ${faltaNaEquipe.length > 0 ? faltaNaEquipe.join(", ") : "Aberto a integrar equipes multidisciplinares"}`,
-      `- **Disponível para Convites:** Sim (Aberto para ser contatado via WhatsApp)`
-    );
-  } else {
-    // Equipe formada
-    const teamMembers: string[] = item.teamMembers && item.teamMembers.length > 0
-      ? item.teamMembers
-      : (notes?.membros_detalhes || []).slice(1).map((m: any) => m.nome);
+  if (member.curso || isTeam) {
+    lines.push(`- **Curso / Área:** ${member.curso || item.institution || "—"}`);
+  }
+  if (member.vinculo || isTeam) {
+    lines.push(`- **Vínculo:** ${member.vinculo || "—"}`);
+  }
 
+  if (isTeam) {
     lines.push(
+      ``,
       `---`,
-      `## 👥 3. DADOS DA EQUIPE`,
-      `- **Nome da Equipe:** ${item.teamName || payload.equipeNome || "Não informado"}`,
-      `- **Líder:** ${member.nome || item.name}`,
-      `- **Total de Integrantes:** ${1 + teamMembers.length}`,
-      `- **Demais Integrantes:** ${teamMembers.length > 0 ? teamMembers.join(", ") : "Nenhum adicional cadastrado"}`
+      `## 🎯 2. PERFIL NO HACKATHON & HABILIDADES`,
+      `- **Modalidade:** ${isSemEquipe ? "Banco de Talentos Individual (Buscando Equipe)" : "Inscrição com Equipe"}`,
+      `- **Papel de Atuação:** ${member.papel || "Não especificado"}`,
+      `- **Disponibilidade Declarada:** ${disponibilidade.length > 0 ? disponibilidade.join("; ") : "Total / Sem restrição informada"}`,
+      `- **Competências & Habilidades:** ${competencias.length > 0 ? competencias.join(", ") : "Nenhuma competência marcada"}`,
+      ``
     );
 
-    if (payload.idear?.nome_solucao || ficha.funcao) {
+    if (isSemEquipe) {
       lines.push(
-        ``,
         `---`,
-        `## 🚀 4. PROPOSTA DE PROJETO / SOLUÇÃO`,
-        `- **Nome da Solução:** ${payload.idear?.nome_solucao || "Em definição"}`,
-        `- **Eixo Temático:** ${ficha.eixo || payload.definir?.eixo || "—"}`,
-        `- **Problema / Dor Alvo:** ${ficha.dor || payload.empatizar?.o_que_perde || "—"}`,
-        `- **Público-Alvo:** ${ficha.usuario || payload.empatizar?.quem_vive || "—"}`,
-        `- **Habilidades Faltantes na Equipe:** ${faltaNaEquipe.length > 0 ? faltaNaEquipe.join(", ") : "Equipe completa"}`
+        `## 💡 3. SITUAÇÃO NO BANCO DE TALENTOS`,
+        `- **Status:** Sem equipe definida (Disponível para convocação e alocação)`,
+        `- **Eixo Temático de Preferência:** ${ficha.eixo || payload.definir?.eixo || "Infraestrutura em Saúde Digital"}`,
+        `- **Interesse em Solução:** ${ficha.funcao || "Solução inovadora para a área da saúde"}`,
+        `- **Público / Usuário Alvo:** ${ficha.usuario || "Profissionais e pacientes"}`,
+        `- **Dor ou Problema que Quer Resolver:** ${ficha.dor || "Ineficiência ou sobrecarga no atendimento"}`,
+        `- **Habilidades que Busca em Integrantes:** ${faltaNaEquipe.length > 0 ? faltaNaEquipe.join(", ") : "Aberto a integrar equipes multidisciplinares"}`,
+        `- **Disponível para Convites:** Sim (Aberto para ser contatado via WhatsApp)`
       );
+    } else {
+      // Equipe formada
+      const teamMembers: string[] = item.teamMembers && item.teamMembers.length > 0
+        ? item.teamMembers
+        : (notes?.membros_detalhes || []).slice(1).map((m: any) => m.nome);
+
+      lines.push(
+        `---`,
+        `## 👥 3. DADOS DA EQUIPE`,
+        `- **Nome da Equipe:** ${item.teamName || payload.equipeNome || "Não informado"}`,
+        `- **Líder:** ${member.nome || item.name}`,
+        `- **Total de Integrantes:** ${1 + teamMembers.length}`,
+        `- **Demais Integrantes:** ${teamMembers.length > 0 ? teamMembers.join(", ") : "Nenhum adicional cadastrado"}`
+      );
+
+      if (payload.idear?.nome_solucao || ficha.funcao) {
+        lines.push(
+          ``,
+          `---`,
+          `## 🚀 4. PROPOSTA DE PROJETO / SOLUÇÃO`,
+          `- **Nome da Solução:** ${payload.idear?.nome_solucao || "Em definição"}`,
+          `- **Eixo Temático:** ${ficha.eixo || payload.definir?.eixo || "—"}`,
+          `- **Problema / Dor Alvo:** ${ficha.dor || payload.empatizar?.o_que_perde || "—"}`,
+          `- **Público-Alvo:** ${ficha.usuario || payload.empatizar?.quem_vive || "—"}`,
+          `- **Habilidades Faltantes na Equipe:** ${faltaNaEquipe.length > 0 ? faltaNaEquipe.join(", ") : "Equipe completa"}`
+        );
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
+import { EmailFieldWithFeedback } from "../../components/EmailFieldWithFeedback";
 import {
   AlertIcon,
   CheckIcon,
@@ -1378,16 +1379,15 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                               onChange={(e) => handleUpdateAutor(idx, "name", e.target.value)}
                             />
                           </label>
-                          <label className="field" style={{ margin: 0 }}>
-                            <span style={{ fontSize: 12, fontWeight: 600 }}>E-mail *</span>
-                            <input
-                              type="email"
+                          <div style={{ margin: 0 }}>
+                            <EmailFieldWithFeedback
+                              label="E-mail"
                               required
                               placeholder="email@instituicao.edu.br"
                               value={autor.email}
-                              onChange={(e) => handleUpdateAutor(idx, "email", e.target.value)}
+                              onChange={(val) => handleUpdateAutor(idx, "email", val)}
                             />
-                          </label>
+                          </div>
                           <label className="field" style={{ margin: 0 }}>
                             <span style={{ fontSize: 12, fontWeight: 600 }}>Instituição (Opcional)</span>
                             <input

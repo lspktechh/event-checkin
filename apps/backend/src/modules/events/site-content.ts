@@ -105,7 +105,28 @@ export const siteContentSchema = z.object({
       tamanho: z.number().int().min(2).max(20),
     })
     .optional(),
-});
+
+  // Banner / imagem do evento para a página de inscrição
+  bannerUrl: z.string().trim().max(500000).optional().nullable(),
+  imageUrl: z.string().trim().max(500000).optional().nullable(),
+
+  // Configuração do formulário de inscrição pública no site LSPK Eventos
+  registrationForm: z
+    .object({
+      fields: z
+        .object({
+          name: z.boolean().default(true),
+          email: z.boolean().default(true),
+          cpf: z.boolean().default(true),
+          phone: z.boolean().default(false),
+        })
+        .optional(),
+      customTitle: z.string().trim().max(200).optional().nullable(),
+      customDescription: z.string().trim().max(4000).optional().nullable(),
+      bannerUrl: z.string().trim().max(500000).optional().nullable(),
+    })
+    .optional(),
+}).passthrough();
 
 export type SiteTheme = z.infer<typeof siteThemeSchema>;
 export type SectionType = z.infer<typeof sectionTypeSchema>;

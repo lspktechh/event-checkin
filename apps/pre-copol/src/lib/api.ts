@@ -409,3 +409,25 @@ export function regenerateSubmissionPayment(submissionId: string) {
     method: "POST",
   });
 }
+
+export interface EmailVerificationResult {
+  valid: boolean;
+  email: string;
+  normalized: string;
+  domain: string;
+  reason?: string;
+  suggestion?: string;
+  details: {
+    syntax: boolean;
+    disposable: boolean;
+    typo: boolean;
+    hasMx: boolean;
+  };
+}
+
+export function verifyEmail(email: string, checkMx = true) {
+  return request<EmailVerificationResult>("/verify-email", {
+    method: "POST",
+    body: { email, checkMx },
+  });
+}

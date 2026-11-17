@@ -287,6 +287,19 @@ export interface SiteContent {
   partnersTitle?: string;
   partnersText?: string;
   footerText?: string;
+  bannerUrl?: string | null;
+  imageUrl?: string | null;
+  registrationForm?: {
+    fields?: {
+      name?: boolean;
+      email?: boolean;
+      cpf?: boolean;
+      phone?: boolean;
+    };
+    customTitle?: string | null;
+    customDescription?: string | null;
+    bannerUrl?: string | null;
+  };
 }
 export interface CertificateSignatory {
   name: string;
@@ -329,6 +342,8 @@ export interface EventRecord {
   startDate: string;
   endDate: string;
   status: "ACTIVE" | "CLOSED";
+  slug?: string | null;
+  registrationInPortal?: boolean;
   registrationDeadline: string | null;
   registrationsClosedAt: string | null;
   registrationsOpen: boolean;
@@ -463,9 +478,16 @@ export function createEvent(input: {
 }) {
   return request<EventRecord>("/events", { method: "POST", body: input });
 }
+
+export type UpdateEventInput = Partial<Omit<EventRecord, "registrationDeadline">> & {
+  registrationDeadline?: string | null;
+  registrationInPortal?: boolean;
+  slug?: string | null;
+};
+
 export function updateEvent(
   eventId: string,
-  input: Partial<Omit<EventRecord, "registrationDeadline">> & { registrationDeadline?: string | null }
+  input: UpdateEventInput
 ) {
   return request<EventRecord>(`/events/${eventId}`, { method: "PATCH", body: input });
 }
@@ -474,6 +496,9 @@ export function closeRegistrations(eventId: string) {
 }
 export function reopenRegistrations(eventId: string) {
   return request<EventRecord>(`/events/${eventId}/registrations/reopen`, { method: "POST" });
+}
+export function deleteEvent(eventId: string) {
+  return request<{ id: string; name: string }>(`/events/${eventId}`, { method: "DELETE" });
 }
 
 // --- Participants ---
@@ -843,6 +868,10 @@ export interface EventConfig {
   timezone: string;
   language: string;
   visibility: "PUBLIC" | "PRIVATE";
+  /** Mostrar na aba "Realizados" do site LSPK Eventos (só aparece com o evento Encerrado). */
+  showInPortal: boolean;
+  /** Inscrição pelo site LSPK Eventos: aparece na aba "Inscrição" e o formulário do site aceita o evento. */
+  registrationInPortal: boolean;
   modules: EventModuleInfo[];
 }
 
@@ -851,7 +880,7 @@ export function getEventConfig(eventId: string) {
 }
 export function updateEventConfig(
   eventId: string,
-  body: Partial<Pick<EventConfig, "slug" | "timezone" | "language" | "visibility">>
+  body: Partial<Pick<EventConfig, "slug" | "timezone" | "language" | "visibility" | "showInPortal" | "registrationInPortal">>
 ) {
   return request<EventConfig>(`/events/${eventId}/config`, { method: "PATCH", body });
 }
@@ -1528,6 +1557,85 @@ export function checkInHandsOn(eventId: string, idOrToken: string) {
   );
 }
 
+export interface EmailVerificationResult {
+  valid: boolean;
+  email: string;
+  normalized: string;
+  domain: string;
+  reason?: string;
+  suggestion?: string;
+  details: {
+    syntax: boolean;
+    disposable: boolean;
+    typo: boolean;
+    hasMx: boolean;
+  };
+}
+
+export function verifyEmail(email: string, checkMx = true) {
+  return request<EmailVerificationResult>("/verify-email", {
+    method: "POST",
+    body: { email, checkMx },
+    auth: false,
+  });
+}
 
 
 
+
+
+// --- Sorteios (número aleatório gerado pelo QR Code) ---
+export interface RaffleEntryRecord {
+  id: string;
+  number: number;
+  createdAt: string;
+  wins: number;
+}
+
+export interface RaffleDrawRecord {
+  id: string;
+  entryId: string;
+  number: number;
+  drawnBy: string | null;
+  drawnAt: string;
+}
+
+export interface RaffleState {
+  entries: RaffleEntryRecord[];
+  draws: RaffleDrawRecord[];
+}
+
+export interface RaffleClaim {
+  number: number;
+  createdAt: string;
+  eventName: string;
+  deviceKey: string;
+}
+
+export function getRaffle(eventId: string) {
+  return request<RaffleState>(`/events/${eventId}/raffle`);
+}
+
+export function drawRaffle(eventId: string, excludeWinners: boolean) {
+  return request<RaffleDrawRecord>(`/events/${eventId}/raffle/draw`, {
+    method: "POST",
+    body: { excludeWinners },
+  });
+}
+
+export function undoRaffleDraw(eventId: string, drawId: string) {
+  return request<{ deletedId: string }>(`/events/${eventId}/raffle/draws/${drawId}`, { method: "DELETE" });
+}
+
+export function resetRaffle(eventId: string) {
+  return request<{ reset: true }>(`/events/${eventId}/raffle`, { method: "DELETE" });
+}
+
+/** Público — usado pela página aberta pelo QR Code (sem login). */
+export function claimRaffleNumber(eventId: string, deviceKey: string) {
+  return request<RaffleClaim>(`/public/events/${eventId}/raffle/number`, {
+    method: "POST",
+    body: { deviceKey },
+    auth: false,
+  });
+}

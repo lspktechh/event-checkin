@@ -8,7 +8,7 @@ import { ManualInscriptionModal } from "../../components/ManualInscriptionModal"
 import { EditInscriptionModal } from "../../components/EditInscriptionModal";
 import { PhoneWhatsAppPopover } from "../../components/PhoneWhatsAppPopover";
 import { formatPhone, formatDocument, stripEmoji } from "../../utils/formatters";
-import { isParticipantSemEquipe, generateInscriptionMarkdown, parseInscriptionNotes } from "../../utils/inscriptionMarkdown";
+import { isParticipantSemEquipe, isTeamEvent, generateInscriptionMarkdown, parseInscriptionNotes } from "../../utils/inscriptionMarkdown";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -167,13 +167,21 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
     return getConfirmedDuplicate(item) !== null;
   }
 
+  const isTeam = isTeamEvent(eventName, eventId);
+
+  useEffect(() => {
+    if (!isTeam && statusFilter === "SEM_EQUIPE") {
+      setStatusFilter("ALL");
+    }
+  }, [isTeam, statusFilter]);
+
   const duplicatePendingCount = inscriptions.filter(isDuplicatePending).length;
-  const semEquipeCount = inscriptions.filter(isParticipantSemEquipe).length;
+  const semEquipeCount = isTeam ? inscriptions.filter((i) => isParticipantSemEquipe(i, eventName, eventId)).length : 0;
 
   // Filtros
   const filtered = inscriptions.filter((item) => {
     if (statusFilter === "SEM_EQUIPE") {
-      if (!isParticipantSemEquipe(item)) return false;
+      if (!isTeam || !isParticipantSemEquipe(item, eventName, eventId)) return false;
     } else if (statusFilter === "DUPLICATES") {
       if (!isDuplicatePending(item)) return false;
     } else if (statusFilter !== "ALL" && item.status !== statusFilter) {
@@ -203,11 +211,11 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
       (item.phone && item.phone.toLowerCase().includes(term)) ||
       maskedPhone.includes(term) ||
       (cleanDigits.length > 0 && phoneDigits.includes(cleanDigits)) ||
-      (item.teamName && item.teamName.toLowerCase().includes(term)) ||
-      (item.teamMembers && item.teamMembers.some((m) => m.toLowerCase().includes(term))) ||
+      (isTeam && item.teamName && item.teamName.toLowerCase().includes(term)) ||
+      (isTeam && item.teamMembers && item.teamMembers.some((m) => m.toLowerCase().includes(term))) ||
       curso.includes(term) ||
-      competencias.includes(term) ||
-      (term === "sem equipe" && isParticipantSemEquipe(item))
+      (isTeam && competencias.includes(term)) ||
+      (term === "sem equipe" && isTeam && isParticipantSemEquipe(item, eventName, eventId))
     );
   });
 
@@ -249,8 +257,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
       "E-mail",
       "Telefone",
       "CPF",
-      "Equipe",
-      "Integrantes",
+      ...(isTeam ? ["Equipe", "Integrantes"] : []),
       "Lote",
       "Valor Bruto",
       "Taxa (0,99%)",
@@ -277,8 +284,10 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
         `"${i.email}"`,
         `"${i.phone ? formatPhone(i.phone) : ""}"`,
         `"${i.document ? formatDocument(i.document) : ""}"`,
-        `"${(i.teamName || "").replace(/"/g, '""')}"`,
-        `"${(i.teamMembers || []).join(", ").replace(/"/g, '""')}"`,
+        ...(isTeam ? [
+          `"${(i.teamName || "").replace(/"/g, '""')}"`,
+          `"${(i.teamMembers || []).join(", ").replace(/"/g, '""')}"`,
+        ] : []),
         `"${i.category}"`,
         `"R$ ${i.amount.toFixed(2).replace(".", ",")}"`,
         `"- R$ ${fee.toFixed(2).replace(".", ",")}"`,
@@ -415,7 +424,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
               </button>
             </>
           )}
-          {canEdit && (
+          {canEdit && isTeam && (
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleSortearEquipes}
@@ -524,13 +533,15 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
           onClick={() => setStatusFilter("DUPLICATES")}
         />
         <MetricCard label="Inscrições Canceladas" value={cancelledCount} highlight="danger" onClick={() => setStatusFilter("CANCELLED")} />
-        <MetricCard
-          label="Sem Equipe (Talentos)"
-          value={semEquipeCount}
-          subvalue="Banco individual para equipes"
-          highlight={semEquipeCount > 0 ? "warning" : undefined}
-          onClick={() => setStatusFilter("SEM_EQUIPE")}
-        />
+        {isTeam && (
+          <MetricCard
+            label="Sem Equipe (Talentos)"
+            value={semEquipeCount}
+            subvalue="Banco individual para equipes"
+            highlight={semEquipeCount > 0 ? "warning" : undefined}
+            onClick={() => setStatusFilter("SEM_EQUIPE")}
+          />
+        )}
         <MetricCard
           label="Receita Confirmada (Bruta)"
           value={`R$ ${confirmedRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
@@ -576,20 +587,22 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
             <FilterButton active={statusFilter === "PENDING"} onClick={() => setStatusFilter("PENDING")}>
               Pendentes ({pendingCount})
             </FilterButton>
-            <FilterButton
-              active={statusFilter === "SEM_EQUIPE"}
-              onClick={() => setStatusFilter("SEM_EQUIPE")}
-              title="Participantes inscritos no Banco de Talentos sem equipe definida"
-              style={
-                statusFilter === "SEM_EQUIPE"
-                  ? { background: "rgba(234, 179, 8, 0.2)", color: "#ffb340", borderColor: "#ffb340" }
-                  : semEquipeCount > 0
-                    ? { color: "#ffb340", borderColor: "rgba(234, 179, 8, 0.35)" }
-                    : undefined
-              }
-            >
-              ⚠️ Sem Equipe ({semEquipeCount})
-            </FilterButton>
+            {isTeam && (
+              <FilterButton
+                active={statusFilter === "SEM_EQUIPE"}
+                onClick={() => setStatusFilter("SEM_EQUIPE")}
+                title="Participantes inscritos no Banco de Talentos sem equipe definida"
+                style={
+                  statusFilter === "SEM_EQUIPE"
+                    ? { background: "rgba(234, 179, 8, 0.2)", color: "#ffb340", borderColor: "#ffb340" }
+                    : semEquipeCount > 0
+                      ? { color: "#ffb340", borderColor: "rgba(234, 179, 8, 0.35)" }
+                      : undefined
+                }
+              >
+                ⚠️ Sem Equipe ({semEquipeCount})
+              </FilterButton>
+            )}
             <FilterButton
               active={statusFilter === "DUPLICATES"}
               onClick={() => setStatusFilter("DUPLICATES")}
@@ -765,7 +778,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
         </div>
       )}
 
-      {statusFilter === "SEM_EQUIPE" && (
+      {isTeam && statusFilter === "SEM_EQUIPE" && (
         <div
           style={{
             background: "rgba(234, 179, 8, 0.12)",
@@ -824,7 +837,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>{item.name}</span>
-                      {isParticipantSemEquipe(item) && (
+                      {isTeam && isParticipantSemEquipe(item, eventName, eventId) && (
                         <span
                           className="badge"
                           style={{
@@ -883,6 +896,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                         <PhoneWhatsAppPopover
                           item={item}
                           eventName={eventName}
+                          isTeamEvent={isTeam}
                           compact
                           onNotify={(msg) => setSuccessMessage(msg)}
                         />
@@ -894,7 +908,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                       )}
                     </div>
 
-                    {item.teamName && (
+                    {isTeam && item.teamName && (
                       <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
                         <div>
                           <span
@@ -1127,7 +1141,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{item.name}</h4>
-                    {isParticipantSemEquipe(item) && (
+                    {isTeam && isParticipantSemEquipe(item, eventName, eventId) && (
                       <span
                         className="badge"
                         style={{
@@ -1261,6 +1275,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                     <PhoneWhatsAppPopover
                       item={item}
                       eventName={eventName}
+                      isTeamEvent={isTeam}
                       onNotify={(msg) => setSuccessMessage(msg)}
                     />
                   </div>
@@ -1289,7 +1304,7 @@ export function InscriptionsReportTab({ eventId, eventName }: InscriptionsReport
                   <span className="muted">Data da Inscrição:</span>
                   <span>{new Date(item.createdAt).toLocaleDateString("pt-BR")}</span>
                 </div>
-                {item.teamName && (
+                {isTeam && item.teamName && (
                   <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid var(--border)" }}>
                     <div style={{ fontWeight: 700, color: "#30d158", fontSize: 12 }}>
                       <UsersIcon size="1.1em" /> Equipe: {item.teamName}

@@ -1,5 +1,6 @@
 import { handsOnRepository, type CreateHandsOnData } from "./hands-on.repository.js";
 import { generateQrToken } from "../../shared/tokens.js";
+import { assertValidEmail } from "../../shared/email-verifier.js";
 import { NotFoundError, ConflictError, BadRequestError, ForbiddenError } from "../../shared/errors.js";
 import { mercadoPagoClient } from "../../lib/mercadopago/mercadopago.client.js";
 import { prisma } from "../../database/prisma.js";
@@ -227,7 +228,8 @@ export const handsOnService = {
       );
     }
 
-    // 3. Verifica se a pessoa já possui inscrição neste workshop
+    // 3. Valida e-mail de entrega e registros de duplicação
+    input.email = await assertValidEmail(input.email, { fieldName: "E-mail do participante" });
     const cleanDoc = input.document.replace(/\D/g, "");
     const relatedIds = getRelatedHandsOnIds(input.handsOnId);
 
@@ -835,10 +837,17 @@ export const handsOnService = {
     // `id` chega pelo painel (botão "Fazer Check-in", com permissão de admin):
     // é uma decisão de uma pessoa da equipe. `qrToken` é o que o participante
     // APRESENTA na porta.
-    let reg = await handsOnRepository.findById(idOrToken);
+    const raw = idOrToken.trim();
+    let reg = await handsOnRepository.findById(raw);
     const veioPorId = !!reg;
     if (!reg) {
-      reg = await handsOnRepository.findByQrToken(idOrToken);
+      reg = await handsOnRepository.findByQrToken(raw);
+    }
+    // O site do Hands On mostra `HO-<id da inscrição>` quando não tem o token
+    // em mãos. Esse QR também é o que a pessoa apresenta na porta, então vale
+    // como token (exige pagamento confirmado), não como decisão da equipe.
+    if (!reg && /^HO-[0-9a-f-]{36}$/i.test(raw)) {
+      reg = await handsOnRepository.findById(raw.slice(3));
     }
     if (!reg) throw new NotFoundError("Inscrição de Hands On não encontrada");
 
@@ -900,10 +909,12 @@ export const handsOnService = {
     eventId: string,
     input: Omit<CreateHandsOnData, "eventId" | "qrToken">
   ) {
+    const validatedEmail = await assertValidEmail(input.email, { fieldName: "E-mail do participante" });
     const qrToken = `HO-${generateQrToken()}`;
     const status = input.status || "CONFIRMED";
     const created = await handsOnRepository.create({
       ...input,
+      email: validatedEmail,
       eventId,
       qrToken,
       status,

@@ -25,11 +25,11 @@ const envSchema = z.object({
   // só a implementação de CertificateStorage.
   STORAGE_DIR: z.string().min(1).default("./storage"),
 
-  // Base pública do portal pre-copol, usada só para montar a URL de
+  // Base pública do portal LSPK Eventos, usada só para montar a URL de
   // validação embutida no QR Code do certificado (ex.:
-  // "https://precopol.lspktecnology.com.br/certificados"). Sem barra no
+  // "https://lspkeventos.com.br/certificados"). Sem barra no
   // final.
-  CERTIFICATE_VALIDATION_BASE_URL: z.string().min(1).default("http://localhost:3002/certificados"),
+  CERTIFICATE_VALIDATION_BASE_URL: z.string().min(1).default("https://lspkeventos.com.br/certificados"),
 
   // Integração PicPay E-Commerce
   PICPAY_TOKEN: z.string().optional().default(""),
@@ -73,7 +73,7 @@ const envSchema = z.object({
 
   // Envio de e-mails via Resend
   RESEND_API_KEY: z.string().optional().default(""),
-  EMAIL_FROM: z.string().default("COPOL 2026 <contato@copol2026.com.br>"),
+  EMAIL_FROM: z.string().default("LSPK Eventos <lspkeventos@gmail.com>"),
 
   // Envio de e-mails via SMTP (Gmail, etc.)
   SMTP_HOST: z.string().optional().default("smtp.gmail.com"),
@@ -84,6 +84,7 @@ const envSchema = z.object({
 
   // URLs públicas do sistema
   PRE_COPOL_BASE_URL: z.string().default("https://copol2026.com.br"),
+  PORTAL_BASE_URL: z.string().default("https://lspkeventos.com.br"),
   BACKEND_PUBLIC_URL: z.string().default("http://137.131.233.254:3000"),
 });
 
