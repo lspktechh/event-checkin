@@ -466,6 +466,15 @@ export function certificateTemplateImageUrl(templateId: string): string {
 export function listEvents() {
   return request<EventRecord[]>("/events");
 }
+
+/** Relatório geral dos eventos escolhidos: números por evento, totais e o
+ * Markdown pronto para baixar. */
+export function getEventsSummary(eventIds: string[]) {
+  return request<{ generatedAt: string; markdown: string }>("/reports/events-summary", {
+    method: "POST",
+    body: { eventIds },
+  });
+}
 export function getEvent(eventId: string) {
   return request<EventRecord>(`/events/${eventId}`);
 }

@@ -29,6 +29,7 @@ import { scheduleRoutes } from "./modules/schedule/schedule.routes.js";
 import { handsOnRoutes } from "./modules/hands-on/hands-on.routes.js";
 import { emailVerificationRoutes } from "./modules/email-verification/email-verification.routes.js";
 import { raffleRoutes } from "./modules/raffle/raffle.routes.js";
+import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { evaluationsRoutes } from "./modules/evaluations/evaluations.routes.js";
 
 // Versão da API — usada pelo app do terminal para verificar compatibilidade
@@ -130,6 +131,7 @@ export function buildApp() {
   app.register(handsOnRoutes);
   app.register(emailVerificationRoutes);
   app.register(raffleRoutes);
+  app.register(reportsRoutes);
   app.register(evaluationsRoutes);
 
   return app;
