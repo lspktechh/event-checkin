@@ -10,16 +10,18 @@ export interface CreateCheckInParams {
   localCheckInId?: string | null;
   /** Dia do evento (1, 2, 3…); 0 em evento sem credenciamento por dia. */
   dayIndex: number;
+  /** Período do dia (1 = Manhã, 2 = Noite); 0 em evento sem credenciamento por dia. */
+  period: number;
 }
 
 export function createCheckIn(params: CreateCheckInParams) {
   return prisma.checkIn.create({ data: params });
 }
 
-/** A presença de um participante NAQUELE dia (dayIndex 0 = evento sem dia). */
-export function findByEventParticipantAndDay(eventId: string, participantId: string, dayIndex: number) {
+/** A presença de um participante NAQUELE dia e período (0/0 = evento sem dia). */
+export function findByEventParticipantDayAndPeriod(eventId: string, participantId: string, dayIndex: number, period: number) {
   return prisma.checkIn.findUnique({
-    where: { eventId_participantId_dayIndex: { eventId, participantId, dayIndex } },
+    where: { eventId_participantId_dayIndex_period: { eventId, participantId, dayIndex, period } },
   });
 }
 
@@ -37,10 +39,20 @@ export async function countPresentParticipants(eventId: string): Promise<number>
   return rows.length;
 }
 
-/** Presenças por dia do evento (dayIndex → quantas pessoas). */
+/** Pessoas presentes em cada dia do evento (dayIndex → quantas pessoas). A
+ * mesma pessoa tem até uma linha por período; aqui ela conta uma vez no dia. */
 export async function countByDay(eventId: string): Promise<Map<number, number>> {
-  const rows = await prisma.checkIn.groupBy({ by: ["dayIndex"], where: { eventId }, _count: { _all: true } });
-  return new Map(rows.map((r) => [r.dayIndex, r._count._all]));
+  const rows = await prisma.checkIn.groupBy({ by: ["dayIndex", "participantId"], where: { eventId } });
+  const perDay = new Map<number, number>();
+  for (const r of rows) perDay.set(r.dayIndex, (perDay.get(r.dayIndex) ?? 0) + 1);
+  return perDay;
+}
+
+/** Pessoas presentes em cada período de cada dia (chave "dia:período"). Há no
+ * máximo uma linha por pessoa em cada um, então contar linhas conta pessoas. */
+export async function countByDayAndPeriod(eventId: string): Promise<Map<string, number>> {
+  const rows = await prisma.checkIn.groupBy({ by: ["dayIndex", "period"], where: { eventId }, _count: { _all: true } });
+  return new Map(rows.map((r) => [`${r.dayIndex}:${r.period}`, r._count._all]));
 }
 
 export function countByEventAndTerminal(eventId: string) {

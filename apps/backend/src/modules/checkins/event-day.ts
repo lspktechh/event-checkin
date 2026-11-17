@@ -68,6 +68,49 @@ export function eventPeriodLabel(period: EventPeriod): string {
   return `${dm(localDate(period.startDate, period.timezone))} a ${dm(localDate(period.endDate, period.timezone))}`;
 }
 
+/**
+ * Períodos de credenciamento de cada dia (COPOL): Manhã a partir das 07:30 e
+ * Noite a partir das 18:00. Cada um é um credenciamento independente — o mesmo
+ * QR entra uma vez em cada.
+ *
+ * O período vem da hora LOCAL (fuso do evento) da leitura: vale o último que já
+ * começou. Antes das 07:30 ainda é Manhã (ninguém é barrado por chegar cedo) e a
+ * Noite vai até a meia-noite, quando o dia seguinte começa na Manhã.
+ *
+ * Os horários também estão na migração que classificou os check-ins antigos
+ * (add_checkin_period); mudar aqui exige atualizar lá.
+ */
+export interface EventPeriodInfo {
+  /** 1 = Manhã, 2 = Noite. (0 é "sem período", dos eventos comuns.) */
+  index: number;
+  label: string;
+  /** Horário de início, "HH:MM", no fuso do evento. */
+  startsAt: string;
+}
+
+export const CHECKIN_PERIODS: readonly EventPeriodInfo[] = [
+  { index: 1, label: "Manhã", startsAt: "07:30" },
+  { index: 2, label: "Noite", startsAt: "18:00" },
+];
+
+const minutesOfDay = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/** Período em que `instant` cai, pela hora local no fuso do evento. */
+export function resolveEventPeriod(instant: Date, timeZone: string): EventPeriodInfo {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(instant);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  const now = hour * 60 + minute;
+  // O último período que já começou; antes do primeiro, vale o primeiro.
+  const started = CHECKIN_PERIODS.filter((p) => minutesOfDay(p.startsAt) <= now);
+  return started.length > 0 ? started[started.length - 1] : CHECKIN_PERIODS[0];
+}
+
+/** O dia do evento da leitura, já com o período em que ela caiu. */
+export interface EventDayWithPeriod extends EventDay {
+  period: EventPeriodInfo;
+}
+
 /** Leitura fora dos dias do evento (antes do primeiro ou depois do último).
  * Em evento por dia não existe dia 0 nem dia 4: recusa, em vez de gravar a
  * presença num dia que não é o dela. */
