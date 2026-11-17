@@ -22,6 +22,47 @@ const ACTION_LABELS: Record<string, string> = {
   "participant.import": "Importou participantes",
   "terminal.create": "Criou terminal",
   "terminal.delete": "Excluiu terminal",
+  "event.configure": "Configurou o evento",
+  "event.delete": "Excluiu evento",
+  "inscription.cancel": "Cancelou inscrição",
+  "inscription.confirm": "Confirmou inscrição",
+  "inscription.create_manual": "Lançou inscrição manual",
+  "inscription.delete": "Excluiu inscrição",
+  "inscription.import": "Importou inscritos",
+  "inscription.sortear_equipes": "Sorteou equipes",
+  "inscription.update": "Editou inscrição",
+  "certificate.generated": "Gerou certificado",
+  "certificate.released": "Liberou certificados",
+  "certificate.manually_released": "Liberou certificado manualmente",
+  "certificate.manual_release_undone": "Cancelou a liberação manual de certificado",
+  "certificate.revoked": "Revogou certificado",
+  "certificate.reinstated": "Restaurou certificado",
+  "certificate.emailed": "Enviou certificado por e-mail",
+  "certificate.emailed_bulk": "Enviou certificados em lote",
+  "certificate.downloaded_by_admin": "Baixou certificado (administração)",
+  "certificate.preview_generated": "Gerou prévia de certificado",
+  "certificate.signature_image_uploaded": "Enviou imagem de assinatura",
+  "certificate_template.created": "Criou modelo de certificado",
+  "certificate_template.updated": "Editou modelo de certificado",
+  "certificate_template.deleted": "Excluiu modelo de certificado",
+  "attendance_proof.emailed": "Enviou comprovante de presença por e-mail",
+  "attendance_proof.emailed_bulk": "Enviou comprovantes de presença em lote",
+  "submissions.admin_edit": "Editou trabalho (administração)",
+  "submissions.create": "Criou trabalho",
+  "submissions.submit": "Submeteu trabalho",
+  "submissions.resubmit": "Reenviou trabalho",
+  "submissions.withdraw": "Retirou trabalho",
+  "submissions.decide": "Decidiu sobre trabalho",
+  "submissions.delete": "Excluiu trabalho",
+  "submissions.file_upload": "Enviou arquivo de trabalho",
+  "submissions.file_remove": "Removeu arquivo de trabalho",
+  "submissions.send_receipt": "Enviou comprovante de trabalho",
+  "submissions.settings_update": "Alterou as configurações da chamada de trabalhos",
+  "submissions.modality_create": "Criou modalidade",
+  "submissions.modality_delete": "Excluiu modalidade",
+  "submissions.topic_create": "Criou área temática",
+  "submissions.topic_delete": "Excluiu área temática",
+  "team_work.upload_file": "Enviou arquivo de trabalho da equipe",
 };
 
 export function AuditPage() {
@@ -40,7 +81,7 @@ export function AuditPage() {
       <div>
         <h1 style={{ margin: 0 }}>Auditoria</h1>
         <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
-          Histórico de ações administrativas sensíveis (usuários, perfis, eventos).
+          Quem fez o quê e quando — só das pessoas dos perfis com a auditoria ligada (tela Perfis).
         </p>
       </div>
 

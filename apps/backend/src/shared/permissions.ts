@@ -67,6 +67,9 @@ export const PERMISSIONS: PermissionDef[] = [
   // retirar da chamada) é diferente de organizar o catálogo.
   { key: "submissions.manage", description: "Editar, retirar e decidir sobre trabalhos submetidos", category: "Submissão" },
 
+  // Auditoria
+  { key: "audit.view", description: "Ver o registro de auditoria (quem fez o quê)", category: "Auditoria" },
+
   // Certificados
   { key: "certificates.view", description: "Ver status e estatísticas de certificados do evento", category: "Certificados" },
   { key: "certificates.issue", description: "Liberar, reprocessar e revogar certificados", category: "Certificados" },

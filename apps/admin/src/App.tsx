@@ -8,6 +8,7 @@ import { EventsPage } from "./pages/EventsPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { UsersPage } from "./pages/UsersPage";
 import { RolesPage } from "./pages/RolesPage";
+import { AuditPage } from "./pages/AuditPage";
 import { ApkPage } from "./pages/ApkPage";
 import { CredenciamentoPage } from "./pages/CredenciamentoPage";
 import { CredenciamentoSelectPage } from "./pages/CredenciamentoSelectPage";
@@ -45,6 +46,9 @@ export default function App() {
                 </Route>
                 <Route element={<ProtectedRoute permission="roles.view" />}>
                   <Route path="/perfis" element={<RolesPage />} />
+                </Route>
+                <Route element={<ProtectedRoute permission="audit.view" />}>
+                  <Route path="/auditoria" element={<AuditPage />} />
                 </Route>
                 <Route path="/apk" element={<ApkPage />} />
               </Route>

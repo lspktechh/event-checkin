@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { to: "/apk", label: "App do terminal", permission: null },
   { to: "/usuarios", label: "Usuários", permission: "users.view" },
   { to: "/perfis", label: "Perfis", permission: "roles.view" },
+  { to: "/auditoria", label: "Auditoria", permission: "audit.view" },
 ];
 
 export function Layout() {

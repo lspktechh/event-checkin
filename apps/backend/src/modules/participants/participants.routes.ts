@@ -41,7 +41,15 @@ export async function participantsRoutes(app: FastifyInstance) {
       const { eventId } = eventIdParamsSchema.parse(request.params);
       const { csv, confirm, cortesia } = importParticipantsSchema.parse(request.body);
       const report = await participantsService.importParticipants(eventId, csv, confirm, cortesia);
-      await recordAudit(request, "participant.import", "Participant", null, { eventId, ...report });
+      // Só contagens: as linhas do relatório têm nome, e-mail e CPF de terceiros.
+      await recordAudit(request, "participant.import", "Participant", null, {
+        eventId,
+        totalRows: report.totalRows,
+        validCount: report.validCount,
+        invalidCount: report.invalidCount,
+        duplicateCount: report.duplicateCount,
+        imported: report.imported,
+      });
       return ok(report);
     }
   );

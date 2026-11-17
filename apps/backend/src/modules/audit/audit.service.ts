@@ -1,26 +1,49 @@
 import type { FastifyRequest } from "fastify";
+import * as auditRepository from "./audit.repository.js";
 
 /**
- * Auditoria desativada conforme solicitação (não registra o que cada pessoa fez).
- * Mantido como no-op para preservar a compatibilidade de chamada nos serviços/rotas.
+ * Registra uma ação administrativa — SÓ se o perfil de quem agiu estiver com a
+ * auditoria ligada (Role.auditEnabled, escolhido na tela de Perfis). Perfil
+ * desligado não gera registro nenhum.
+ *
+ * Nunca lança: auditoria não pode derrubar a ação principal se a escrita do
+ * log falhar (loga o erro e segue). Exige request.admin (preenchido por
+ * requireAdmin/requirePermission), então só deve ser chamado depois desses
+ * middlewares.
  */
 export async function recordAudit(
-  _request: FastifyRequest,
-  _action: string,
-  _entityType: string,
-  _entityId?: string | null,
-  _metadata?: unknown
+  request: FastifyRequest,
+  action: string,
+  entityType: string,
+  entityId?: string | null,
+  metadata?: unknown
 ): Promise<void> {
-  // Auditoria de ações por pessoa desativada
-  return;
+  const admin = request.admin;
+  if (!admin || !admin.auditEnabled) return;
+
+  try {
+    await auditRepository.createAuditLog({
+      actorId: admin.userId,
+      actorEmail: admin.email,
+      action,
+      entityType,
+      entityId,
+      metadata,
+    });
+  } catch (error) {
+    request.log.error({ error, action, entityType }, "Falha ao gravar log de auditoria");
+  }
 }
 
-export async function listAuditLogs(_limit = 200) {
-  return [];
+export async function listAuditLogs(limit = 200) {
+  return auditRepository.listAuditLogs(Math.min(limit, 500));
 }
 
 /**
- * Mantido como no-op para preservar a compatibilidade de chamada.
+ * Ações disparadas pelo próprio participante (portal do participante) não
+ * pertencem a nenhum perfil, e a auditoria é escolhida por perfil — então
+ * continuam SEM registro. Mantido como no-op para preservar a compatibilidade
+ * de chamada em certificates.routes.ts.
  */
 export async function recordParticipantAudit(
   _request: FastifyRequest,
@@ -30,6 +53,5 @@ export async function recordParticipantAudit(
   _actorEmail: string,
   _metadata?: unknown
 ): Promise<void> {
-  // Auditoria desativada
   return;
 }
