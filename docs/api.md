@@ -270,6 +270,41 @@ Reenviar o mesmo `localCheckInId` é idempotente: o backend identifica que
 aquele registro específico já foi sincronizado por aquele terminal e
 devolve o mesmo resultado, sem duplicar.
 
+## Relatório geral de eventos (requer `reports.view`)
+
+### `POST /reports/events-summary`
+Body: `{ "eventIds": ["<uuid>", …] }` (1 a 200 eventos; ids repetidos contam uma vez).
+Só leitura: lê contagens agrupadas por evento e não grava nada.
+
+```json
+{
+  "success": true,
+  "data": {
+    "generatedAt": "2026-11-17T12:10:00.000Z",
+    "events": [{
+      "eventId": "…", "name": "…", "startDate": "…", "endDate": "…", "timezone": "America/Sao_Paulo", "status": "ACTIVE",
+      "inscriptions": { "total": 5, "confirmed": 3, "pending": 1, "cancelled": 1, "courtesy": 1, "revenue": 250.5 },
+      "participants": 6, "present": 2,
+      "certificates": { "generated": 1, "eligible": 1, "revoked": 1 },
+      "submissions": 2
+    }],
+    "totals": { "events": 1, "inscriptions": { … }, "participants": 6, "present": 2, "certificates": { … }, "submissions": 2 },
+    "markdown": "# Relatório geral de eventos\n…"
+  }
+}
+```
+
+- `participants`: só participantes **ativos**. `present`: **pessoas** com ao menos
+  uma presença (em evento por dia a mesma pessoa tem uma linha por dia).
+  `revenue`: soma das inscrições **confirmadas** (pendente e cancelada não entram).
+  `submissions`: trabalhos enviados (rascunho não conta).
+- `markdown` já vem pronto: resumo geral + tabela por evento, datas no fuso de cada
+  evento, valores no padrão brasileiro (`1.234,50`, `50,0%`).
+- Conta restrita a eventos (`allowedEventIds`) só pode pedir os seus: `403` se
+  incluir outro. Evento inexistente → `404`; lista vazia ou id inválido → `422`.
+- No painel: botão **Relatório geral (MD)** em *Eventos*, com a lista de eventos
+  para marcar (COPOL vem desmarcado por padrão).
+
 ## Limitações conhecidas desta fase
 
 - Não há endpoint para o admin recuperar/regenerar o `activationCode` de

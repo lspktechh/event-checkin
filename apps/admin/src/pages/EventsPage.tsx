@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import * as api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { SmartphoneIcon, TrashIcon } from "../components/Icons";
+import { EventsSummaryModal } from "../components/EventsSummaryModal";
 
 const STATUS_LABEL: Record<api.EventRecord["status"], string> = {
   ACTIVE: "Ativo",
@@ -16,10 +17,12 @@ const STATUS_BADGE: Record<api.EventRecord["status"], string> = {
 export function EventsPage() {
   const { hasPermission, user } = useAuth();
   const canCreate = hasPermission("events.create");
+  const canReport = hasPermission("reports.view");
   const canDelete = hasPermission("events.delete") || hasPermission("events.edit");
   const [events, setEvents] = useState<api.EventRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<api.EventRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -61,12 +64,21 @@ export function EventsPage() {
     <div className="stack">
       <div className="spread">
         <h1 style={{ margin: 0 }}>Eventos</h1>
-        {canCreate ? (
-          <button className="btn" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "Cancelar" : "+ Novo evento"}
-          </button>
-        ) : null}
+        <div className="row" style={{ gap: 8 }}>
+          {canReport && events && events.length > 0 ? (
+            <button className="btn btn-secondary" onClick={() => setShowSummary(true)}>
+              Relatório geral (MD)
+            </button>
+          ) : null}
+          {canCreate ? (
+            <button className="btn" onClick={() => setShowForm((v) => !v)}>
+              {showForm ? "Cancelar" : "+ Novo evento"}
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {showSummary && events ? <EventsSummaryModal events={events} onClose={() => setShowSummary(false)} /> : null}
 
       {showForm && canCreate ? (
         <CreateEventForm
