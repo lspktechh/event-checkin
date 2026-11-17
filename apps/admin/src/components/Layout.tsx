@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { CheckIcon, MenuIcon } from "./Icons";
 import { Sheet } from "./Sheet";
-import lspkLogo from "../assets/lspk-tecnology.png";
+import lspkLogo from "../assets/lspk-logo.png";
 
 const NAV_LINKS = [
   { to: "/eventos", label: "Eventos", permission: "events.view" },
@@ -72,8 +72,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="app-footer">
-        {/* Versão da logo feita para fundo escuro (L e P brancos, S e K azuis). */}
-        <img src={lspkLogo} alt="LSPK Tecnology" className="app-footer-logo" width={112} height={36} />
+        <img src={lspkLogo} alt="LSPK" className="app-footer-logo" width={40} height={40} />
       </footer>
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu">

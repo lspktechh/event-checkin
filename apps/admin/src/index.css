@@ -407,9 +407,9 @@ tr:hover td {
 
 .app-footer-logo {
   display: inline-block;
-  height: 36px;
-  width: auto;
-  opacity: 0.9;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
 }
 
 .login-page {
