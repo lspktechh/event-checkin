@@ -144,8 +144,8 @@ export interface LinkCourtesiesResult {
  * evento, e fazê-las contar agora poderia esgotar o lote e fechar as vendas.
  * As cortesias novas, lançadas depois, ocupam vaga normalmente.
  *
- * A inscrição exige e-mail e CPF; quem não tem os dois é pulado e avisado
- * (complete em "Editar" e rode de novo). Só pega participante ATIVO,
+ * A inscrição exige e-mail (o CPF é opcional); quem não tem e-mail é pulado e
+ * avisado (complete em "Editar" e rode de novo). Só pega participante ATIVO,
  * cortesia e sem inscrição; quem já consta no evento por outra inscrição
  * ou participante é pulado, para não haver duas linhas da mesma pessoa.
  * Pode rodar de novo sem efeito.
@@ -177,11 +177,12 @@ export async function linkCourtesiesToInscriptions(eventId: string): Promise<Lin
 
     const email = p.email?.trim() ?? "";
     const document = p.document?.trim() ?? "";
-    if (!email || !document) {
+    // A inscrição exige e-mail; o CPF é opcional (como na inscrição manual).
+    if (!email) {
       result.skipped.push({
         id: p.id,
         name: p.name,
-        reason: "Sem e-mail ou CPF: complete em Editar e tente de novo",
+        reason: "Sem e-mail: complete em Editar e tente de novo",
       });
       continue;
     }
@@ -240,7 +241,8 @@ export async function importParticipants(
   cortesia = false,
 ): Promise<ImportReport & { imported: number }> {
   // COPOL + cortesia: cada linha vira inscrição (e participante com QR), como
-  // na importação da aba Inscritos — com e-mail/CPF obrigatórios e vaga no lote.
+  // na importação da aba Inscritos — com e-mail/CPF obrigatórios (o CSV exige os
+  // dois) e vaga no lote.
   if (cortesia && (await eventIsCopol(eventId))) {
     return importInscriptions(eventId, csv, confirm, true);
   }

@@ -28,7 +28,7 @@ export function ParticipantsTab({
 }: {
   eventId: string;
   eventName?: string;
-  /** Evento do COPOL: a cortesia daqui também entra em Inscritos (e-mail e CPF obrigatórios). */
+  /** Evento do COPOL: a cortesia daqui também entra em Inscritos (e-mail obrigatório). */
   isCopol?: boolean;
 }) {
   const { hasPermission } = useAuth();
@@ -126,7 +126,7 @@ export function ParticipantsTab({
   async function handleLinkCourtesies() {
     if (
       !window.confirm(
-        `Incluir ${cortesiasForaDeInscritos} cortesia(s) na lista de Inscritos?\n\nO QR de cada pessoa continua o mesmo. Elas aparecem em Inscritos como cortesia, sem ocupar vaga do lote. Quem não tem e-mail e CPF é avisado para completar.`,
+        `Incluir ${cortesiasForaDeInscritos} cortesia(s) na lista de Inscritos?\n\nO QR de cada pessoa continua o mesmo. Elas aparecem em Inscritos como cortesia, sem ocupar vaga do lote. Quem não tem e-mail é avisado para completar.`,
       )
     ) {
       return;
@@ -454,7 +454,7 @@ function CreateParticipantForm({
   const [cortesia, setCortesia] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // No COPOL a cortesia vira inscrição, e a inscrição exige e-mail e CPF.
+  // No COPOL a cortesia vira inscrição, e a inscrição exige e-mail (o CPF é opcional).
   const exigeContato = isCopol && cortesia;
 
   async function handleSubmit(e: FormEvent) {
@@ -504,7 +504,7 @@ function CreateParticipantForm({
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label htmlFor="p-doc">Documento</label>
-          <input id="p-doc" value={document} onChange={(e) => setDocument(e.target.value)} required={exigeContato} />
+          <input id="p-doc" value={document} onChange={(e) => setDocument(e.target.value)} />
         </div>
       </div>
       <label className="switch-row" style={{ margin: "12px 0" }}>
@@ -512,7 +512,7 @@ function CreateParticipantForm({
           <strong>Cortesia</strong>
           <small>
             {isCopol
-              ? "Convidado da organização, sem pagamento. Entra também em Inscritos, ocupa uma vaga do lote e recebe QR (e-mail e CPF obrigatórios)."
+              ? "Convidado da organização, sem pagamento. Entra também em Inscritos, ocupa uma vaga do lote e recebe QR (e-mail obrigatório)."
               : "Convidado da organização, sem pagamento. Fica marcado na lista."}
           </small>
         </span>

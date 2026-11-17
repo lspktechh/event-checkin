@@ -289,8 +289,9 @@ credenciamento por dia ligado). Os demais eventos seguem como antes.
   aba Participantes (`POST /participants` ou `/participants/import` com
   `cortesia: true`) passa pelo mesmo caminho da cortesia de Inscritos: cria a
   inscrição confirmada (valor zero, ocupa vaga do lote) **e** o participante
-  com QR. Por isso exige e-mail e CPF (`422` no cadastro; `invalid` no preview
-  da importação), recusa quem já está no evento (`409 JA_INSCRITO`) e respeita
+  com QR. Por isso o cadastro exige e-mail (`422` sem ele; o CPF é opcional,
+  como na inscrição manual), a importação por CSV exige e-mail e CPF (`invalid`
+  no preview), recusa quem já está no evento (`409 JA_INSCRITO`) e respeita
   o teto do lote. Sem `cortesia`, o participante continua sendo criado solto.
 - **`POST /participants/courtesies-to-inscriptions`** traz para Inscritos as
   cortesias que só existem como participante (criadas quando a aba
@@ -299,7 +300,7 @@ credenciamento por dia ligado). Os demais eventos seguem como antes.
   (`category: "Cortesia"`) **ligada ao mesmo participante** — o QR continua o
   mesmo. **Não ocupa vaga do lote** (`batchId` vazio): são pessoas que já
   estavam no evento e contá-las agora poderia esgotar o lote e fechar as
-  vendas. Exige e-mail e CPF; quem não tem, ou já consta no evento por outra
+  vendas. Exige e-mail (o CPF é opcional); quem não tem, ou já consta no evento por outra
   inscrição/participante, vem em `skipped` com o motivo. Idempotente.
   Resposta: `{ linked, skipped: [{ id, name, reason }] }`. Fora do COPOL:
   `409 SO_COPOL`.

@@ -174,9 +174,9 @@ describe("COPOL: cortesia que só existe como participante passa a constar em In
     expect(await prisma.inscription.count({ where: { eventId: event.id } })).toBe(1);
   });
 
-  it("sem e-mail ou CPF não dá para criar a inscrição: pula, avisa o motivo e segue com as outras", async () => {
-    // Pega: gravar inscrição com contato em branco, ou abortar tudo por causa
-    // de uma pessoa.
+  it("sem e-mail não dá para criar a inscrição: pula, avisa e segue; sem CPF entra normalmente", async () => {
+    // Pega: gravar inscrição sem e-mail, abortar tudo por causa de uma pessoa, ou
+    // exigir um CPF que a inscrição manual não exige mais.
     const event = await copol();
     const admin = await loginAsAdmin();
     const semEmail = await cortesiaAntiga(event.id, 1, { email: null });
@@ -185,11 +185,12 @@ describe("COPOL: cortesia que só existe como participante passa a constar em In
 
     const res = await incluir(event.id, admin);
 
-    expect(res.json().data.linked).toBe(1);
+    expect(res.json().data.linked).toBe(2);
     const puladas = res.json().data.skipped as { id: string; reason: string }[];
-    expect(puladas.map((p) => p.id).sort()).toEqual([semEmail.id, semCpf.id].sort());
-    for (const p of puladas) expect(p.reason).toMatch(/e-mail|CPF/i);
-    expect(await prisma.inscription.count({ where: { eventId: event.id } })).toBe(1);
+    expect(puladas.map((p) => p.id)).toEqual([semEmail.id]);
+    expect(puladas[0].reason).toMatch(/e-mail/i);
+    expect(await prisma.inscription.count({ where: { eventId: event.id } })).toBe(2);
+    expect((await prisma.inscription.findFirstOrThrow({ where: { participantId: semCpf.id } })).document).toBe("");
   });
 
   it("não duplica quem já consta no evento com outra inscrição", async () => {
