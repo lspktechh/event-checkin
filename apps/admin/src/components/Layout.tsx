@@ -72,7 +72,10 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="app-footer">
-        <img src={lspkLogo} alt="LSPK" className="app-footer-logo" width={40} height={40} />
+        {/* Mesma apresentação dos sites: a logo da LSPK (letras escuras) em cartão branco. */}
+        <span className="app-footer-logo">
+          <img src={lspkLogo} alt="LSPK Technology" width={73} height={28} />
+        </span>
       </footer>
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu">

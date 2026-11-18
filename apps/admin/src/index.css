@@ -406,10 +406,17 @@ tr:hover td {
 }
 
 .app-footer-logo {
-  display: inline-block;
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.app-footer-logo img {
+  display: block;
+  height: 28px;
+  width: auto;
 }
 
 .login-page {
