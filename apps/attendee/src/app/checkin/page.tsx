@@ -693,24 +693,32 @@ export default function CheckInPage() {
                   {myDocuments?.certificate.status === "GENERATED" && (
                     <p className="text-xs text-[var(--primary)]">Certificado disponível</p>
                   )}
-                  {myDocuments?.certificate.status === "ELIGIBLE" && (
+                  {myDocuments?.certificate.status === "ELIGIBLE" && !myDocuments.certificate.issuanceClosed && (
                     <p className="text-xs text-[var(--primary)]">Certificado disponível</p>
                   )}
                   {myDocuments?.certificate.status === "REVOKED" && (
                     <p className="text-xs text-red-400">Este certificado foi revogado</p>
                   )}
-                  {myDocuments?.certificate.status === "LOCKED" &&
+                  {myDocuments?.certificate.issuanceClosed && myDocuments.certificate.status !== "GENERATED" && (
+                    <p className="text-xs text-amber-400">
+                      A emissão de novos certificados para este evento foi encerrada.
+                    </p>
+                  )}
+                  {!myDocuments?.certificate.issuanceClosed &&
+                    myDocuments?.certificate.status === "LOCKED" &&
                     myDocuments.certificate.reason === "EVENT_NOT_ENDED" && (
                       <p className="text-xs text-[var(--muted-foreground)]">
                         Certificado indisponível — será liberado após o encerramento do evento e a confirmação da sua
                         presença.
                       </p>
                     )}
-                  {myDocuments?.certificate.status === "LOCKED" && myDocuments.certificate.reason === "NOT_PRESENT" && (
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      Certificado disponível apenas para quem teve presença confirmada no evento.
-                    </p>
-                  )}
+                  {!myDocuments?.certificate.issuanceClosed &&
+                    myDocuments?.certificate.status === "LOCKED" &&
+                    myDocuments.certificate.reason === "NOT_PRESENT" && (
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Certificado disponível apenas para quem teve presença confirmada no evento.
+                      </p>
+                    )}
                   {!myDocuments && <p className="text-xs text-[var(--muted-foreground)]">Carregando…</p>}
                 </div>
                 <button
@@ -718,7 +726,11 @@ export default function CheckInPage() {
                   disabled={!myDocuments?.certificate.canDownload || downloadingCertificate}
                   className="min-h-10 shrink-0 rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {downloadingCertificate ? "Gerando..." : "Baixar PDF"}
+                  {downloadingCertificate
+                    ? "Gerando..."
+                    : myDocuments?.certificate.issuanceClosed && myDocuments.certificate.status !== "GENERATED"
+                    ? "Encerrado"
+                    : "Baixar PDF"}
                 </button>
               </div>
             </div>

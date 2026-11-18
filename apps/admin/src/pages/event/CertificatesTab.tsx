@@ -1,50 +1,6 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
-import { ColorField, ContentSection, ListEditor, TextField } from "../../components/FormFields";
-import { RichTextEditor } from "../../components/RichTextEditor";
-import { XIcon } from "../../components/Icons";
-
-// Espelha DEFAULT_CERTIFICATE_SETTINGS do backend
-// (certificate-settings.ts) — preenche o formulário com o que já está no
-// ar quando o evento ainda não tem nada customizado.
-const DEFAULT_SETTINGS = {
-  workloadHours: 16,
-  closingText: "O evento proporcionou atualização científica e integração entre profissionais e acadêmicos da odontologia.",
-  locationLabel: "Londrina/PR",
-  primaryColor: "#044544",
-  textColor: "#1A1A1A",
-};
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
-
-// Espelha buildDefaultParagraphSegments() do backend
-// (certificate-settings.ts) — reproduz o parágrafo que sempre existiu
-// ("Participou do {evento}, realizado em {local}...") pra eventos que
-// ainda não têm paragraphSegments salvo (nunca some texto customizado:
-// usa o closingText que já estava salvo, se houver).
-function buildDefaultParagraphSegments(primaryColor: string, closingText: string): api.ParagraphSegment[] {
-  return [
-    { type: "text", text: "Participou do " },
-    { type: "token", key: "eventName", bold: true, color: primaryColor },
-    { type: "text", text: ", realizado em " },
-    { type: "token", key: "locationLabel" },
-    { type: "text", text: ", nos dias " },
-    { type: "token", key: "eventDateRange" },
-    { type: "text", text: ", com carga horária total de " },
-    { type: "token", key: "workloadHours" },
-    { type: "text", text: " horas. " },
-    { type: "text", text: closingText },
-  ];
-}
-const DEFAULT_SIGNATORIES: api.CertificateSignatory[] = [
-  { name: "Gustavo Nascimento De Souza Pinto", role: "Coordenador do Evento" },
-  { name: "Pablo Guilherme Caldarelli", role: "Coordenador Geral do Campus Coordenador do Curso de Odontologia" },
-  { name: "Amanda Vessoni Barbosa Kasuya", role: "Coordenador Adjunta do Curso de Odontologia." },
-];
-// Espelha MAX_SIGNATORIES_ON_CERTIFICATE em certificate-template.ts — as
-// colunas do certificado agora são calculadas dinamicamente conforme a
-// quantidade cadastrada (antes só cabiam 3, com posições fixas na imagem).
-const MAX_SIGNATORIES = 6;
 
 const STATUS_LABEL: Record<api.CertificateRowStatus, string> = {
   LOCKED: "Bloqueado",
@@ -63,10 +19,6 @@ const STATUS_BADGE_CLASS: Record<api.CertificateRowStatus, string> = {
 export function CertificatesTab({ eventId }: { eventId: string }) {
   const { hasPermission } = useAuth();
   const canIssue = hasPermission("certificates.issue");
-  // Salvar o texto do certificado é uma edição do próprio Event
-  // (Event.certificateSettings, via PATCH /events/:eventId) — mesma
-  // permissão que já protege a aba Site, não certificates.issue.
-  const canEditSettings = hasPermission("events.edit");
 
   const [stats, setStats] = useState<api.CertificateStats | null>(null);
   const [rows, setRows] = useState<api.CertificateRow[]>([]);
@@ -76,23 +28,8 @@ export function CertificatesTab({ eventId }: { eventId: string }) {
   const [previewName, setPreviewName] = useState("Participante de Teste");
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-
-  const [workloadHours, setWorkloadHours] = useState(DEFAULT_SETTINGS.workloadHours);
-  const [locationLabel, setLocationLabel] = useState(DEFAULT_SETTINGS.locationLabel);
-  const [signatories, setSignatories] = useState<api.CertificateSignatory[]>(DEFAULT_SIGNATORIES);
-  const [primaryColor, setPrimaryColor] = useState(DEFAULT_SETTINGS.primaryColor);
-  const [textColor, setTextColor] = useState(DEFAULT_SETTINGS.textColor);
-  const [paragraphSegments, setParagraphSegments] = useState<api.ParagraphSegment[]>([]);
-  // Só monta o RichTextEditor depois que o valor real chegou do backend —
-  // ele só lê `value` na montagem (ver comentário em RichTextEditor.tsx),
-  // então montar antes disso faria ele começar vazio/com o valor padrão
-  // errado e nunca mais atualizar.
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
-  const [uploadingSignatureIndex, setUploadingSignatureIndex] = useState<number | null>(null);
-  const [signatureUploadError, setSignatureUploadError] = useState<string | null>(null);
+  const [togglingIssuance, setTogglingIssuance] = useState(false);
+  const [issuanceError, setIssuanceError] = useState<string | null>(null);
 
   function reload() {
     Promise.all([api.getCertificateStats(eventId), api.listCertificates(eventId)])
@@ -103,143 +40,32 @@ export function CertificatesTab({ eventId }: { eventId: string }) {
       .catch((err) => setError(err instanceof Error ? err.message : "Falha ao carregar certificados"));
   }
 
-  // --- Modelo de certificado (biblioteca) ---
-  const [modelos, setModelos] = useState<api.CertificateTemplateRecord[]>([]);
-  const [modeloId, setModeloId] = useState<string | null>(null);
-  const [trocandoModelo, setTrocandoModelo] = useState(false);
-
-  useEffect(() => {
-    api.listCertificateTemplates().then(setModelos).catch(() => setModelos([]));
-  }, []);
-
-  async function trocarModelo(novo: string | null) {
-    setTrocandoModelo(true);
-    setSettingsError(null);
-    try {
-      await api.updateEvent(eventId, { certificateTemplateId: novo } as never);
-      setModeloId(novo);
-      // Trocar o modelo invalida os PDFs já gerados (o modelo entra no
-      // hash de conteúdo). Quem já baixou continua com o arquivo antigo
-      // no computador — isso precisa ser dito, não descoberto.
-      setSettingsNotice(
-        novo
-          ? "Modelo trocado. Os certificados já gerados serão refeitos no próximo download — quem já baixou continua com o arquivo antigo."
-          : "Voltou ao certificado padrão.",
-      );
-    } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Falha ao trocar o modelo");
-    } finally {
-      setTrocandoModelo(false);
-    }
-  }
-
-  function loadSettings() {
-    setSettingsLoaded(false);
-    api
-      .getEvent(eventId)
-      .then((event) => {
-        setModeloId(event.certificateTemplateId ?? null);
-        const c = event.certificateSettings ?? {};
-        const resolvedPrimaryColor = c.primaryColor || DEFAULT_SETTINGS.primaryColor;
-        setWorkloadHours(c.workloadHours || DEFAULT_SETTINGS.workloadHours);
-        setLocationLabel(c.locationLabel || DEFAULT_SETTINGS.locationLabel);
-        setSignatories(c.signatories && c.signatories.length > 0 ? c.signatories : DEFAULT_SIGNATORIES);
-        setPrimaryColor(resolvedPrimaryColor);
-        setTextColor(c.textColor || DEFAULT_SETTINGS.textColor);
-        setParagraphSegments(
-          c.paragraphSegments && c.paragraphSegments.length > 0
-            ? c.paragraphSegments
-            : buildDefaultParagraphSegments(resolvedPrimaryColor, c.closingText || DEFAULT_SETTINGS.closingText)
-        );
-        setSettingsLoaded(true);
-      })
-      .catch((err) => setSettingsError(err instanceof Error ? err.message : "Falha ao carregar configurações do certificado"));
-  }
-
   useEffect(() => {
     reload();
-    loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
-  function updateSignatory<K extends keyof api.CertificateSignatory>(index: number, key: K, value: api.CertificateSignatory[K]) {
-    setSignatories((prev) => prev.map((s, i) => (i === index ? { ...s, [key]: value } : s)));
-  }
-  function addSignatory() {
-    if (signatories.length >= MAX_SIGNATORIES) return;
-    setSignatories((prev) => [...prev, { name: "", role: "" }]);
-  }
-  function removeSignatory(index: number) {
-    setSignatories((prev) => prev.filter((_, i) => i !== index));
-  }
+  async function handleToggleIssuance() {
+    if (!stats) return;
+    const willClose = !stats.issuanceClosed;
+    const confirmMessage = willClose
+      ? "Deseja realmente encerrar a emissão de novos certificados para este evento? Participantes que ainda não emitiram não poderão mais gerar."
+      : "Deseja reabrir a emissão de certificados para este evento?";
+    if (!window.confirm(confirmMessage)) return;
 
-  async function handleSignatureUpload(index: number, file: File) {
-    setSignatureUploadError(null);
-    setUploadingSignatureIndex(index);
+    setTogglingIssuance(true);
+    setIssuanceError(null);
     try {
-      const { key } = await api.uploadSignatureImage(file);
-      updateSignatory(index, "signatureImageKey", key);
+      if (willClose) {
+        await api.closeCertificateIssuance(eventId);
+      } else {
+        await api.reopenCertificateIssuance(eventId);
+      }
+      reload();
     } catch (err) {
-      setSignatureUploadError(err instanceof Error ? err.message : "Falha ao enviar a imagem da assinatura");
+      setIssuanceError(err instanceof Error ? err.message : "Não foi possível alterar o status de emissão");
     } finally {
-      setUploadingSignatureIndex(null);
-    }
-  }
-
-  function removeSignatureImage(index: number) {
-    updateSignatory(index, "signatureImageKey", undefined);
-  }
-
-  async function handleSaveSettings() {
-    setSettingsError(null);
-    setSettingsNotice(null);
-
-    if (!locationLabel.trim()) {
-      setSettingsError("Preencha o local exibido no certificado.");
-      return;
-    }
-    if (!workloadHours || workloadHours <= 0) {
-      setSettingsError("A carga horária precisa ser maior que zero.");
-      return;
-    }
-    const cleanSignatories = signatories
-      .map((s) => ({ name: s.name.trim(), role: s.role.trim(), signatureImageKey: s.signatureImageKey }))
-      .filter((s) => s.name && s.role);
-    if (cleanSignatories.length === 0) {
-      setSettingsError("Configure pelo menos um signatário.");
-      return;
-    }
-    if (!HEX_COLOR_RE.test(primaryColor)) {
-      setSettingsError("Cor de destaque inválida — use o formato #RRGGBB.");
-      return;
-    }
-    if (!HEX_COLOR_RE.test(textColor)) {
-      setSettingsError("Cor do texto inválida — use o formato #RRGGBB.");
-      return;
-    }
-    if (paragraphSegments.length === 0) {
-      setSettingsError("O parágrafo do certificado não pode ficar vazio.");
-      return;
-    }
-
-    setSavingSettings(true);
-    try {
-      await api.updateEvent(eventId, {
-        certificateSettings: {
-          workloadHours,
-          locationLabel: locationLabel.trim(),
-          signatories: cleanSignatories,
-          primaryColor,
-          textColor,
-          paragraphSegments,
-        },
-      });
-      setSignatories(cleanSignatories);
-      setSettingsNotice("Configurações do certificado salvas.");
-    } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Falha ao salvar as configurações do certificado");
-    } finally {
-      setSavingSettings(false);
+      setTogglingIssuance(false);
     }
   }
 
@@ -309,33 +135,38 @@ export function CertificatesTab({ eventId }: { eventId: string }) {
       </div>
 
       <div className="card">
-        <h2 style={{ fontSize: 15, margin: "0 0 4px" }}>Modelo do certificado</h2>
-        <p className="muted" style={{ margin: "0 0 12px", fontSize: 13 }}>
-          Escolha a arte deste evento. Os modelos são cadastrados em{" "}
-          <strong>Modelos de certificado</strong>, no menu, e servem a qualquer evento.
-        </p>
-        <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <select
-            value={modeloId ?? ""}
-            disabled={trocandoModelo}
-            onChange={(e) => void trocarModelo(e.target.value || null)}
-            style={{ flex: 1, maxWidth: 360 }}
-          >
-            <option value="">Certificado padrão (COPOL)</option>
-            {modelos.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} — {m.imageWidth}×{m.imageHeight}px
-              </option>
-            ))}
-          </select>
-          {trocandoModelo && <span className="muted">trocando…</span>}
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div className="row" style={{ gap: 8, alignItems: "center", marginBottom: 4 }}>
+              <h2 style={{ fontSize: 15, margin: 0 }}>Emissão de certificados</h2>
+              <span className={stats.issuanceClosed ? "badge badge-danger" : "badge badge-success"}>
+                {stats.issuanceClosed ? "Emissão encerrada" : "Emissão aberta"}
+              </span>
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              {stats.issuanceClosed
+                ? "Novos certificados não podem mais ser emitidos no portal. Quem já emitiu continua com acesso para download."
+                : "Participantes elegíveis podem emitir e baixar seus certificados normalmente pelo portal."}
+            </p>
+          </div>
+          {canIssue && (
+            <button
+              className={stats.issuanceClosed ? "btn btn-sm" : "btn btn-danger btn-sm"}
+              onClick={handleToggleIssuance}
+              disabled={togglingIssuance}
+            >
+              {togglingIssuance
+                ? "Salvando..."
+                : stats.issuanceClosed
+                ? "Reabrir emissão de certificados"
+                : "Encerrar emissão de certificados"}
+            </button>
+          )}
         </div>
-        {modeloId && (
-          <img
-            src={api.certificateTemplateImageUrl(modeloId)}
-            alt="Arte do modelo escolhido"
-            style={{ marginTop: 12, width: "100%", maxWidth: 420, borderRadius: 6, border: "1px solid var(--linha)" }}
-          />
+        {issuanceError && (
+          <p className="error-text" style={{ marginTop: 8, marginBottom: 0 }}>
+            {issuanceError}
+          </p>
         )}
       </div>
 
@@ -362,148 +193,6 @@ export function CertificatesTab({ eventId }: { eventId: string }) {
           </p>
         )}
       </div>
-
-      {canEditSettings && !settingsLoaded && (
-        <div className="card">
-          <p className="muted" style={{ margin: 0 }}>Carregando texto do certificado...</p>
-        </div>
-      )}
-
-      {canEditSettings && settingsLoaded && (
-      <div className="card">
-        <h2 style={{ fontSize: 15, margin: "0 0 4px" }}>Texto do certificado</h2>
-        <p className="muted" style={{ margin: "0 0 20px", fontSize: 12 }}>
-          Nome do participante vem automaticamente do evento — o resto do parágrafo é editável abaixo, igual num
-          editor de texto: selecione um trecho pra formatar (negrito, itálico, cor). O layout (logo, título, ondas,
-          logos de apoio) continua fixo.
-        </p>
-
-        <div className="stack" style={{ gap: 24 }}>
-          <ContentSection title="Local e carga horária">
-            <p className="muted" style={{ margin: "0 0 4px", fontSize: 12 }}>
-              Usados no chip de data do certificado e nos blocos "Local"/"Carga horária" do parágrafo abaixo.
-            </p>
-            <div className="row" style={{ gap: 12, alignItems: "flex-end" }}>
-              <TextField label="Local (ex.: Cidade/UF)" value={locationLabel} onChange={setLocationLabel} />
-              <div style={{ flex: "0 0 140px" }}>
-                <label className="muted" style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
-                  Carga horária (horas)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={workloadHours}
-                  onChange={(e) => setWorkloadHours(Number(e.target.value))}
-                  style={{ width: "100%" }}
-                />
-              </div>
-            </div>
-          </ContentSection>
-
-          <ContentSection title="Parágrafo descritivo">
-            <RichTextEditor key={eventId} value={paragraphSegments} onChange={setParagraphSegments} defaultColor={textColor} />
-          </ContentSection>
-
-          <ContentSection title="Signatários (até 6, aparecem no rodapé)">
-            <p className="muted" style={{ margin: "0 0 4px", fontSize: 12 }}>
-              A imagem da assinatura aparece acima do nome, exatamente como se a pessoa tivesse assinado ali. PNG ou
-              JPEG, até 2MB — opcional, sem imagem o certificado sai só com nome e cargo, como sempre foi.
-            </p>
-            <ListEditor label="Signatários" onAdd={addSignatory} addDisabled={signatories.length >= MAX_SIGNATORIES}>
-              {signatories.map((signatory, i) => (
-                <div key={i} className="row" style={{ gap: 8, alignItems: "flex-start" }}>
-                  <div style={{ flex: "0 0 92px", textAlign: "center" }}>
-                    {signatory.signatureImageKey ? (
-                      <div className="stack" style={{ gap: 4 }}>
-                        <img
-                          src={api.signatureImageUrl(signatory.signatureImageKey)}
-                          alt={`Assinatura de ${signatory.name || "signatário"}`}
-                          style={{
-                            width: "100%",
-                            height: 46,
-                            objectFit: "contain",
-                            background: "#fff",
-                            borderRadius: 4,
-                            border: "1px solid var(--border)",
-                          }}
-                        />
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeSignatureImage(i)}>
-                          Remover
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="btn btn-secondary btn-sm" style={{ display: "block", cursor: "pointer" }}>
-                        {uploadingSignatureIndex === i ? "Enviando..." : "+ Assinatura"}
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg"
-                          style={{ display: "none" }}
-                          disabled={uploadingSignatureIndex !== null}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            e.target.value = "";
-                            if (file) handleSignatureUpload(i, file);
-                          }}
-                        />
-                      </label>
-                    )}
-                  </div>
-                  <div className="stack" style={{ gap: 6, flex: 1 }}>
-                    <input
-                      value={signatory.name}
-                      onChange={(e) => updateSignatory(i, "name", e.target.value)}
-                      placeholder="Nome"
-                    />
-                    <input
-                      value={signatory.role}
-                      onChange={(e) => updateSignatory(i, "role", e.target.value)}
-                      placeholder="Cargo"
-                    />
-                  </div>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => removeSignatory(i)}
-                    type="button"
-                    disabled={signatories.length <= 1}
-                    title="Remover signatário"
-                   aria-label="Fechar">
-                    <XIcon size="1.1em" />
-                  </button>
-                </div>
-              ))}
-            </ListEditor>
-            {signatureUploadError && (
-              <p className="error-text" style={{ margin: "8px 0 0" }}>
-                {signatureUploadError}
-              </p>
-            )}
-          </ContentSection>
-
-          <ContentSection title="Cores do texto">
-            <p className="muted" style={{ margin: "0 0 4px", fontSize: 12 }}>
-              Cor de destaque no nome do participante, no nome do evento (em negrito), no título do chip de data e
-              nos nomes dos signatários — e cor do restante do texto (parágrafo, local do chip, cargo dos
-              signatários).
-            </p>
-            <div className="row" style={{ gap: 12 }}>
-              <ColorField label="Cor de destaque" value={primaryColor} onChange={setPrimaryColor} />
-              <ColorField label="Cor do texto" value={textColor} onChange={setTextColor} />
-            </div>
-          </ContentSection>
-
-          {settingsError && <p className="error-text" style={{ margin: 0 }}>{settingsError}</p>}
-          {settingsNotice && (
-            <p style={{ color: "var(--success)", margin: 0, fontSize: 13 }}>{settingsNotice}</p>
-          )}
-
-          <div>
-            <button className="btn btn-sm" onClick={handleSaveSettings} disabled={savingSettings}>
-              {savingSettings ? "Salvando..." : "Salvar texto do certificado"}
-            </button>
-          </div>
-        </div>
-      </div>
-      )}
 
       {!stats.eventEnded && (
         <p className="muted" style={{ margin: 0 }}>

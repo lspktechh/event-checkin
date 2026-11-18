@@ -181,6 +181,28 @@ export async function certificatesRoutes(app: FastifyInstance) {
     }
   );
 
+  app.post(
+    "/events/:eventId/certificates/close-issuance",
+    { preHandler: requirePermission("certificates.issue") },
+    async (request) => {
+      const { eventId } = eventIdParamsSchema.parse(request.params);
+      const result = await certificatesService.setCertificateIssuanceClosed(eventId, true);
+      await recordAudit(request, "certificate.issuance_closed", "Event", eventId, result);
+      return ok(result);
+    }
+  );
+
+  app.post(
+    "/events/:eventId/certificates/reopen-issuance",
+    { preHandler: requirePermission("certificates.issue") },
+    async (request) => {
+      const { eventId } = eventIdParamsSchema.parse(request.params);
+      const result = await certificatesService.setCertificateIssuanceClosed(eventId, false);
+      await recordAudit(request, "certificate.issuance_reopened", "Event", eventId, result);
+      return ok(result);
+    }
+  );
+
   // --- Certificado de um participante específico (painel do admin) ---
   //
   // Complementam o release em lote acima, que só alcança quem tem

@@ -708,9 +708,18 @@ export interface CertificateStats {
   pending: number;
   revoked: number;
   eventEnded: boolean;
+  issuanceClosed?: boolean;
 }
 export function getCertificateStats(eventId: string) {
   return request<CertificateStats>(`/events/${eventId}/certificates/stats`);
+}
+
+export function closeCertificateIssuance(eventId: string) {
+  return request<{ issuanceClosed: boolean }>(`/events/${eventId}/certificates/close-issuance`, { method: "POST" });
+}
+
+export function reopenCertificateIssuance(eventId: string) {
+  return request<{ issuanceClosed: boolean }>(`/events/${eventId}/certificates/reopen-issuance`, { method: "POST" });
 }
 
 export type CertificateRowStatus = "LOCKED" | "ELIGIBLE" | "GENERATED" | "REVOKED";

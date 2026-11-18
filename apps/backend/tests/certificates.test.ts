@@ -845,5 +845,153 @@ describe("administração", () => {
     expect(stats.eligible).toBe(2);
     expect(stats.generated).toBe(1);
     expect(stats.pending).toBe(1);
+    expect(stats.issuanceClosed).toBe(false);
+  });
+
+  describe("encerramento e reabertura da emissão de certificados", () => {
+    it("permite fechar e reabrir emissão via rotas dedicadas e reflete em stats", async () => {
+      const event = await createEndedTestEvent();
+      const adminToken = await loginAdmin();
+
+      // Fecha emissão
+      const closeRes = await app.inject({
+        method: "POST",
+        url: `/events/${event.id}/certificates/close-issuance`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(closeRes.statusCode).toBe(200);
+      expect(closeRes.json().data.issuanceClosed).toBe(true);
+
+      const statsRes1 = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/certificates/stats`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(statsRes1.json().data.issuanceClosed).toBe(true);
+
+      // Reabre emissão
+      const reopenRes = await app.inject({
+        method: "POST",
+        url: `/events/${event.id}/certificates/reopen-issuance`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(reopenRes.statusCode).toBe(200);
+      expect(reopenRes.json().data.issuanceClosed).toBe(false);
+
+      const statsRes2 = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/certificates/stats`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(statsRes2.json().data.issuanceClosed).toBe(false);
+    });
+
+    it("bloqueia primeira emissão quando fechado, mas permite download de quem já emitiu", async () => {
+      const event = await createEndedTestEvent();
+      const p1 = await createTestParticipant(event.id, { name: "Primeiro Participante" });
+      const p2 = await createTestParticipant(event.id, { name: "Segundo Participante" });
+      await createTestCheckIn(event.id, p1.id);
+      await createTestCheckIn(event.id, p2.id);
+
+      const tokenP1 = await createAttendeeToken(app, p1);
+      const tokenP2 = await createAttendeeToken(app, p2);
+
+      // P1 gera o certificado ANTES do encerramento
+      const p1DownloadBefore = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/certificates/download`,
+        headers: { authorization: `Bearer ${tokenP1}` },
+      });
+      expect(p1DownloadBefore.statusCode).toBe(200);
+
+      // Admin fecha emissão de certificados
+      const adminToken = await loginAdmin();
+      await app.inject({
+        method: "POST",
+        url: `/events/${event.id}/certificates/close-issuance`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      // P1 (já emitiu antes) visita /my-documents: continua com canDownload = true
+      const p1Docs = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/my-documents`,
+        headers: { authorization: `Bearer ${tokenP1}` },
+      });
+      expect(p1Docs.json().data.certificate.status).toBe("GENERATED");
+      expect(p1Docs.json().data.certificate.canDownload).toBe(true);
+      expect(p1Docs.json().data.certificate.issuanceClosed).toBe(true);
+
+      // P1 consegue baixar seu certificado já gerado
+      const p1DownloadAfter = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/certificates/download`,
+        headers: { authorization: `Bearer ${tokenP1}` },
+      });
+      expect(p1DownloadAfter.statusCode).toBe(200);
+
+      // P2 (nunca emitiu) visita /my-documents: canDownload = false, reason = ISSUANCE_CLOSED
+      const p2Docs = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/my-documents`,
+        headers: { authorization: `Bearer ${tokenP2}` },
+      });
+      expect(p2Docs.json().data.certificate.status).toBe("ELIGIBLE");
+      expect(p2Docs.json().data.certificate.canDownload).toBe(false);
+      expect(p2Docs.json().data.certificate.issuanceClosed).toBe(true);
+      expect(p2Docs.json().data.certificate.reason).toBe("ISSUANCE_CLOSED");
+
+      // P2 tenta baixar: bloqueado com 403
+      const p2DownloadAttempt = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/certificates/download`,
+        headers: { authorization: `Bearer ${tokenP2}` },
+      });
+      expect(p2DownloadAttempt.statusCode).toBe(403);
+      expect(p2DownloadAttempt.json().error.message).toContain("encerrada pela organização");
+
+      // Admin reabre emissão: P2 agora consegue baixar normalmente
+      await app.inject({
+        method: "POST",
+        url: `/events/${event.id}/certificates/reopen-issuance`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      const p2DocsAfterReopen = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/my-documents`,
+        headers: { authorization: `Bearer ${tokenP2}` },
+      });
+      expect(p2DocsAfterReopen.json().data.certificate.canDownload).toBe(true);
+
+      const p2DownloadSuccess = await app.inject({
+        method: "GET",
+        url: `/events/${event.id}/certificates/download`,
+        headers: { authorization: `Bearer ${tokenP2}` },
+      });
+      expect(p2DownloadSuccess.statusCode).toBe(200);
+    });
+
+    it("rotas close-issuance e reopen-issuance exigem permissão certificates.issue", async () => {
+      const event = await createEndedTestEvent();
+      const viewOnlyRole = await createTestRole("Apenas Visualizador", ["certificates.view"]);
+      const { user, password } = await createTestUserWithRole(viewOnlyRole.id, "viewer@teste.com");
+      const loginRes = await app.inject({ method: "POST", url: "/auth/login", payload: { email: user.email, password } });
+      const viewerToken = loginRes.json().data.token as string;
+
+      const resClose = await app.inject({
+        method: "POST",
+        url: `/events/${event.id}/certificates/close-issuance`,
+        headers: { authorization: `Bearer ${viewerToken}` },
+      });
+      expect(resClose.statusCode).toBe(403);
+
+      const resReopen = await app.inject({
+        method: "POST",
+        url: `/events/${event.id}/certificates/reopen-issuance`,
+        headers: { authorization: `Bearer ${viewerToken}` },
+      });
+      expect(resReopen.statusCode).toBe(403);
+    });
   });
 });

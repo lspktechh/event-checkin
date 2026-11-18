@@ -336,7 +336,10 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
           formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
           verbose: false,
           experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true,
+            // NÃO religar: o BarcodeDetector nativo do Chrome congela o stream
+            // da câmera logo após ler um QR em vários Android (tela preta no
+            // credenciamento). O decodificador interno (ZXing) não trava.
+            useBarCodeDetectorIfSupported: false,
           },
         });
       }
@@ -442,7 +445,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
               scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
                 formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
                 verbose: false,
-                experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+                experimentalFeatures: { useBarCodeDetectorIfSupported: false },
               });
               await scannerRef.current.start(best1x.id, buildScanConfig(best1x.id), handleDecoded, () => {});
               const newVid = document.querySelector(`#${CONTAINER_ID} video`) as HTMLVideoElement | null;
@@ -566,7 +569,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
     if (recoveringRef.current || isStartingRef.current) return;
     const now = Date.now();
     restartHistoryRef.current = restartHistoryRef.current.filter((t) => now - t < 30000);
-    if (restartHistoryRef.current.length >= 3) {
+    if (restartHistoryRef.current.length >= 6) {
       await stopScanner();
       setCameraError("A câmera parou de responder. Toque em 'Tentar Novamente'.");
       return;
@@ -644,7 +647,7 @@ export function WebQrScanner({ onScan, paused, manualMode, onToggleManual }: Pro
       scannerRef.current = new Html5Qrcode(CONTAINER_ID, {
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
         verbose: false,
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        experimentalFeatures: { useBarCodeDetectorIfSupported: false },
       });
 
       await scannerRef.current.start(

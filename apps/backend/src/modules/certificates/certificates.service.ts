@@ -112,12 +112,17 @@ function computeCertificateContentHash(
   // muda e nenhum PDF já gerado é invalidado por esta feature.
   porAvaliacao?: { horas: number; templateAssetKey: string },
 ): string {
+  // Ignora o flag operacional de encerramento da emissão no cálculo do hash
+  // visual para que fechar/reabrir a emissão não invalide o cache de PDFs
+  // já emitidos anteriormente.
+  const { issuanceClosed: _unused, ...visualSettings } = settings;
+
   const payload = JSON.stringify({
     porAvaliacao,
     eventName: event.name,
     startDate: event.startDate.toISOString(),
     endDate: event.endDate.toISOString(),
-    settings,
+    settings: visualSettings,
     // O MODELO ENTRA NO HASH.
     //
     // Sem isto, trocar o modelo do evento no painel não invalidaria os
@@ -273,22 +278,28 @@ function mensagemNaoElegivel(reason: EligibilityResult["reason"]): string {
  * eventId/participantId sempre vêm de request.attendee (JWT), nunca de
  * input do cliente (ver middleware/auth.ts requireAttendee). */
 export async function getMyDocuments(eventId: string, participantId: string) {
+  const event = await loadEventOrThrow(eventId);
   const participant = await loadParticipantOrThrow(eventId, participantId);
   const { eligibility, checkIn } = await computeEligibility(eventId, participantId);
 
   const certificate = await repo.findCertificate(eventId, participantId);
   const status = resolveDisplayStatus({ eligibility, persistedStatus: certificate?.status ?? null });
 
+  const settings = resolveCertificateSettings(event.certificateSettings);
+  const issuanceClosed = Boolean(settings.issuanceClosed);
+  const alreadyGenerated = status === "GENERATED";
+  const canDownload = alreadyGenerated || (!issuanceClosed && status === "ELIGIBLE");
+
   return {
-    hasCertificate: status === "ELIGIBLE" || status === "GENERATED",
+    hasCertificate: canDownload || status === "ELIGIBLE",
     qrCode: { available: participant.status === "ACTIVE" && !participant.revokedAt },
     attendanceProof: { available: !!checkIn },
     certificate: {
       status, // LOCKED | ELIGIBLE | GENERATED | REVOKED
-      // ELIGIBLE já pode ser baixado (o PDF é gerado no primeiro download,
-      // ver getOrGenerateCertificatePdf) — só LOCKED/REVOKED bloqueiam.
-      canDownload: status === "ELIGIBLE" || status === "GENERATED",
-      reason: eligibility.reason, // "EVENT_NOT_ENDED" | "NOT_PRESENT" | null
+      // Se a emissão foi encerrada, só quem já gerou anteriormente (GENERATED) pode baixar.
+      canDownload,
+      issuanceClosed,
+      reason: issuanceClosed && !alreadyGenerated ? "ISSUANCE_CLOSED" : eligibility.reason,
       generatedAt: certificate?.generatedAt ?? null,
     },
   };
@@ -308,11 +319,18 @@ export async function getOrGenerateCertificatePdf(eventId: string, participantId
   if (existing?.status === "REVOKED") {
     throw new ForbiddenError("Este certificado foi revogado");
   }
+
+  const settings = resolveCertificateSettings(event.certificateSettings);
+
+  // Se a emissão de novos certificados foi encerrada, só quem já gerou anteriormente (GENERATED)
+  // tem permissão de baixar o arquivo.
+  if (settings.issuanceClosed && existing?.status !== "GENERATED") {
+    throw new ForbiddenError("A emissão de novos certificados para este evento foi encerrada pela organização.");
+  }
+
   if (!eligibility.eligible) {
     throw new ForbiddenError(mensagemNaoElegivel(eligibility.reason));
   }
-
-  const settings = resolveCertificateSettings(event.certificateSettings);
 
   // Certificado por avaliação: arte e carga horária saem das horas da
   // avaliação desta pessoa (8h online / 16h com Demoday).
@@ -334,6 +352,9 @@ export async function getOrGenerateCertificatePdf(eventId: string, participantId
   const cacheIsFresh =
     existing?.status === "GENERATED" && existing.settingsSnapshotHash === currentHash && (await certificateStorage.exists(fileKey));
   if (cacheIsFresh) {
+    return { buffer: await certificateStorage.read(fileKey), certificateId: existing.id, regenerated: false };
+  }
+  if (settings.issuanceClosed && existing?.status === "GENERATED" && (await certificateStorage.exists(fileKey))) {
     return { buffer: await certificateStorage.read(fileKey), certificateId: existing.id, regenerated: false };
   }
 
@@ -479,6 +500,7 @@ export async function generateTestCertificatePdf(eventId: string, participantNam
 
 export async function getCertificateStats(eventId: string) {
   const event = await loadEventOrThrow(eventId);
+  const settings = resolveCertificateSettings(event.certificateSettings);
   const [totalParticipants, present, generated, revoked] = await Promise.all([
     repo.countParticipants(eventId),
     repo.countCheckIns(eventId),
@@ -500,7 +522,16 @@ export async function getCertificateStats(eventId: string) {
   }
   const pending = Math.max(eligible - generated - revoked, 0);
 
-  return { totalParticipants, present, eligible, generated, pending, revoked, eventEnded: hasEventEnded(event.endDate) };
+  return {
+    totalParticipants,
+    present,
+    eligible,
+    generated,
+    pending,
+    revoked,
+    eventEnded: hasEventEnded(event.endDate),
+    issuanceClosed: Boolean(settings.issuanceClosed),
+  };
 }
 
 export async function listCertificates(eventId: string) {
@@ -625,6 +656,20 @@ export async function reinstateCertificate(certificateId: string) {
     throw new ConflictError("CERTIFICATE_NOT_REVOKED", "Este certificado não está revogado");
   }
   return repo.markCertificateReinstated(certificateId);
+}
+
+export async function setCertificateIssuanceClosed(eventId: string, closed: boolean) {
+  const event = await loadEventOrThrow(eventId);
+  const currentSettings = (event.certificateSettings as Record<string, unknown> | null) ?? {};
+  const updatedSettings = {
+    ...currentSettings,
+    issuanceClosed: closed,
+  };
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { certificateSettings: updatedSettings },
+  });
+  return { issuanceClosed: closed };
 }
 
 async function findCertificateOrThrow(certificateId: string) {

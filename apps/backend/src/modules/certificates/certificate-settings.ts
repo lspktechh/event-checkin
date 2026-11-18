@@ -82,6 +82,11 @@ export const certificateSettingsSchema = z.object({
   // — era um cinza-escuro fixo (#1A1A1A).
   textColor: hexColor.optional(),
 
+  // Bloqueio de novas emissões pelo admin. Quando verdadeiro, quem ainda
+  // não emitiu o certificado não consegue gerar; quem já emitiu continua
+  // podendo baixar normalmente.
+  issuanceClosed: z.boolean().optional(),
+
   // O parágrafo descritivo inteiro ("Participou do evento X, realizado em
   // Y..."), como uma sequência de trechos de texto livre + tokens
   // dinâmicos, cada um com negrito/itálico/cor próprios — editado pelo
@@ -99,6 +104,7 @@ export const DEFAULT_CERTIFICATE_SETTINGS: ResolvedCertificateSettings = {
   workloadHours: 16,
   closingText: "O evento proporcionou atualização científica e integração entre profissionais e acadêmicos da odontologia.",
   locationLabel: "Londrina/PR",
+  issuanceClosed: false,
   signatories: [
     { name: "Gustavo Nascimento De Souza Pinto", role: "Coordenador do Evento" },
     { name: "Pablo Guilherme Caldarelli", role: "Coordenador Geral do Campus Coordenador do Curso de Odontologia" },
@@ -148,6 +154,7 @@ export function resolveCertificateSettings(stored: unknown): ResolvedCertificate
     workloadHours: content.workloadHours || DEFAULT_CERTIFICATE_SETTINGS.workloadHours,
     closingText,
     locationLabel: content.locationLabel || DEFAULT_CERTIFICATE_SETTINGS.locationLabel,
+    issuanceClosed: Boolean(content.issuanceClosed),
     signatories:
       content.signatories && content.signatories.length > 0 ? content.signatories : DEFAULT_CERTIFICATE_SETTINGS.signatories,
     templateAssetKey: content.templateAssetKey || DEFAULT_CERTIFICATE_SETTINGS.templateAssetKey,
