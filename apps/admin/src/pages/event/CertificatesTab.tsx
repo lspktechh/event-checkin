@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
+import { showConfirm } from "../../components/DialogModal";
 
 const STATUS_LABEL: Record<api.CertificateRowStatus, string> = {
   LOCKED: "Bloqueado",
@@ -51,7 +52,12 @@ export function CertificatesTab({ eventId }: { eventId: string }) {
     const confirmMessage = willClose
       ? "Deseja realmente encerrar a emissão de novos certificados para este evento? Participantes que ainda não emitiram não poderão mais gerar."
       : "Deseja reabrir a emissão de certificados para este evento?";
-    if (!window.confirm(confirmMessage)) return;
+    const confirmed = await showConfirm(confirmMessage, {
+      title: willClose ? "Encerrar emissão" : "Reabrir emissão",
+      variant: willClose ? "danger" : "primary",
+      confirmText: willClose ? "Encerrar" : "Reabrir",
+    });
+    if (!confirmed) return;
 
     setTogglingIssuance(true);
     setIssuanceError(null);

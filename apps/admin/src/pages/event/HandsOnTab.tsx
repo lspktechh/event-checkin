@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import * as api from "../../api/client";
+import { showConfirm } from "../../components/DialogModal";
 import { AlertIcon, ClockIcon, BanIcon, BoltIcon, CalendarIcon, CheckIcon, DotIcon, DownloadIcon, FlaskIcon, GradCapIcon, ListIcon, MailIcon, MapPinIcon, MessageIcon, PhoneIcon, PlusIcon, RefreshIcon, SearchIcon, TrashIcon, UserIcon, UsersIcon, WalletIcon } from "../../components/Icons";
 import { EmailFieldWithFeedback } from "../../components/EmailFieldWithFeedback";
 
@@ -584,13 +585,14 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   }, [registrations, workshopSelloutData]);
 
   async function handleSyncSoldOut() {
-    if (
-      !confirm(
-        "Deseja verificar todos os workshops com vagas esgotadas e cancelar imediatamente todas as cobranças Pix pendentes no Mercado Pago?\n\nIsso impedirá que novos participantes consigam pagar Pix de vagas que já acabaram."
-      )
-    ) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      "Deseja verificar todos os workshops com vagas esgotadas e cancelar imediatamente todas as cobranças Pix pendentes no Mercado Pago?\n\nIsso impedirá que novos participantes consigam pagar Pix de vagas que já acabaram.",
+      {
+        title: "Sincronizar esgotados",
+        confirmText: "Sincronizar",
+      }
+    );
+    if (!confirmed) return;
 
     try {
       setSyncingSoldOut(true);
@@ -611,7 +613,11 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   }
 
   async function handleConfirmPayment(id: string) {
-    if (!confirm("Deseja confirmar o pagamento Pix desta inscrição?")) return;
+    const confirmed = await showConfirm("Deseja confirmar o pagamento Pix desta inscrição?", {
+      title: "Confirmar pagamento",
+      confirmText: "Confirmar",
+    });
+    if (!confirmed) return;
     try {
       setProcessingId(id);
       await api.confirmHandsOnPayment(eventId, id);
@@ -639,13 +645,15 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
   }
 
   async function handleDeleteRegistration(reg: api.HandsOnRegistrationRecord) {
-    if (
-      !confirm(
-        `Tem certeza que deseja EXCLUIR a inscrição de "${reg.name}" no Hands On "${selectedWorkshop?.titulo || reg.title}"?\n\nEsta ação removerá definitivamente o registro e liberará a vaga. Deseja prosseguir?`
-      )
-    ) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      `Tem certeza que deseja EXCLUIR a inscrição de "${reg.name}" no Hands On "${selectedWorkshop?.titulo || reg.title}"?\n\nEsta ação removerá definitivamente o registro e liberará a vaga. Deseja prosseguir?`,
+      {
+        title: "Excluir inscrição",
+        variant: "danger",
+        confirmText: "Excluir",
+      }
+    );
+    if (!confirmed) return;
     try {
       setProcessingId(reg.id);
       await api.deleteHandsOnRegistration(eventId, reg.id);
@@ -686,7 +694,12 @@ export function HandsOnTab({ eventId }: { eventId: string }) {
     const msg = nextState
       ? "Deseja LIBERAR as inscrições dos Hands On no site público do COPOL?\n\nOs participantes poderão se inscrever e efetuar pagamentos via Pix normalmente."
       : "Deseja FECHAR / PAUSAR as inscrições dos Hands On no site público?\n\nO público não conseguirá mais enviar inscrições até que você reabra.";
-    if (!confirm(msg)) return;
+    const confirmed = await showConfirm(msg, {
+      title: nextState ? "Liberar inscrições" : "Encerrar inscrições",
+      variant: nextState ? "primary" : "warning",
+      confirmText: nextState ? "Liberar" : "Encerrar",
+    });
+    if (!confirmed) return;
 
     try {
       setTogglingOpen(true);

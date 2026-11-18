@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../../api/client";
+import { showConfirm } from "../../components/DialogModal";
 import {
   PaletteIcon,
   LayersIcon,
@@ -439,8 +440,12 @@ export function SiteTab({ eventId }: { eventId: string }) {
     }
   }
 
-  function handleResetDefaults() {
-    if (!confirm("Deseja redefinir as cores e posições para o padrão oficial do COPOL?")) return;
+  async function handleResetDefaults() {
+    const confirmed = await showConfirm("Deseja redefinir as cores e posições para o padrão oficial do COPOL?", {
+      title: "Redefinir para padrão",
+      confirmText: "Redefinir",
+    });
+    if (!confirmed) return;
     setTheme(DEFAULT_THEME);
     setSections(DEFAULT_SECTIONS);
   }

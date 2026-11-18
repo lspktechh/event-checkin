@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { AdminOnlyRoute, ProtectedRoute } from "./components/ProtectedRoute";
+import { DialogModal } from "./components/DialogModal";
 import { CertificateTemplatesPage } from "./pages/CertificateTemplatesPage";
 import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
@@ -26,6 +27,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <DialogModal />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           {/* Pública: aberta pelo QR Code da aba Sorteios, sem login. */}

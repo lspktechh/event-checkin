@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
+import { showConfirm } from "../../components/DialogModal";
 import { CalendarIcon, PlusIcon, MoveUpIcon, MoveDownIcon } from "../../components/Icons";
 
 interface FormData {
@@ -114,7 +115,12 @@ export function ScheduleTab({ eventId }: { eventId: string }) {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Tem certeza que deseja remover esta atividade da programação?")) return;
+    const confirmed = await showConfirm("Tem certeza que deseja remover esta atividade da programação?", {
+      title: "Remover atividade",
+      variant: "danger",
+      confirmText: "Remover",
+    });
+    if (!confirmed) return;
 
     try {
       await api.deleteScheduleItem(id);

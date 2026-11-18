@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../../api/client";
+import { showConfirm } from "../../components/DialogModal";
 import { copyTextToClipboard } from "../../utils/clipboard";
 
 const STATUS_BADGE: Record<api.TerminalRecord["status"], string> = {
@@ -56,9 +57,14 @@ export function TerminalsTab({ eventId }: { eventId: string }) {
   }
 
   async function handleDelete(terminal: api.TerminalRecord) {
-    const confirmed = window.confirm(
+    const confirmed = await showConfirm(
       `Excluir o terminal "${terminal.name}"? O aparelho vinculado a ele vai se desconectar automaticamente ` +
-        "na próxima vez que tentar falar com o servidor. O histórico de presenças já registradas por ele é mantido."
+        "na próxima vez que tentar falar com o servidor. O histórico de presenças já registradas por ele é mantido.",
+      {
+        title: "Excluir terminal",
+        variant: "danger",
+        confirmText: "Excluir",
+      }
     );
     if (!confirmed) return;
 

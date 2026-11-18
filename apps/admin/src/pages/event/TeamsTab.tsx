@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import * as api from "../../api/client";
+import { showConfirm } from "../../components/DialogModal";
 import {
   UsersIcon,
   SearchIcon,
@@ -1109,7 +1110,12 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
 
   async function removerAvaliacao() {
     if (!evaluatingTeam) return;
-    if (!confirm(`Deseja remover a avaliação da equipe "${evaluatingTeam.teamName}"?`)) return;
+    const confirmed = await showConfirm(`Deseja remover a avaliação da equipe "${evaluatingTeam.teamName}"?`, {
+      title: "Remover avaliação",
+      variant: "danger",
+      confirmText: "Remover",
+    });
+    if (!confirmed) return;
 
     setSavingEvaluation(true);
     try {
@@ -1341,11 +1347,15 @@ export function TeamsTab({ eventId, eventName = "INOVA SAÚDE 2026" }: TeamsTabP
 
   async function removerTrabalhoEquipe() {
     if (!editingWorkTeam) return;
-    if (
-      !confirm(
-        `Deseja realmente remover o trabalho entregue da equipe "${editingWorkTeam.teamName}"?`
-      )
-    ) {
+    const confirmed = await showConfirm(
+      `Deseja realmente remover o trabalho entregue da equipe "${editingWorkTeam.teamName}"?`,
+      {
+        title: "Remover trabalho",
+        variant: "danger",
+        confirmText: "Remover",
+      }
+    );
+    if (!confirmed) {
       return;
     }
 

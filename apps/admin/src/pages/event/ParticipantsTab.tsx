@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
+import { showConfirm } from "../../components/DialogModal";
 import { QrCodeModal } from "../../components/QrCodeModal";
 import { ImportCsvModal } from "../../components/ImportCsvModal";
 import { EditParticipantModal } from "../../components/EditParticipantModal";
@@ -79,7 +80,11 @@ export function ParticipantsTab({
     // Sem check-in a liberação contradiz a regra automática, então o
     // aviso é explícito — é exatamente o caso em que se quer ter certeza.
     const warning = cert && !cert.hasCheckIn ? "\n\nAtenção: esta pessoa NÃO tem check-in registrado neste evento." : "";
-    if (!window.confirm(`Liberar o certificado de "${participant.name}"?${warning}`)) return;
+    const confirmed = await showConfirm(`Liberar o certificado de "${participant.name}"?${warning}`, {
+      title: "Liberar certificado",
+      confirmText: "Liberar",
+    });
+    if (!confirmed) return;
 
     setError(null);
     setBusyCertId(participant.id);
@@ -94,7 +99,12 @@ export function ParticipantsTab({
   }
 
   async function handleUndoRelease(participant: api.ParticipantRecord) {
-    if (!window.confirm(`Cancelar a liberação manual do certificado de "${participant.name}"?`)) return;
+    const confirmed = await showConfirm(`Cancelar a liberação manual do certificado de "${participant.name}"?`, {
+      title: "Cancelar liberação",
+      variant: "warning",
+      confirmText: "Cancelar liberação",
+    });
+    if (!confirmed) return;
 
     setError(null);
     setBusyCertId(participant.id);
@@ -124,13 +134,14 @@ export function ParticipantsTab({
   }
 
   async function handleLinkCourtesies() {
-    if (
-      !window.confirm(
-        `Incluir ${cortesiasForaDeInscritos} cortesia(s) na lista de Inscritos?\n\nO QR de cada pessoa continua o mesmo. Elas aparecem em Inscritos como cortesia, sem ocupar vaga do lote. Quem não tem e-mail é avisado para completar.`,
-      )
-    ) {
-      return;
-    }
+    const confirmed = await showConfirm(
+      `Incluir ${cortesiasForaDeInscritos} cortesia(s) na lista de Inscritos?\n\nO QR de cada pessoa continua o mesmo. Elas aparecem em Inscritos como cortesia, sem ocupar vaga do lote. Quem não tem e-mail é avisado para completar.`,
+      {
+        title: "Incluir cortesias",
+        confirmText: "Incluir",
+      }
+    );
+    if (!confirmed) return;
     setError(null);
     setNotice(null);
     setLinking(true);
@@ -171,8 +182,13 @@ export function ParticipantsTab({
   }
 
   async function handleDelete(participant: api.ParticipantRecord) {
-    const confirmed = window.confirm(
-      `Excluir "${participant.name}"? O QR Code dele deixa de funcionar e o histórico de presença dele neste evento é apagado. Essa ação não pode ser desfeita.`
+    const confirmed = await showConfirm(
+      `Excluir "${participant.name}"? O QR Code dele deixa de funcionar e o histórico de presença dele neste evento é apagado. Essa ação não pode ser desfeita.`,
+      {
+        title: "Excluir participante",
+        variant: "danger",
+        confirmText: "Excluir",
+      }
     );
     if (!confirmed) return;
 

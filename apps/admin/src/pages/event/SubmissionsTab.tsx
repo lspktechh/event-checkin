@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
+import { showConfirm } from "../../components/DialogModal";
 import { EmailFieldWithFeedback } from "../../components/EmailFieldWithFeedback";
 import {
   AlertIcon,
@@ -680,17 +681,19 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                       className="btn btn-sm"
                       disabled={s.files.length === 0 || ocupado === `sub-${s.id}`}
                       title={s.files.length === 0 ? "Anexe o arquivo antes de enviar" : undefined}
-                      onClick={() => {
+                      onClick={async () => {
                         // Liberar sem a taxa é decisão consciente (pagou por
                         // fora, isenção) — não pode sair num clique distraído.
-                        if (
-                          s.paymentStatus === "PENDING" &&
-                          !window.confirm(
-                            `${s.code} ainda não pagou a taxa de ${formatarReais(s.feeAmount)}. ` +
-                              "Enviar para a comissão mesmo assim?"
-                          )
-                        ) {
-                          return;
+                        if (s.paymentStatus === "PENDING") {
+                          const confirmed = await showConfirm(
+                            `${s.code} ainda não pagou a taxa de ${formatarReais(s.feeAmount)}. Enviar para a comissão mesmo assim?`,
+                            {
+                              title: "Liberar sem pagamento",
+                              variant: "warning",
+                              confirmText: "Enviar",
+                            }
+                          );
+                          if (!confirmed) return;
                         }
                         acao(
                           `sub-${s.id}`,
@@ -713,8 +716,15 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                         type="button"
                         className="btn btn-sm"
                         disabled={ocupado === `ap-${s.id}`}
-                        onClick={() => {
-                          if (!window.confirm(`Aprovar ${s.code}? Os autores recebem o resultado por e-mail.`)) return;
+                        onClick={async () => {
+                          const confirmed = await showConfirm(
+                            `Aprovar ${s.code}? Os autores recebem o resultado por e-mail.`,
+                            {
+                              title: "Aprovar trabalho",
+                              confirmText: "Aprovar",
+                            }
+                          );
+                          if (!confirmed) return;
                           acao(
                             `ap-${s.id}`,
                             () => api.decideSubmission(eventId, s.id, "APPROVED"),
@@ -788,14 +798,16 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                       style={{ background: "#dc2626", color: "#ffffff", borderColor: "#dc2626" }}
                       disabled={ocupado === `del-${s.id}`}
                       title="Excluir permanentemente este trabalho (testes)"
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            `Excluir permanentemente o trabalho ${s.code} ("${s.title}")?\n\nEsta ação apagará o trabalho do sistema (ideal para limpar testes).`
-                          )
-                        ) {
-                          return;
-                        }
+                      onClick={async () => {
+                        const confirmed = await showConfirm(
+                          `Excluir permanentemente o trabalho ${s.code} ("${s.title}")?\n\nEsta ação apagará o trabalho do sistema (ideal para limpar testes).`,
+                          {
+                            title: "Excluir trabalho",
+                            variant: "danger",
+                            confirmText: "Excluir",
+                          }
+                        );
+                        if (!confirmed) return;
                         acao(
                           `del-${s.id}`,
                           () => api.deleteSubmission(eventId, s.id),
@@ -973,12 +985,17 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
             zIndex: 60,
             padding: 16,
           }}
-          onClick={() => {
-            if (
-              modoEdicaoAtivo &&
-              !window.confirm("Você está no modo de edição. Deseja realmente fechar e perder alterações não salvas?")
-            ) {
-              return;
+          onClick={async () => {
+            if (modoEdicaoAtivo) {
+              const confirmed = await showConfirm(
+                "Você está no modo de edição. Deseja realmente fechar e perder alterações não salvas?",
+                {
+                  title: "Fechar edição",
+                  variant: "warning",
+                  confirmText: "Fechar",
+                }
+              );
+              if (!confirmed) return;
             }
             setTrabalhoAberto(null);
             setModoEdicaoAtivo(false);
@@ -1028,8 +1045,15 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                   color: "var(--text-muted)",
                   padding: 4,
                 }}
-                onClick={() => {
-                  if (modoEdicaoAtivo && !window.confirm("Deseja fechar sem salvar?")) return;
+                onClick={async () => {
+                  if (modoEdicaoAtivo) {
+                    const confirmed = await showConfirm("Deseja fechar sem salvar?", {
+                      title: "Fechar edição",
+                      variant: "warning",
+                      confirmText: "Fechar",
+                    });
+                    if (!confirmed) return;
+                  }
                   setTrabalhoAberto(null);
                   setModoEdicaoAtivo(false);
                 }}
@@ -1290,8 +1314,16 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                   <button
                     type="button"
                     className="btn btn-sm btn-secondary"
-                    onClick={() => {
-                      if (window.confirm("Deseja sair do modo de edição? Alterações não salvas serão perdidas.")) {
+                    onClick={async () => {
+                      const confirmed = await showConfirm(
+                        "Deseja sair do modo de edição? Alterações não salvas serão perdidas.",
+                        {
+                          title: "Sair da edição",
+                          variant: "warning",
+                          confirmText: "Sair",
+                        }
+                      );
+                      if (confirmed) {
                         setModoEdicaoAtivo(false);
                       }
                     }}
@@ -1503,8 +1535,16 @@ export function SubmissionsTab({ eventId }: { eventId: string }) {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => {
-                      if (window.confirm("Deseja cancelar a edição? As alterações feitas serão perdidas.")) {
+                    onClick={async () => {
+                      const confirmed = await showConfirm(
+                        "Deseja cancelar a edição? As alterações feitas serão perdidas.",
+                        {
+                          title: "Cancelar edição",
+                          variant: "warning",
+                          confirmText: "Cancelar edição",
+                        }
+                      );
+                      if (confirmed) {
                         setModoEdicaoAtivo(false);
                       }
                     }}

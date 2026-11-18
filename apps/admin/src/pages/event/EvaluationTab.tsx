@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import * as api from "../../api/client";
+import { showConfirm } from "../../components/DialogModal";
 import {
   RefreshIcon,
   XIcon,
@@ -403,7 +404,12 @@ export function EvaluationTab({ eventId, eventName = "INOVA SAÚDE 2026" }: Eval
 
   // Remove avaliação
   async function removerAvaliacaoEquipe(teamName: string) {
-    if (!confirm(`Deseja remover as notas da equipe "${teamName}"?`)) return;
+    const confirmed = await showConfirm(`Deseja remover as notas da equipe "${teamName}"?`, {
+      title: "Remover avaliação",
+      variant: "danger",
+      confirmText: "Remover",
+    });
+    if (!confirmed) return;
 
     setSavingEvaluation(true);
     try {

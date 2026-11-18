@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../../api/client";
 import { CheckIcon, GearIcon, PlusIcon } from "../../components/Icons";
+import { showConfirm } from "../../components/DialogModal";
 
 interface BatchFormData {
   id?: string;
@@ -183,7 +184,12 @@ export function BatchesTab({ eventId }: { eventId: string }) {
   }
 
   async function handleDeleteBatch(id: string) {
-    if (!confirm("Tem certeza que deseja excluir este lote?")) return;
+    const confirmed = await showConfirm("Tem certeza que deseja excluir este lote?", {
+      title: "Excluir lote",
+      variant: "danger",
+      confirmText: "Excluir",
+    });
+    if (!confirmed) return;
     try {
       await api.deleteBatch(id);
       await loadData();
@@ -203,7 +209,11 @@ export function BatchesTab({ eventId }: { eventId: string }) {
   }
 
   async function handleSeedDefault() {
-    if (!confirm("Deseja aplicar a estrutura padrão de 4 lotes do Copol para este evento?")) return;
+    const confirmed = await showConfirm("Deseja aplicar a estrutura padrão de 4 lotes do Copol para este evento?", {
+      title: "Aplicar lotes padrão",
+      confirmText: "Aplicar",
+    });
+    if (!confirmed) return;
     try {
       await api.seedDefaultBatches(eventId);
       await loadData();

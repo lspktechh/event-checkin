@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { EmailFieldWithFeedback } from "../components/EmailFieldWithFeedback";
+import { showConfirm } from "../components/DialogModal";
 
 export function UsersPage() {
   const { user: currentUser, hasPermission } = useAuth();
@@ -43,7 +44,12 @@ export function UsersPage() {
   }
 
   async function handleDelete(u: api.UserRecord) {
-    if (!confirm(`Excluir o usuário "${u.name}"? Essa ação não pode ser desfeita.`)) return;
+    const confirmed = await showConfirm(`Excluir o usuário "${u.name}"? Essa ação não pode ser desfeita.`, {
+      title: "Excluir usuário",
+      variant: "danger",
+      confirmText: "Excluir",
+    });
+    if (!confirmed) return;
     setError(null);
     setBusyUserId(u.id);
     try {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { showConfirm } from "../components/DialogModal";
 
 export function RolesPage() {
   const { hasPermission } = useAuth();
@@ -21,7 +22,12 @@ export function RolesPage() {
   useEffect(reload, []);
 
   async function handleDelete(role: api.RoleRecord) {
-    if (!confirm(`Excluir o perfil "${role.name}"?`)) return;
+    const confirmed = await showConfirm(`Excluir o perfil "${role.name}"?`, {
+      title: "Excluir perfil",
+      variant: "danger",
+      confirmText: "Excluir",
+    });
+    if (!confirmed) return;
     setError(null);
     try {
       await api.deleteRole(role.id);
