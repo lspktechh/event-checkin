@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { CheckIcon, MenuIcon } from "./Icons";
 import { Sheet } from "./Sheet";
+import lspkLogo from "../assets/lspk-logo.png";
 
 const NAV_LINKS = [
   { to: "/eventos", label: "Eventos", permission: "events.view" },
@@ -70,7 +71,9 @@ export function Layout() {
       <main className="app-main">
         <Outlet />
       </main>
-      <footer className="app-footer">Copol | LSPK Tecnology</footer>
+      <footer className="app-footer">
+        <img src={lspkLogo} alt="LSPK" className="app-footer-logo" width={40} height={40} />
+      </footer>
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu">
         {user ? (

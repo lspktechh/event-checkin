@@ -405,6 +405,13 @@ tr:hover td {
   font-size: 12px;
 }
 
+.app-footer-logo {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+}
+
 .login-page {
   min-height: 100vh;
   min-height: 100dvh;
