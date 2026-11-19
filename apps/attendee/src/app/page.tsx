@@ -57,7 +57,11 @@ export default function AcessarPage() {
         setSingleEventSession(null);
       }
     } catch (err: any) {
-      setError(err.message ?? "Erro ao fazer login");
+      if (err?.message === "Failed to fetch" || err?.name === "TypeError") {
+        setError("Não foi possível conectar ao servidor. Tente novamente em instantes.");
+      } else {
+        setError(err.message ?? "Erro ao fazer login");
+      }
     } finally {
       setLoading(false);
     }
@@ -101,7 +105,11 @@ export default function AcessarPage() {
       );
       router.push("/checkin");
     } catch (err: any) {
-      setError(err.message ?? "Erro ao acessar credencial do evento");
+      if (err?.message === "Failed to fetch" || err?.name === "TypeError") {
+        setError("Não foi possível conectar ao servidor. Tente novamente em instantes.");
+      } else {
+        setError(err.message ?? "Erro ao acessar credencial do evento");
+      }
     } finally {
       setLoading(false);
     }

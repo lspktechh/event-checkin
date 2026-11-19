@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://painel.lspk.com.br";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://lspk.com.br";
 
 export interface ParticipantData {
   id: string;
@@ -42,16 +42,21 @@ export interface ApiResponse<T> {
 export async function loginAttendee(
   email: string
 ): Promise<LoginResponse> {
-  const res = await fetch("/api/attendee/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/attendee/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    throw new Error("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.");
+  }
 
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
 
   if (!res.ok) {
-    throw new Error(data.error?.message ?? "Erro ao fazer login");
+    throw new Error(data?.error?.message ?? "Erro ao fazer login");
   }
 
   return data;
@@ -60,16 +65,21 @@ export async function loginAttendee(
 export async function selectEvent(
   participantId: string
 ): Promise<LoginResponse> {
-  const res = await fetch("/api/attendee/select-event", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ participantId }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/attendee/select-event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ participantId }),
+    });
+  } catch {
+    throw new Error("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.");
+  }
 
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
 
   if (!res.ok) {
-    throw new Error(data.error?.message ?? "Erro ao selecionar evento");
+    throw new Error(data?.error?.message ?? "Erro ao selecionar evento");
   }
 
   return data;
@@ -422,9 +432,15 @@ export interface PublicCertificate {
 }
 
 export async function getPublicCertificate(code: string): Promise<PublicCertificate> {
-  const res = await fetch(`${API_URL}/public/certificates/${encodeURIComponent(code)}`);
-  const data = await res.json();
-  if (!res.ok || !data.success) {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/public/certificates/${encodeURIComponent(code)}`);
+  } catch {
+    throw new Error("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.");
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
     throw new Error(data?.error?.message ?? "Certificado não encontrado");
   }
   return data.data;
